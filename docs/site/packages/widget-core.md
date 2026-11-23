@@ -434,6 +434,13 @@ widened array such as `('changed' | 'reset')[]` (pass a list literal or an
 `as const` array) are type errors. The argument types of an Event live in the
 interfaces; there is nothing else to define.
 
+The error names the problem in the parameter type: a missing name shows as
+`WidgetEventNamesViolation<Missing>`, whose one key reads
+`'widget-core: .events() must list every declared Event; missing'`, and a
+widened array as `WidgetEventNamesTupleViolation`, whose key starts with
+`'widget-core: .events() takes a tuple of Event names'`. `ExactWidgetEventNames<Interfaces, Names>`
+is the check itself: `unknown` when `Names` lists every declared Event.
+
 #### Runtime validation of declarations
 
 Section builders are sealed, and every definition is checked when the plugin
@@ -640,7 +647,15 @@ responsible for enforcing it in `validateStructure`. What the expectation does:
   a contract names must satisfy its `Shape`: each member exists, and its type
   agrees with the contract's by the rule of its section (see the table
   below). A violation is a type error on `plugins` that names the plugin and
-  the member. A contract without `Types` names no
+  the member: the options are intersected with
+  `WidgetSystemSlotTypeViolation<Type>`
+  (`'widget-core: a slot expects a plugin type that is not registered in this System'`)
+  or `WidgetSystemSlotContractViolation<Reason>`
+  (`'widget-core: a plugin does not satisfy the WidgetContract of a slot that expects it'`).
+  `WidgetSystemPluginsCheck<Plugins>` is the whole check (`unknown` when it
+  passes), and `UnregisteredSlotPluginTypeOf<Plugins>` and
+  `SlotContractViolationOf<Plugins>` are its parts, for a wrapper that creates
+  a System from a generic plugin list. A contract without `Types` names no
   plugin, so nothing is checked against it, and a loosely typed System (a
   plugin typed with a broad `string`) is not checked;
 - it narrows the children of that slot, to the plugin types it names, in a
@@ -648,6 +663,14 @@ responsible for enforcing it in `validateStructure`. What the expectation does:
   [Authored source](#authored-source)). `WidgetSlotPluginTypeOf<Interfaces, Name>`
   is that union (`never` when the slot accepts any widget), for renderers and
   tools.
+
+The other slot type helpers: `WidgetSlotExpectation` is what a slot may
+declare (a plugin-type union or a `WidgetContract`), `WidgetContractShape` the
+members a contract may list, `WidgetSlotsOf<Interfaces>` the declared slots
+record (`never` without the capability), `WidgetSlotExpectedOf<Interfaces, Name>`
+what one slot expects, and `WidgetExpectedPluginTypeOf<Expected>` the plugin
+types an expectation names (`never` for `WidgetChild` and a contract without
+`Types`).
 
 How a named plugin's member is compared with the contract's:
 
@@ -885,6 +908,11 @@ if (!result.ok) {
 - `reasons` is not a capability: it has no builder phase, and it is not
   listed by `plugin.capabilities`, the catalog or inspection. Like every other
   section, it is documented by JSDoc on the interfaces type.
+- For a helper that reports on a plugin's behalf, `WidgetReasonsOf<Interfaces>`
+  is the declared record (`never` without `reasons`),
+  `WidgetReasonKeyOf<Interfaces>` its keys, and
+  `DiagnosticReasonFields<Interfaces>` the `reason` / `details` pair of an
+  `addDiagnostic` input under the rules above.
 
 ### State
 
@@ -1183,6 +1211,10 @@ export const wizardPlugin = createWidgetPlugin('wizard')
   an ordinary `missing-dependency-capability` / `missing-dependency-member`
   diagnostic. Enforce the expectation in `validateStructure` when the
   container requires it.
+- The types are exported for code that passes a target around:
+  `WidgetRegisterDepsSlotContext<Interfaces, Consumer>` is `slot` itself,
+  `SlotChildDependencyTarget<Expected, Consumer>` one child's target, and
+  `ContractDependencyTarget<Shape, Consumer>` the target a contract types.
 
 ### Callback context lifetime
 
@@ -1356,7 +1388,11 @@ exactly these recognized own keys:
   `'notice' | 'link'` accepts only those sources. This is an authoring aid
   only. `WidgetSource`, and so `blueprint.source`, does not narrow slot
   children, because Core never checks a slot expectation and a valid Blueprint
-  may hold any registered type there.
+  may hold any registered type there. `WidgetSourceOf<typeof system>` is
+  `WidgetTypedSource<Plugins>`; for a helper that builds part of a tree,
+  `WidgetTypedSourceFor<Plugin, Plugins>` is one plugin's node and
+  `WidgetSlotChildSource<Plugins, Expected>` one child of a slot that expects
+  `Expected`.
 - Authored source and `SourcePatch` operands may nest at most
   `MAX_JSON_DEPTH` (256, exported) containers deep. A widget node uses three
   containers per tree level (the node, `slots`, and the slot array), so that is
