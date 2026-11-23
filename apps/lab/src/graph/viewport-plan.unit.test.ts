@@ -11,6 +11,7 @@ import {
 	fitZoom,
 	frameBoxTop,
 	isContentInView,
+	isMinimapCovering,
 	isMinimapUseful,
 	manualMinZoom,
 	MEMBER_FONT_PX,
@@ -234,14 +235,18 @@ describe('the minimap', () => {
 			.toBe(false)
 	})
 
-	it('gives way to a focus tag under it, not to one elsewhere', () => {
-		const zoomedIn = { x: 0, y: 0, zoom: 1 }
+	it('gives way to a focus tag or the expanded header under it, not to one elsewhere', () => {
 		const map = bottomRightRect(pane, { width: 200, height: 120 }, 8)
 		expect(map)
 			.toEqual({ x: 1232, y: 611, width: 200, height: 120 })
-		expect(isMinimapUseful(content, pane, zoomedIn, map, [{ x: 100, y: 100, width: 120, height: 24 }]))
+		expect(isMinimapCovering(map, [{ x: 100, y: 100, width: 120, height: 24 }]))
+			.toBe(false)
+		expect(isMinimapCovering(map, [{ x: 100, y: 100, width: 120, height: 24 }, { x: 1200, y: 640, width: 120, height: 24 }]))
 			.toBe(true)
-		expect(isMinimapUseful(content, pane, zoomedIn, map, [{ x: 100, y: 100, width: 120, height: 24 }, { x: 1200, y: 640, width: 120, height: 24 }]))
+		// An expanded widget panned so its header (40px high) runs across the bottom of the canvas.
+		expect(isMinimapCovering(map, [{ x: -300, y: 700, width: 2000, height: 40 }]))
+			.toBe(true)
+		expect(isMinimapCovering(map, []))
 			.toBe(false)
 		// Touching edges do not overlap.
 		expect(rectsOverlap({ x: 0, y: 0, width: 10, height: 10 }, { x: 10, y: 0, width: 10, height: 10 }))

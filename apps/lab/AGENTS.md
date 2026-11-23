@@ -958,7 +958,7 @@ BlueprintInspection -> projectSemanticGraph() -> toElkGraph() -> ELK layout -> t
 
 - `viewport-plan.ts` — pure viewport geometry for the Graph canvas: the readable zoom on expand, framing the expanded widget, Fit's zoom and margin, the manual zoom floor, which layout generation frames (`clusterToFrame()`), and when the minimap is shown. See "Readable zoom on expand" and "Minimap" below.
 - `relations.ts` — pure `projectRelations()`: `SemanticGraph + InspectorFocus + rootNodeId` -> a framework-agnostic Relations view model. It imports neither Vue Flow nor ELK. Root/no usable focus yields an explicit empty state; member focus exposes exact incoming **Used by** and outgoing **Depends on** facts grouped by remote widget; widget focus treats all members as the selected set, keeps cross-widget incoming/outgoing separate, and lists same-widget dependencies in an internal section. Every row retains the original semantic edge/reference/path/operation; unresolved stubs remain unresolved and non-focusable. Relations shares `graphShowAbsent`, but deliberately projects with isolated members present so the Graph-only `graphShowIsolatedMembers` presentation preference can never erase a focused member from this inspector. Resolved member/widget clicks write through the existing Document-scoped focus API; they do not request ELK layout.
-- `src/components/dependencies/DependenciesPanel.vue` owns the internal `Relations | Graph` switcher and view-specific toolbar. The switcher follows the WAI-ARIA tabs pattern (roving tab stop plus Arrow/Home/End keyboard navigation and labelled tabpanels). The Graph DOM stays mounted with `v-show`, preserving pan/zoom across view changes. Shared focus changes never mutate Graph expansion state or request layout/refit; cluster identity selection and the explicit expand/collapse toggle are separate actions. `RelationsView.vue` renders the dense three-column inspector and the widget/internal-dependency mode without a canvas layout engine; same-widget unresolved stubs stay in the internal section rather than leaking into cross-widget outgoing dependencies. A selected Method whose `transitivelyWrites` and `transitivelyEmits` are both `false` is tagged "read-only" next to where W and E would be (issue #230: it used to be told only by the missing badges); the compact member chips keep W and E only.
+- `src/components/dependencies/DependenciesPanel.vue` owns the internal `Relations | Graph` switcher and view-specific toolbar. The switcher follows the WAI-ARIA tabs pattern (roving tab stop plus Arrow/Home/End keyboard navigation and labelled tabpanels). The Graph DOM stays mounted with `v-show`, preserving pan/zoom across view changes. Shared focus changes never mutate Graph expansion state or request layout/refit; cluster identity selection and the explicit expand/collapse toggle are separate actions. `RelationsView.vue` renders the dense three-column inspector and the widget/internal-dependency mode without a canvas layout engine; same-widget unresolved stubs stay in the internal section rather than leaking into cross-widget outgoing dependencies. A selected Method whose `transitivelyWrites` and `transitivelyEmits` are both `false` is tagged "read-only" next to where W and E would be (issue #230: it used to be told only by the missing badges); the compact member chips keep W and E only. The Relations empty state (`RelationsEmptyState.vue`) centres its card with `my-auto` in a box that scrolls (`min-h-0 overflow-y-auto`), and the Relations tabpanel clips (`overflow-hidden`): with `justify-center` the card, taller than the half-height Tools pane of a short window (since phase 3B), spilled up over the panel toolbar and took the clicks meant for the Graph tab (`e2e/dependencies.spec.ts`, 1100 x 700 and 900 x 600).
 - `types.ts` / `projection.ts` — the Lab's semantic graph shape and its pure, deterministic projection.
   Widgets are visual clusters (`GraphCluster`); State/Property/Method members are the semantic vertices
   (`GraphVertex`). Edge direction is owner -> declared dependency target; `state-get`/`property-get`
@@ -1029,7 +1029,7 @@ BlueprintInspection -> projectSemanticGraph() -> toElkGraph() -> ELK layout -> t
   Edge operation is encoded primarily by stroke treatment (reads thin solid, writes stronger solid,
   invokes dashed). Since PR 3c (audit U11) every edge label (the aggregate counts too) is hidden until its edge is hovered or selected, because neighbouring
   labels ran into each other; all text is 11px or more (members 12px, node footprints `VERTEX_WIDTH` 200 x 36, `COLLAPSED_CLUSTER` 240 x 88 to fit it), and `GraphKey.vue`,
-  a row above the canvas (folded behind its Key button in a pane shorter than 360px, see "The Graph key folds in a short pane"), says what S, P, M, W, E, ! and the three line styles mean, so the Legend popover is only the long form.
+  a row above the canvas (folded behind its Graph key button in a pane shorter than 360px, see "The Graph key folds in a short pane"), says what S, P, M, W, E, ! and the three line styles mean, so the Legend popover is only the long form.
   Edges are drawn by `GraphDependencyEdge.vue` (registered under `GRAPH_EDGE_TYPE`): Bezier curves through ELK's route
   points, starting and ending on the card borders where ELK spread them, so several edges of one card stay apart and none
   runs behind a card; without route points it falls back to Vue Flow's own handle positions. The key's first item states
@@ -1146,7 +1146,7 @@ them, and Relations lists them all. `e2e/graph.spec.ts` and `e2e/dependencies.sp
 framing leaves out of view, as a person would.
 
 **Minimap.** `GraphCanvas.vue` draws `@vue-flow/minimap`'s `MiniMap` (pinned in the catalog at 1.5.4, peer `@vue-flow/core` ^1.23.0
-against our 1.48.2; it bundles its own d3-zoom, so it is a `defineAsyncComponent` loaded the first time it is shown) in the canvas's bottom right
+against our 1.48.2; it bundles its own d3-zoom, so it is a `defineAsyncComponent`, defined once in `components/graph/lazy-minimap.ts`, loaded the first time it is shown) in the canvas's bottom right
 corner, inside the canvas, so it covers neither the Graph key nor the toolbar (both are above the canvas). Its size follows the canvas
 (`minimapSize()`): 19% of the canvas width with the graph's aspect ratio, within 96 x 64 and 200 x 120 (144 x 92 in the default Tools pane
 at 1440 x 900, 129 x 82 at 1280 x 800, borders included). It is themed with the Lab tokens (surface panel, cards in a muted mix, the expanded widget
@@ -1156,24 +1156,34 @@ viewport on that point at the current zoom (`setCenter()`; d3-zoom swallows the 
 `aria-hidden="true"` with no accessible name: it repeats what the canvas shows, has no keyboard operation and no tab stop, and the zoom
 buttons, Fit graph and Relations are the keyboard and screen-reader routes. It is shown only while part of the graph (the cards and curves,
 as Fit sees them) is out of view by more than a pixel, the canvas is at least 320 x 160 (`isMinimapUseful()`, `MINIMAP_MIN_PANE`), and
-no focus tag is under it: with everything in view it adds nothing, and in a smaller canvas (the default pane of a 1440 x 600 window, 155px
+nothing it must leave readable is under it: with everything in view it adds nothing, and in a smaller canvas (the default pane of a 1440 x 600 window, 155px
 high) it would hide much of what it maps. The default Tools pane, where most people see the Graph and where an expanded widget is framed in
 the least room, shows it; it sits in the bottom right corner and the framed widget's header (type, id, Collapse) at the top left, so they do
-not meet (asserted at 1440 x 900 and 1280 x 800). **Focus tags (coordinator decision):** the minimap is not shown while its box on screen
-(margin and border included) would cover a focus tag's box or leader line on screen. Making it an obstacle of the tag placement was the
-other option and was not taken: the tags are placed in flow units once per zoom bucket (`use-graph-tags.ts`) while the minimap is fixed to
-the screen, so it would mean placing every tag again on every pan step, and tags moving while the graph is dragged. The minimap therefore
-comes and goes as a tag is panned under it. `e2e/graph-readability.spec.ts` covers when it shows and hides (default pane, a 1440 x 600
-window, a tag panned under it and back), its size and place, dragging and clicking it, and its light and dark colours;
+not meet (asserted at 1440 x 900 and 1280 x 800). **Focus tags and the header (coordinator decision, PR #267 review):** while its box on
+screen (margin and border included) would cover a focus tag that is showing (box or leader line; a tag hidden for its hovered, focused or
+selected edge does not count) or the expanded widget's header (type, id, Collapse; `EXPANDED_HEADER_PX`, bound into the stylesheet), the
+minimap is hidden with `visibility: hidden` and `pointer-events: none` (`isMinimapCovering()`, `data-covering`), **not unmounted**: only
+the canvas size rule and "the whole graph is in view" unmount it (`v-if`). Making it an obstacle of the tag placement was the other option
+and was not taken: the tags are placed in flow units once per zoom bucket (`use-graph-tags.ts`) while the minimap is fixed to the screen,
+so it would mean placing every tag again on every pan step, and tags moving while the graph is dragged. The minimap therefore comes and goes
+as a tag is panned under it. **While it is dragged** (pointer down on it until the window's pointerup or pointercancel, plus one frame so
+d3-zoom's own mouseup runs first) its state is frozen, mounted and visible: the drag pans the canvas and can bring a tag under it or the
+whole graph into view, and unmounting it under the pointer used to leave d3-zoom's window listeners (which the package's cleanup does not
+remove) panning on for a minimap that was gone, with a new instance mounted afterwards (found in the PR #267 review). `e2e/graph-readability.spec.ts` covers when it shows and hides (default pane, a 1440 x 600
+window, a tag panned under it and back), its size and place, dragging it (also with a tag passing under it mid-drag: the same instance,
+nothing moving after the release) and a click centring the clicked point, and its light and dark colours;
 `src/graph/viewport-plan.unit.test.ts` the geometry.
 
 **The Graph key folds in a short pane (coordinator decision).** The key (`GraphKey.vue`) is a standing row above the canvas, separate from
 the Legend popover (the long form). At the width of the default Tools pane it wraps to two lines and took about 50 of the roughly 300px the
 key and the canvas share. `DependenciesPanel.vue` measures the view area (key plus canvas; measured whichever view, Relations or Graph, is
 showing, so the state is known before the Graph is first drawn and fitted; a hidden Dockview tab measures 0 and is ignored), and while it is
-shorter than 360px the key starts folded. A **Key** button (標記說明) in the Graph toolbar, beside Legend, shows or folds it: `aria-expanded`
-is its state and `aria-controls` names the key, which keeps its own accessible name "Graph key"; a press is kept as the person's choice for
-that panel. Maximized, and in any pane 360px or taller, the key is shown as before (the Key button then reads expanded).
+shorter than 360px the key starts folded. A **Graph key** button (標記說明; not a bare "Key", which read as the Legend's twin) in the Graph
+toolbar, beside Legend, shows or folds it: `aria-expanded` is its state, drawn pressed (accent border and tint) while expanded, and
+`aria-controls` names the key, whose own accessible name is the same "Graph key" (in zh-TW both are 標記說明, one message; the list was
+"Graph 標記說明" before). A press is kept as the person's choice for that panel. Maximized, and in any pane 360px or taller, the key is shown
+as before (the button then reads expanded). `GraphCanvas.vue` waits one frame before an automatic fit, so a fold decided in the same frame
+(the pane first measured) is laid out first; a fold or unfold after the fit (a press) does not refit, Fit graph does.
 `e2e/graph-readability.spec.ts` ("the Graph key starts folded ...") and `e2e/polish.spec.ts` (the key's content, opened with the button,
 in English and zh-TW) cover it.
 

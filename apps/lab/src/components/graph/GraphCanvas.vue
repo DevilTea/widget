@@ -21,15 +21,16 @@
 import type { GraphNode, NodeMouseEvent } from '@vue-flow/core'
 import type { GraphFlowEdge, GraphFlowNode } from '../../graph/vue-flow'
 import { Handle, Position, useVueFlow, VueFlow } from '@vue-flow/core'
-import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 import { useGraphTags } from '../../composables/use-graph-tags'
 import { useLabI18n } from '../../composables/use-lab-i18n'
 import { edgeKeyboardOrder, edgeName, edgeTabStop, isEdgeNavigationKey, nextEdgeId } from '../../graph/edge-a11y'
 import { tagSize } from '../../graph/tag-placement'
-import { bottomRightRect, isMinimapUseful, manualMinZoom, MEMBER_FONT_PX, minimapSize, planExpandViewport, toScreenRect } from '../../graph/viewport-plan'
+import { bottomRightRect, EXPANDED_HEADER_PX, isMinimapCovering, isMinimapUseful, manualMinZoom, MEMBER_FONT_PX, minimapSize, planExpandViewport, toScreenRect } from '../../graph/viewport-plan'
 import { GRAPH_EDGE_TYPE } from '../../graph/vue-flow'
 import { ARROW_KINDS, arrowMarkerId, ZOOM_BUCKETS, zoomBucket } from '../../graph/zoom-scale'
 import GraphDependencyEdge from './GraphDependencyEdge.vue'
+import { MiniMap } from './lazy-minimap'
 import '@vue-flow/core/dist/style.css'
 
 const props = defineProps<{
@@ -65,6 +66,8 @@ const MAX_ZOOM = 2
 const ZOOM_LIMITS = { min: FIT_MIN_ZOOM, max: MAX_ZOOM } as const
 /** The member cards' font size, bound into the stylesheet below, so the readable zoom and the CSS cannot disagree. */
 const memberFontSize = `${MEMBER_FONT_PX}px`
+/** The expanded widget's header height, bound into the stylesheet: the minimap gives way to the header (`minimapObstacles`). */
+const expandedHeaderHeight = `${EXPANDED_HEADER_PX}px`
 
 const i18n = useLabI18n()
 const vueFlowContainer = ref<HTMLElement | null>(null)
@@ -197,7 +200,12 @@ async function attemptFit(): Promise<boolean> {
 		return false
 
 	await nextTick()
-	if (!areCurrentNodesMeasured())
+	// One frame more: a size change made in the same frame (the Graph key folding or unfolding as the pane is first measured,
+	// `DependenciesPanel.vue`) is laid out by then, so the fit uses the canvas as it will stay.
+	await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
+	if (fitted)
+		return true
+	if (el.clientWidth === 0 || el.clientHeight === 0 || !areCurrentNodesMeasured())
 		return false
 
 	const success = await fitGeneration()
@@ -254,32 +262,61 @@ watch(() => props.layoutVersion, () => {
 const MINIMAP_MARGIN = 8
 const MINIMAP_BORDER = 1
 const minimapMargin = `${MINIMAP_MARGIN}px`
-/**
- * Loaded the first time it is shown: the package bundles its own copy of d3-zoom, about 57 KB raw / 19 KB gzip on the eager main
- * chunk when imported statically, for a panel most sessions never see.
- */
-const MiniMap = defineAsyncComponent(async () => (await import('@vue-flow/minimap')).MiniMap)
 const minimapDrawing = computed(() => contentBounds.value === null ? null : minimapSize(dimensions.value, contentBounds.value))
-/** The focus tags on screen (box and leader line): the minimap gives way to them. */
-const tagScreenRects = computed(() => [...tagPlacements.value.values()].map((tag) => {
-	let left = tag.x - tag.width / 2
-	let top = tag.y - tag.height / 2
-	let right = left + tag.width
-	let bottom = top + tag.height
-	for (const point of tag.leader === undefined ? [] : [tag.leader.from, tag.leader.to]) {
-		left = Math.min(left, point.x)
-		top = Math.min(top, point.y)
-		right = Math.max(right, point.x)
-		bottom = Math.max(bottom, point.y)
+/**
+ * What the minimap gives way to, on screen: the focus tags that are showing (box and leader line; a tag hidden while its edge is hovered,
+ * focused or selected does not count) and the header of the expanded widget (type, id and Collapse).
+ */
+const minimapObstacles = computed(() => [...tagPlacements.value.entries()]
+	.filter(([edgeId]) => !tagIsHidden(edgeId))
+	.map(([, tag]) => {
+		let left = tag.x - tag.width / 2
+		let top = tag.y - tag.height / 2
+		let right = left + tag.width
+		let bottom = top + tag.height
+		for (const point of tag.leader === undefined ? [] : [tag.leader.from, tag.leader.to]) {
+			left = Math.min(left, point.x)
+			top = Math.min(top, point.y)
+			right = Math.max(right, point.x)
+			bottom = Math.max(bottom, point.y)
+		}
+		return toScreenRect({ x: left, y: top, width: right - left, height: bottom - top }, viewport.value)
+	})
+	.concat(getNodes.value
+		.filter(node => node.type === 'cluster' && node.data.isExpanded === true)
+		.map(node => toScreenRect({ x: node.computedPosition.x, y: node.computedPosition.y, width: node.dimensions.width, height: EXPANDED_HEADER_PX }, viewport.value))))
+
+/**
+ * While the minimap is being dragged (pointer down on it until the pointer is released, plus a frame so d3-zoom's own mouseup runs
+ * first) its state is frozen: dragging pans the canvas, which can bring a tag under it or the whole graph into view, and unmounting it
+ * under the pointer would leave d3-zoom's window listeners panning a minimap that is gone.
+ */
+const minimapDragging = ref(false)
+function onMinimapPointerdown(): void {
+	minimapDragging.value = true
+	const release = (): void => {
+		window.removeEventListener('pointerup', release)
+		window.removeEventListener('pointercancel', release)
+		requestAnimationFrame(() => {
+			minimapDragging.value = false
+		})
 	}
-	return toScreenRect({ x: left, y: top, width: right - left, height: bottom - top }, viewport.value)
-}))
-const showMinimap = computed(() => {
+	window.addEventListener('pointerup', release)
+	window.addEventListener('pointercancel', release)
+}
+
+/** Mounted while it is useful (the canvas size and "part of the graph is out of view"); the size rule and that rule alone unmount it. */
+const showMinimap = computed(() => minimapDragging.value || (minimapDrawing.value !== null && isMinimapUseful(contentBounds.value, dimensions.value, viewport.value)))
+/**
+ * Hidden (`visibility: hidden`, no pointer events), not unmounted, while a tag or the expanded widget's header would be under it:
+ * that changes as the canvas pans, also during a drag of the minimap itself.
+ */
+const minimapCovering = computed(() => {
 	const drawing = minimapDrawing.value
-	if (drawing === null)
+	if (minimapDragging.value || drawing === null)
 		return false
 	const box = bottomRightRect(dimensions.value, { width: drawing.width + 2 * MINIMAP_BORDER, height: drawing.height + 2 * MINIMAP_BORDER }, MINIMAP_MARGIN)
-	return isMinimapUseful(contentBounds.value, dimensions.value, viewport.value, box, tagScreenRects.value)
+	return isMinimapCovering(box, minimapObstacles.value)
 })
 
 function minimapNodeClass(node: GraphNode): string {
@@ -593,7 +630,9 @@ function memberKindShort(kind: string): string {
 			<MiniMap
 				v-if="showMinimap"
 				class="graph-minimap"
+				:class="{ 'graph-minimap--covering': minimapCovering }"
 				data-testid="graph-minimap"
+				:data-covering="minimapCovering"
 				aria-hidden="true"
 				position="bottom-right"
 				pannable
@@ -604,6 +643,7 @@ function memberKindShort(kind: string): string {
 				:nodeBorderRadius="6"
 				:nodeStrokeWidth="0"
 				@click="onMinimapClick"
+				@pointerdown.capture="onMinimapPointerdown"
 			/>
 
 			<template #[`edge-${GRAPH_EDGE_TYPE}`]="edge">
@@ -850,7 +890,8 @@ function memberKindShort(kind: string): string {
 	top: 0;
 	left: 0;
 	right: 0;
-	height: 40px;
+	/* EXPANDED_HEADER_PX (graph/viewport-plan.ts): the minimap gives way to this box. */
+	height: v-bind(expandedHeaderHeight);
 	display: flex;
 	align-items: center;
 	gap: 7px;
@@ -1350,6 +1391,12 @@ function memberKindShort(kind: string): string {
 	background: var(--lab-color-surface);
 	box-shadow: 0 2px 8px color-mix(in srgb, var(--lab-color-text) 10%, transparent);
 	line-height: 0;
+}
+
+/* Something it must not cover is under it (a focus tag, the expanded widget's header): out of sight and out of the way, still mounted. */
+.graph-minimap--covering {
+	visibility: hidden;
+	pointer-events: none;
 }
 
 .graph-minimap.pannable {

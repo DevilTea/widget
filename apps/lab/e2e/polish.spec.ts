@@ -41,12 +41,12 @@ function lazyFrameChunks(): Set<string> {
 
 test.describe('Graph readability (U11)', () => {
 	// The key is a row above the canvas, shown whenever there is room for it; in the default Tools pane (shorter than 360px) it starts
-	// folded behind the Key button so the canvas keeps its height, and one press shows it.
+	// folded behind the Graph key button so the canvas keeps its height, and one press shows it.
 	test('explains W, E and the line styles in a key above the canvas, without the Legend', async ({ page }) => {
 		await page.goto('/')
 		await openDependenciesGraph(page)
 		const key = page.getByTestId('graph-key')
-		const toggle = page.getByRole('button', { name: 'Key', exact: true })
+		const toggle = page.getByRole('button', { name: 'Graph key', exact: true })
 		await expect(toggle)
 			.toHaveAttribute('aria-expanded', 'false')
 		await toggle.click()

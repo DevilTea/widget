@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /**
- * The always-visible key of the Graph (audit U11): what the badges on a member (S, P, M, W, E, !) and the three line
- * styles mean, in one row above the canvas, so none of it needs the Legend popover. It states only what
+ * The key of the Graph (audit U11): what the badges on a member (S, P, M, W, E, !) and the three line styles mean, in one row
+ * above the canvas, so none of it needs the Legend popover. Shown whenever there is room; in a pane shorter than 360px it starts
+ * folded behind the Graph key button (`DependenciesPanel.vue`). It states only what
  * `GraphCanvas.vue` renders: the same letters, the same kind colours (State = ok, Property = warning, Method =
  * accent) and the same strokes. The Legend still has the long form.
  *

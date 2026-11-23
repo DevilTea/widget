@@ -329,8 +329,8 @@ const zhTWPresentationMessages: Readonly<Record<string, string>> = {
 	'The preview frame refused the last change, so it still shows the last version that loaded. Try again; if it keeps failing, reload the page.': '預覽框架拒絕了最後一次變更，所以仍顯示最後一個成功載入的版本。請再試一次；如果一直失敗，請重新整理頁面。',
 
 	// Graph key and chrome (audit U11, U21).
-	'Graph key': 'Graph 標記說明',
-	'Key': '標記說明',
+	// The key's list and the button that shows it share this name (標記說明: the Graph view already says which graph).
+	'Graph key': '標記說明',
 	'A → B: A depends on B': 'A → B：A 依賴於 B',
 	'The arrowhead is on the target: A → B means A depends on B. In Relations, B is listed under "Depends on" for A, and A under "Used by" for B.': '箭頭在目標端：A → B 表示 A 依賴於 B。在 Relations 中，B 列在 A 的「依賴於」之下，A 列在 B 的「被誰使用」之下。',
 	'While a widget or member is selected, its edges turn blue and are tagged "Depends on #x" (they leave it) or "Used by #x" (they arrive at it); every other edge fades. A tag with no room on its own edge is set beside it and joined to it by a short line, or left out where there is no room at all: the Relations view has the full list.': '選取 widget 或 member 時，它的 edges 會變成藍色，並標上「依賴於 #x」（從它出發）或「被 #x 使用」（指向它）；其他 edges 會淡出。自己的 edge 上放不下的標籤會移到旁邊，用一條短線連回去；完全沒有空間時則省略：完整清單請看 Relations 檢視。',

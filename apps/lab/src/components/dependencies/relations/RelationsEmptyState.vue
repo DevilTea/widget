@@ -9,11 +9,16 @@ const i18n = useLabI18n()
 </script>
 
 <template>
+	<!--
+		The card is centred with my-auto, not justify-center: in a pane lower than the card (the half-height Tools pane of a short window)
+		justify-center pushed it up out of its box and over the panel toolbar, where it took the clicks meant for the Graph tab. With
+		my-auto it starts at the top and the state scrolls.
+	-->
 	<div
-		class="relations-empty-state flex flex-col items-center justify-center h-full p-[32px_24px] text-center text-lab-text-muted font-lab-sans"
+		class="relations-empty-state flex flex-col items-center h-full min-h-0 overflow-y-auto p-[32px_24px] text-center text-lab-text-muted font-lab-sans"
 	>
 		<div
-			class="relations-empty-card max-w-[420px] p-[24px_28px] rounded-lab border border-lab-border border-dashed bg-lab-surface flex flex-col items-center gap-[12px] [box-shadow:0_2px_10px_color-mix(in_srgb,var(--lab-color-text)_4%,transparent)]"
+			class="relations-empty-card my-auto flex-none max-w-[420px] p-[24px_28px] rounded-lab border border-lab-border border-dashed bg-lab-surface flex flex-col items-center gap-[12px] [box-shadow:0_2px_10px_color-mix(in_srgb,var(--lab-color-text)_4%,transparent)]"
 		>
 			<div
 				class="relations-empty-icon flex items-center justify-center w-[40px] h-[40px] rounded-[50%] bg-lab-surface-alt text-lab-text text-[18px] font-bold"

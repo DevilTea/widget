@@ -36,6 +36,8 @@ export interface ZoomLimits {
 export const MEMBER_FONT_PX = 12
 /** The smallest text anywhere in the Lab, on screen. */
 export const MIN_SCREEN_TEXT_PX = 11
+/** The height of an expanded widget's header (type, id, member count, Collapse), bound into `GraphCanvas.vue`'s stylesheet. */
+export const EXPANDED_HEADER_PX = 40
 
 function clamp(value: number, limits: ZoomLimits): number {
 	return Math.min(limits.max, Math.max(limits.min, value))
@@ -125,7 +127,7 @@ export function clusterToFrame<Graph>(previous: LayoutGeneration<Graph> | null, 
 
 /**
  * The minimap needs at least this much canvas to be any use; below it, it would cover most of what it maps. The default Tools pane
- * (about 749 x 300 at 1440 x 900 and 666 x 250 at 1280 x 800 with the Graph key folded) is above it.
+ * (749 x 305 at 1440 x 900 and 666 x 255 at 1280 x 800 with the Graph key folded) is above it.
  */
 export const MINIMAP_MIN_PANE: Size = { width: 320, height: 160 }
 /** The minimap's width is this share of the canvas width, within `MINIMAP_MIN_SIZE` and `MINIMAP_MAX_SIZE`. */
@@ -177,16 +179,21 @@ export function isContentInView(content: Rect, pane: Size, viewport: Viewport, t
 }
 
 /**
- * The minimap is shown only while part of the graph is out of view and the pane is at least `MINIMAP_MIN_PANE`: with everything in
- * view it has nothing to add, and in a tiny pane it would hide the graph it maps. It also gives way to the focus tags: when
- * `minimap` (its box on screen) would cover any of `tags` (their boxes on screen), it is not shown. The tags are placed in flow
- * units once per zoom bucket (`composables/use-graph-tags.ts`) while the minimap is fixed to the screen, so making it an obstacle of
- * the placement would place every tag again on every pan step, and the tags would move as the graph is dragged.
+ * The minimap is mounted only while part of the graph is out of view and the pane is at least `MINIMAP_MIN_PANE`: with everything in
+ * view it has nothing to add, and in a tiny pane it would hide the graph it maps.
  */
-export function isMinimapUseful(content: Rect | null, pane: Size, viewport: Viewport, minimap?: Rect, tags: readonly Rect[] = []): boolean {
+export function isMinimapUseful(content: Rect | null, pane: Size, viewport: Viewport): boolean {
 	if (content === null || pane.width < MINIMAP_MIN_PANE.width || pane.height < MINIMAP_MIN_PANE.height)
 		return false
-	if (isContentInView(content, pane, viewport))
-		return false
-	return minimap === undefined || !tags.some(tag => rectsOverlap(tag, minimap))
+	return !isContentInView(content, pane, viewport)
+}
+
+/**
+ * Whether the minimap (its box on screen) would cover any of `obstacles` (boxes on screen: the focus tags that are showing and the
+ * expanded widget's header); then it is hidden but stays mounted. The tags are placed in flow units once per zoom bucket
+ * (`composables/use-graph-tags.ts`) while the minimap is fixed to the screen, so making it an obstacle of the placement instead would
+ * place every tag again on every pan step, and the tags would move as the graph is dragged.
+ */
+export function isMinimapCovering(minimap: Rect, obstacles: readonly Rect[]): boolean {
+	return obstacles.some(obstacle => rectsOverlap(obstacle, minimap))
 }

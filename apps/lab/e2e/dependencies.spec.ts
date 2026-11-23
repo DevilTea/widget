@@ -30,6 +30,45 @@ test('Relations is the default Dependencies view, with the Graph one click away'
 		.toBeVisible()
 })
 
+// The half-height Tools pane of a short window is lower than the Relations empty card. The card used to be centred with
+// justify-center, which pushed it up out of its box and over the panel toolbar, where it took the clicks meant for the Graph tab.
+for (const size of [{ width: 1100, height: 700 }, { width: 900, height: 600 }] as const) {
+	test(`at ${size.width} x ${size.height} the Relations empty card stays in its box and scrolls; the Graph tab takes a click`, async ({ page }) => {
+		await page.setViewportSize(size)
+		await openSurveyDependencies(page, { graph: false })
+		const state = page.locator('.relations-empty-state')
+		await expect(state)
+			.toBeVisible()
+		const view = (await page.locator('.dependencies-relations-view')
+			.boundingBox())!
+		const toolbar = (await page.locator('.dependencies-toolbar')
+			.boundingBox())!
+		// Lower than its content: it scrolls, and nothing of it is drawn above its own box (over the toolbar).
+		const scroll = await state.evaluate(element => ({ scrollHeight: element.scrollHeight, clientHeight: element.clientHeight }))
+		expect(scroll.scrollHeight)
+			.toBeGreaterThan(scroll.clientHeight)
+		const card = (await page.locator('.relations-empty-card')
+			.boundingBox())!
+		expect(card.y)
+			.toBeGreaterThanOrEqual(view.y - 1)
+		expect(view.y)
+			.toBeGreaterThanOrEqual(toolbar.y + toolbar.height - 1)
+		await state.evaluate((element) => {
+			element.scrollTop = element.scrollHeight
+		})
+		expect(await state.evaluate(element => element.scrollTop))
+			.toBeGreaterThan(0)
+
+		// A real mouse click on the Graph tab (no keyboard detour) switches the view.
+		await page.getByRole('tablist', { name: 'Dependencies views' })
+			.getByRole('tab', { name: 'Graph' })
+			.click()
+		await expect(page.getByRole('tablist', { name: 'Dependencies views' })
+			.getByRole('tab', { name: 'Graph' }))
+			.toHaveAttribute('aria-selected', 'true')
+	})
+}
+
 test('Relations inspects shared Document focus and switching back to Graph preserves it without refitting', async ({ page }) => {
 	await openSurveyDependencies(page, { graph: false })
 

@@ -164,8 +164,10 @@ watch(() => layoutState.value.status, (status) => {
 /**
  * The Graph key folds away in a short pane. The key is a row above the canvas that wraps to two lines at the width of the default
  * Tools pane, where it took about 50 of the 300px the Graph has. While the view area (key plus canvas) is shorter than
- * `KEY_FOLD_BELOW_PX` it starts folded; the Key button shows it, and a press is kept as the person's choice for this panel. The
- * view area is measured whichever view is showing, so the key is decided before the Graph is first drawn and fitted.
+ * `KEY_FOLD_BELOW_PX` it starts folded; the Graph key button shows it, and a press is kept as the person's choice for this panel.
+ * The view area is measured whichever view is showing, so the key is usually decided before the Graph is first drawn; a fold in the
+ * same frame as the first fit is laid out before it, because `GraphCanvas.vue` waits a frame before its automatic fit. A fold or
+ * unfold after the fit (a press of the button) does not refit: Fit graph does.
  */
 const KEY_FOLD_BELOW_PX = 360
 const viewArea = useTemplateRef<HTMLElement>('viewArea')
@@ -325,15 +327,19 @@ const statusLabel = computed(() => {
 					{{ i18n.t('Collapse all') }}
 				</button>
 				<GraphLegend />
+				<!-- "Graph key", not "Key": next to Legend a bare "Key" read as the same thing. Expanded, it is drawn pressed (accent). -->
 				<button
 					type="button"
 					data-testid="graph-key-toggle"
 					:aria-expanded="keyShown"
 					:aria-controls="graphKeyId"
-					class="p-[3px_8px] min-h-[24px] text-[11px] rounded-lab border border-lab-border bg-lab-surface-alt text-lab-text cursor-pointer"
+					class="p-[3px_8px] min-h-[24px] text-[11px] rounded-lab border cursor-pointer"
+					:class="keyShown
+						? 'border-lab-accent bg-[color-mix(in_srgb,var(--lab-color-accent)_14%,var(--lab-color-surface))] text-lab-text font-semibold'
+						: 'border-lab-border bg-lab-surface-alt text-lab-text'"
 					@click="keyChoice = !keyShown"
 				>
-					{{ i18n.t('Key') }}
+					{{ i18n.t('Graph key') }}
 				</button>
 				<span
 					v-if="statusLabel"
@@ -396,7 +402,7 @@ const statusLabel = computed(() => {
 				role="tabpanel"
 				aria-labelledby="dependencies-view-tab-relations"
 				tabindex="0"
-				class="dependencies-relations-view flex-auto min-h-0 relative flex flex-col"
+				class="dependencies-relations-view flex-auto min-h-0 relative flex flex-col overflow-hidden"
 			>
 				<RelationsView
 					:model="relationsModel"

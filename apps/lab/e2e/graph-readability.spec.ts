@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import { expandGraphWidget, expect, graphWidgetCard, maximizeTools, openDependenciesGraph, openTool, setLocale, test } from './fixtures'
+import { expandGraphWidget, expect, graphWidgetCard, maximizeTools, openDependenciesGraph, setLocale, test } from './fixtures'
 
 /**
  * Issue #230, "the Graph is hard to read": what a person sees in the real browser. The cards are spread out, every dependency
@@ -516,17 +516,7 @@ for (const size of [{ width: 1440, height: 900 }, { width: 1280, height: 800 }] 
 
 test('the minimap is hidden in a canvas lower than 160px (a 1440 x 600 window)', async ({ page }) => {
 	await page.setViewportSize({ width: 1440, height: 600 })
-	await page.goto('/?showcase=trip-budget')
-	await openTool(page, 'dependencies')
-	// The keyboard route to the Graph tab and the zoom buttons: in a pane this low, the Relations card reaches over the toolbar.
-	await page.getByRole('tablist', { name: 'Dependencies views' })
-		.getByRole('tab', { name: 'Relations' })
-		.focus()
-	await page.keyboard.press('ArrowRight')
-	await expect(page.locator('.graph-node--cluster')
-		.first())
-		.toBeVisible({ timeout: 15_000 })
-	await settleViewport(page)
+	await openGraph(page, 'trip-budget', { maximize: false })
 	const canvas = (await page.locator('.vue-flow')
 		.boundingBox())!
 	expect(canvas.height)
@@ -534,8 +524,7 @@ test('the minimap is hidden in a canvas lower than 160px (a 1440 x 600 window)',
 	const fitted = (await readGraph(page)).zoom
 	for (let press = 0; press < 4; press++) {
 		await page.getByTestId('graph-zoom-in')
-			.focus()
-		await page.keyboard.press('Enter')
+			.click()
 	}
 	await settleViewport(page)
 	// Zoomed in: part of the graph is out of view, so only the size of the canvas keeps the minimap away.
@@ -563,11 +552,18 @@ test('the minimap gives way to a focus tag that would be under it, and comes bac
 	// Drag the canvas (from an empty spot of the pane) so the tag's centre lands on the minimap's centre, then back.
 	const delta = { x: map.x + map.width / 2 - (tag.x + tag.width / 2), y: map.y + map.height / 2 - (tag.y + tag.height / 2) }
 	await dragPane(page, delta)
+	// Hidden (visibility, no pointer events) but still mounted, so a drag of it in progress could not lose it.
 	await expect(minimap(page))
-		.toHaveCount(0)
+		.toHaveAttribute('data-covering', 'true')
+	await expect(minimap(page))
+		.toBeHidden()
+	await expect(minimap(page))
+		.toHaveCount(1)
 	await dragPane(page, { x: -delta.x, y: -delta.y })
 	await expect(minimap(page))
 		.toBeVisible()
+	await expect(minimap(page))
+		.toHaveAttribute('data-covering', 'false')
 })
 
 /** Drags the Graph canvas by `delta` screen px, from an empty spot of the pane (not a card, not an edge). */
@@ -596,13 +592,13 @@ async function dragPane(page: Page, delta: Point): Promise<void> {
 
 /**
  * The Graph key folds away in a short pane (the view area under 360px): at the width of the default Tools pane it wraps to two lines
- * and took about 50 of the canvas's 300px. The Key button shows it; maximized, it is shown as before.
+ * and took about 50 of the canvas's 300px. The Graph key button shows it; maximized, it is shown as before.
  */
-test('the Graph key starts folded in the default Tools pane, the Key button shows it, and maximized it is shown', async ({ page }) => {
+test('the Graph key starts folded in the default Tools pane, its button shows it (drawn pressed), and maximized it is shown', async ({ page }) => {
 	await page.setViewportSize({ width: 1440, height: 900 })
 	await openGraph(page, 'survey', { maximize: false })
 	const key = page.getByTestId('graph-key')
-	const toggle = page.getByRole('button', { name: 'Key', exact: true })
+	const toggle = page.getByRole('button', { name: 'Graph key', exact: true })
 	await expect(key)
 		.toBeHidden()
 	await expect(toggle)
@@ -621,12 +617,26 @@ test('the Graph key starts folded in the default Tools pane, the Key button show
 		.toHaveAccessibleName('Graph key')
 	await expect(toggle)
 		.toHaveAttribute('aria-expanded', 'true')
+	// Expanded, it is drawn pressed: its border is the accent colour (folded, the ordinary border).
+	const accent = await page.evaluate(() => {
+		const probe = document.createElement('span')
+		probe.style.color = 'var(--lab-color-accent)'
+		document.body.append(probe)
+		const colour = getComputedStyle(probe).color
+		probe.remove()
+		return colour
+	})
+	await expect(toggle)
+		.toHaveCSS('border-top-color', accent)
 	await expect.poll(async () => (await page.locator('.vue-flow')
 		.boundingBox())!.height)
 		.toBeLessThan(folded.height - 20)
 	await toggle.click()
 	await expect(key)
 		.toBeHidden()
+	await expect(toggle)
+		.not
+		.toHaveCSS('border-top-color', accent)
 
 	// A fresh Lab, maximized: the key is shown and the button says so.
 	await page.goto('/?showcase=survey')
@@ -634,7 +644,7 @@ test('the Graph key starts folded in the default Tools pane, the Key button show
 	await maximizeTools(page)
 	await expect(page.getByTestId('graph-key'))
 		.toBeVisible()
-	await expect(page.getByRole('button', { name: 'Key', exact: true }))
+	await expect(page.getByRole('button', { name: 'Graph key', exact: true }))
 		.toHaveAttribute('aria-expanded', 'true')
 })
 
@@ -664,13 +674,115 @@ test('dragging the minimap pans the canvas at the same zoom, and a click centres
 	expect(dragged.y)
 		.toBeLessThan(before.y)
 
-	// A click centres the viewport on the point clicked, at the same zoom.
-	await page.mouse.click(map.x + 12, map.y + 12)
-	await expect.poll(async () => (await translate()).x)
-		.not
-		.toBe(dragged.x)
-	expect((await translate()).zoom)
-		.toBeCloseTo(before.zoom, 5)
+	// A click centres the viewport on the point clicked, at the same zoom: the flow point under the pointer (mapped through the
+	// minimap's viewBox, letterboxing included, by its screen matrix) ends up in the middle of the canvas.
+	const target = await minimap(page)
+		.locator('svg')
+		.evaluate((svg) => {
+			const rect = svg.getBoundingClientRect()
+			// Whole pixels: the click reaches the page at whole pixels, and one minimap pixel is many canvas pixels.
+			const screen = { x: Math.round(rect.x + rect.width * 0.25), y: Math.round(rect.y + rect.height * 0.3) }
+			const flow = new DOMPoint(screen.x, screen.y)
+				.matrixTransform((svg as SVGSVGElement).getScreenCTM()!.inverse())
+			return { screen, flow: { x: flow.x, y: flow.y } }
+		})
+	await page.mouse.click(target.screen.x, target.screen.y)
+	const canvas = (await page.locator('.vue-flow')
+		.boundingBox())!
+	await expect(async () => {
+		const after = await translate()
+		expect(after.zoom)
+			.toBeCloseTo(before.zoom, 5)
+		expect(Math.abs(canvas.x + target.flow.x * after.zoom + after.x - (canvas.x + canvas.width / 2)))
+			.toBeLessThan(2)
+		expect(Math.abs(canvas.y + target.flow.y * after.zoom + after.y - (canvas.y + canvas.height / 2)))
+			.toBeLessThan(2)
+	})
+		.toPass()
+})
+
+test('dragging the minimap keeps the same minimap while a tag passes under it, and nothing moves after the release', async ({ page }) => {
+	await page.setViewportSize({ width: 1440, height: 900 })
+	await openGraph(page, 'trip-budget', { expand: 'hotel' })
+	await page.locator('.graph-member-card', { hasText: 'shares' })
+		.click()
+	await expect(page.locator('.graph-tag-layer .graph-tag')
+		.first())
+		.toBeVisible()
+	await expect(minimap(page))
+		.toBeVisible()
+	const translate = async (): Promise<{ x: number, y: number }> => page.locator('.vue-flow__transformationpane')
+		.evaluate((element) => {
+			const matrix = new DOMMatrix(getComputedStyle(element).transform)
+			return { x: matrix.e, y: matrix.f }
+		})
+	// Mark this minimap element: a remount would be a new element without the mark.
+	await minimap(page)
+		.evaluate((element) => {
+			(element as HTMLElement & { labProbe?: boolean }).labProbe = true
+		})
+	const sameMinimap = async (): Promise<boolean> => page.evaluate(() => {
+		const element = document.querySelector('[data-testid="graph-minimap"]') as (HTMLElement & { labProbe?: boolean }) | null
+		return element?.labProbe === true && element.isConnected
+	})
+	const map = (await minimap(page)
+		.boundingBox())!
+	const tag = (await page.locator('.graph-tag-layer .graph-tag:not(.graph-tag--hidden) .graph-tag-bg')
+		.first()
+		.boundingBox())!
+	// The tag has to travel by this much (screen px) to sit on the minimap's centre.
+	const needed = { x: map.x + map.width / 2 - (tag.x + tag.width / 2), y: map.y + map.height / 2 - (tag.y + tag.height / 2) }
+
+	const start = { x: map.x + map.width / 2, y: map.y + map.height / 2 }
+	await page.mouse.move(start.x, start.y)
+	await page.mouse.down()
+	// Dragging the minimap by one px moves the canvas the opposite way by many px: measure that ratio with a first small step.
+	const origin = await translate()
+	await page.mouse.move(start.x - 2, start.y - 2)
+	const probe = await translate()
+	const ratio = { x: (probe.x - origin.x) / 2, y: (probe.y - origin.y) / 2 }
+	expect(ratio.x)
+		.toBeGreaterThan(1)
+	let passedUnder = false
+	for (let step = 1; step <= 12; step++) {
+		const pointer = { x: start.x - needed.x / ratio.x * step / 10, y: start.y - needed.y / ratio.y * step / 10 }
+		await page.mouse.move(pointer.x, pointer.y)
+		const state = await page.evaluate(({ map }) => {
+			const element = document.querySelector('[data-testid="graph-minimap"]')
+			const tags = [...document.querySelectorAll('.graph-tag-layer .graph-tag:not(.graph-tag--hidden) .graph-tag-bg')].map(node => node.getBoundingClientRect())
+			const under = tags.some(rect => rect.x < map.x + map.width && map.x < rect.x + rect.width && rect.y < map.y + map.height && map.y < rect.y + rect.height)
+			return { under, visible: element !== null && getComputedStyle(element).visibility === 'visible' }
+		}, { map })
+		if (state.under) {
+			passedUnder = true
+			// Frozen while dragged: the same minimap, still there and visible under the pointer.
+			expect(state.visible)
+				.toBe(true)
+		}
+		expect(await sameMinimap(), `the minimap was replaced at step ${step}`)
+			.toBe(true)
+	}
+	expect(passedUnder, 'a tag passed under the minimap during the drag')
+		.toBe(true)
+	await page.mouse.up()
+	expect(await sameMinimap())
+		.toBe(true)
+
+	// Released: nothing moves any more, whatever the pointer does.
+	await settleViewport(page)
+	const released = await translate()
+	await page.mouse.move(start.x - 200, start.y - 150, { steps: 6 })
+	await page.mouse.move(start.x + 50, start.y + 40, { steps: 6 })
+	await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+	expect(await translate())
+		.toEqual(released)
+	// And with the tag now under it, it gives way, without being unmounted.
+	await expect(minimap(page))
+		.toHaveAttribute('data-covering', 'true')
+	await expect(minimap(page))
+		.toBeHidden()
+	expect(await sameMinimap())
+		.toBe(true)
 })
 
 for (const theme of ['light', 'dark'] as const) {
