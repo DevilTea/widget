@@ -15,9 +15,10 @@ stale prose here or historical `DevilTea/deviltea-labs#13` checkpoints that `Dev
 
 Private, never-published workspace application with two roles:
 
-1. **Lab shell** — the two-column workbench's `Author` workspace (Catalog/Structure/JSON), Preview, the `Explain` tab, the
-   `Selected widget` pane, the live `Events` log, and readonly Blueprint/Runtime/Dependencies inspectors over `@deviltea/widget-core` /
-   `@deviltea/widget-vue`.
+1. **Lab shell** — the workbench (Lab UX phase 3B): a tool group with three tabs, `Edit` (Structure/JSON, and the Catalog
+   as a slide-over), `Explain` and `Tools`, beside the Preview; `Tools` is a menu of the expert views (Blueprint tree, Runtime tree,
+   the live Events log, Dependencies, Selected widget, Document Tools, Implementation), readonly inspectors over `@deviltea/widget-core` /
+   `@deviltea/widget-vue` that open on request in a Tools group below the Preview. See "Workbench layout" below.
 2. **Showcases** — served by the same shell and Document-backed authoring model, as registered in
    `src/showcases/registry.ts`: `Interactive Survey` (`survey`) is the default, and `Trip budget splitter`
    (`trip-budget`), `Quote rules shared by browser and backend` (`quote-rules`), `Onboarding wizard with an Events log` (`onboarding`), `Legacy document repair` (`document-repair`) and `One document, two renderer packs` (`renderer-packs`) are listed after it in the header's Examples menu; `Sandbox` (`sandbox`, minimal fixtures) is a hidden,
@@ -88,6 +89,10 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
 - `src/composables/use-document-tools.ts` — request-only bridge for the lazy, closable Phase 6 Document
   Tools developer panel; it owns no Document state and only asks `Workbench.vue` to add or activate the
   panel, paralleling the Implementation explorer lifecycle.
+- `src/lab/tools.ts` + `src/composables/use-open-tool.ts` (Lab UX phase 3B) — the expert views of the Tools tab (ids, Dockview
+  components, tab titles, menu labels and one-line descriptions) and the one way to open one: `useOpenTool()` (or
+  `createToolOpener()` where the stores are at hand, as in `App.vue` for the tutorial) routes Implementation and Document Tools to
+  their request stores and the other views to `LabStore.openTool()`; `Workbench.vue` adds or focuses the tab in the Tools group.
 - `src/composables/use-graph-edge-selection.ts` — panel-local Graph edge-selection state (edge
   selection never expands into the shared cross-inspector focus).
 - `src/runtime-inspector/` — small framework-agnostic helpers for the Runtime Inspector: `source.ts`
@@ -107,9 +112,9 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   `ShowcaseEntry.sources` (`src/showcases/registry.ts`) alongside `presets`. `src/components/panels/
   ImplementationPanel.vue` (registered lazily — see below) and `src/components/implementation/*`
   (`ImplementationFile.vue`, `ImplementationSourceView.vue`) are the Vue layer; `src/composables/
-  use-implementation-explorer.ts` is the small, deliberately parallel open/activate bridge to
-  `Workbench.vue`'s Dockview instance (see that file's header for why it is not an extension of
-  `LabStore.activeTab`).
+  use-implementation-explorer.ts` is the small open/activate request store `Workbench.vue` follows (it carries the explorer's
+  mode, Focused instance or Registered plugins); since Lab UX phase 3B the panel is the `implementation` view of the Tools group
+  and callers open it through `useOpenTool()`.
 - `src/explain/why.ts` — the Explain tab's "why" sentences (Lab UX phase 2, see "The Explain tab" below): pure, built from the
   Blueprint inspection and the plugin's config JSON Schema, unit-tested over the Survey, Trip budget, quote-rules and Sandbox
   presets. `src/lib/prose.ts` splits generated documentation into text and Markdown code spans (`splitInlineCode`) and a
@@ -121,15 +126,17 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
   structured fields (`code`, `location`, `path`, `reason`, ...). The Lab does not enumerate or label
   diagnostic/failure codes: a code is shown verbatim, so a new Core code needs no Lab change.
 - `src/components/` — the app shell: `LabHeader.vue` (the grouped header, see "Header, status chips and draft
-  protection" below), `Workbench.vue` (`dockview-vue` two-column layout, about half the width for the tool group by default, saved and restored, see "Workbench layout and the Selected widget pane" below), `NonClosableTab.vue`
+  protection" below), `Workbench.vue` (`dockview-vue`: the tool group, about half the width by default, the Preview, and the Tools group
+  created on demand; saved and restored, see "Workbench layout" below), `NonClosableTab.vue`
   (a custom Dockview `tabComponent` — `DevilTea/deviltea-labs#27` Finding 2: registered as `tabComponents.nonClosable` and
-  selected via `AddPanelOptions.tabComponent` on each of the seven canonical panels' `addPanel()` calls, it
+  selected via `AddPanelOptions.tabComponent` on each of the four canonical panels' (Edit, Explain, Tools, Preview) `addPanel()` calls, it
   renders only a title (kept in step with `onDidTitleChange`, so a language switch retitles it), no close control, so those panels can never be closed; Dockview's own `Tab`
   wrapper — drag/reorder/dock/resize/activate — is untouched, since a `tabComponent` only replaces what
-  that wrapper renders as content), `panels/*` (Author/Selected widget/Blueprint/Runtime/Events/Dependencies tabs, plus the
-  lazily-registered `ImplementationPanel.vue` — `DevilTea/deviltea-labs#25` P3; it is the one panel `Workbench.vue`
-  registers with no `tabComponent` override, i.e. Dockview's own default (closable) tab, since it is
-  deliberately not an eighth canonical non-closable surface), `preview/PreviewPanel.vue`,
+  that wrapper renders as content; on the Tools tab it also draws the Events log's unseen count), `panels/*` (`AuthorPanel.vue` is the Edit
+  tab, `ExplainPanel.vue`, `ToolsPanel.vue` the Tools menu; the expert views `BlueprintPanel`, `RuntimePanel`, `EventsPanel`,
+  `DependenciesPanel`, `SelectedWidgetPanel`, and the lazily-registered `ImplementationPanel.vue` (`DevilTea/deviltea-labs#25` P3)
+  and `DocumentToolsPanel.vue`, all registered with no `tabComponent` override, i.e. Dockview's own default (closable) tab),
+  `author/CatalogDialog.vue` (the Catalog slide-over), `preview/PreviewPanel.vue`,
   which consumes the published `@deviltea/widget-inspector` client/agent boundary for Inspect mode through its public subpaths only (never a root entry or an internal module). The Preview Runtime, Vue
   renderer tree and `InspectorAgent` live in an isolated iframe realm (`preview-frame.html` ->
   `src/preview-frame-main.ts`); the parent owns only the iframe element, the remote `InspectorClient`, and
@@ -244,8 +251,8 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
     - **The config JSON Schema.** Each entry of `quoteConfigSchemas` is `~standard.jsonSchema.input({ target: 'draft-2020-12' })` of the
       same schema object (`jsonSchemaOf()`), with the field descriptions as `v.description(...)`. `schemas.unit.test.ts` pins its shape, that the
       showcase hands exactly it to the Lab, and what `describeField` (`lab/config-schema.ts`) makes of it: a list of tiers with Add and Remove,
-      number boxes, a switch, a choice list and free `papers` keys; `e2e/quote-rules.spec.ts` drives those controls in Author >
-      Structure and shows the schema in Author > Catalog. The schema says no more than the validator can express: it cannot say that
+      number boxes, a switch, a choice list and free `papers` keys; `e2e/quote-rules.spec.ts` drives those controls in Edit >
+      Structure and shows the schema in the Catalog (Edit > Browse widget types). The schema says no more than the validator can express: it cannot say that
       the smallest discount tier starts at 1 (and the validator does not either, which is the next point).
     - **An isolated exception.** `VolumeDiscount` has a deliberate, commented defect (`plugins/volume-discount.ts`): it assumes the
       smallest tier starts at 1, so a total quantity below every tier makes `compute` throw a `TypeError` (it applies the tier with the largest
@@ -290,7 +297,7 @@ The app deploys to GitHub Pages together with `docs/site` (see "Deployment" belo
     (`goTo` and `requestSlot` use `validateArgs`, which sees only the arguments and the config, so `invalid-method-arguments` is about the shape
     and the config (the offered days and times); the checks that need the Blueprint or another widget, `no-such-step`, `step-locked`,
     `booking-in-progress`, are in `execute` and are `invalid-method-result`); **Method failures** (a refused move writes and emits nothing; its
-    diagnostic is the Method's latest failure, listed by the Events tab and shown on the Method's row in Selected widget/Runtime, and the next
+    diagnostic is the Method's latest failure, listed by the Events log and shown on the Method's row in Selected widget/Runtime, and the next
     successful call replaces it); and **read-only versus writing Methods** (`Onboarding.canEnter` is read-only, `goTo` and `next` call it, so both apply the same locking rule (`step-locked`), every other
     Method writes State and emits, so Relations marks them W and E; `plugins/wizard.unit.test.ts` pins the derived flags with
     `inspectBlueprint`). Core's code for a failed `validateArgs` is `invalid-method-arguments`. Presets: `onboarding-default`,
@@ -591,8 +598,8 @@ Renderer packs page (page-*.js + page-*.css)
 Renderer packs Nuxt UI pack (NuxtUiPack-*.js + NuxtUiPack-*.css)
                                          ~100.1 KB raw / ~23.9 KB gzip JS + ~197.7 KB / ~25.3 KB CSS — loaded the first time the Nuxt UI pack is chosen (its own
                                          nested Vue app, the eight Nuxt UI renderers, Tailwind utilities and the Nuxt UI component themes); the default frame never loads it
-modern-monaco/core package JS (core-*.js) ~763 KB raw / ~275 KB gzip — loaded when Author JSON is first opened
-vendored editor-core.mjs                ~7.93 MB raw / ~1.41 MB gzip — loaded when Author JSON is first opened
+modern-monaco/core package JS (core-*.js) ~763 KB raw / ~275 KB gzip — loaded when Edit > JSON is first opened
+vendored editor-core.mjs                ~7.93 MB raw / ~1.41 MB gzip — loaded when Edit > JSON is first opened
 vendored editor-worker(-main).mjs       ~566 KB raw / ~119 KB gzip  — loaded on first Monaco worker use
 ELK layout worker (layout.worker-*.js)  ~1.91 MB raw / ~465 KB gzip — loaded on first Graph layout
 Implementation panel + Shiki (ImplementationPanel-*.js)
@@ -619,37 +626,29 @@ CSS (lab-*.css)                           ~342 KB raw / ~40 KB gzip — eager
   force-enabled `useBuiltinLSP` and carried ~740 KB of unused LSP/grammar code is deliberately not
   imported anywhere), and
   `editor-core.mjs` is never in Vite's module graph at all (loaded by `modern-monaco` itself via the
-  importmap-resolved dynamic `import()` described in "Deployment" above). Both are fetched **when the Author JSON view is
-  first opened**: `AuthorPanel.vue` renders only the active view (`v-if`), and since Lab UX phase 1 the view Author opens on is
+  importmap-resolved dynamic `import()` described in "Deployment" above). Both are fetched **when the Edit tab's JSON view is
+  first opened**: `AuthorPanel.vue` renders only the active view (`v-if`), and since Lab UX phase 1 the view Edit opens on is
   Structure, not JSON. (Before, JSON was the default and Dockview mounts every canonical panel's content at load, so
   `MonacoJsonEditor` mounted, and both files were fetched, on every load whichever tab the user looked at; that was an accepted
   trade-off while JSON was the default surface.) The JSON tab, the problems chip and "Show problems" are the ways in; `e2e/shell.spec.ts` asserts no `.monaco-editor` before JSON is opened and the Pages spec asserts
   `editor-core.mjs` is requested once it is.
-- **ELK layout worker**: eager on load because Dockview mounts every canonical panel's content at load (the reason Monaco
-  was eager too until Lab UX phase 1 made Structure the first Author view; Monaco is now fetched when the JSON view is first opened), and this
-  predates this issue's change — verified by loading the built app fresh (no tab interaction) and
-  observing `layout.worker-*.js` requested immediately. `layout-client.ts`'s `ensureElk()` still only
-  creates the `Worker` on the *first* `layoutGraph()` call rather than as an import-time side effect
-  (so it is "lazy" in the narrow sense that comment describes), but that first call happens during
-  initial mount today because `DependenciesPanel.vue` (like Blueprint/Runtime) is mounted immediately by
-  Dockview per the same paragraph above, and its `useDependencyGraph()` composable's
-  `watch(semanticGraph, ...)` fires as soon as the app's initial default-preset commit produces the
-  first real Blueprint — before any user ever opens the Graph tab. Runtime state/property/method
-  activity still never re-triggers a relayout (that guarantee is unaffected and unrelated to this
-  paragraph); what does not currently hold is "ELK stays uninitialized until a user opens Graph." Fixing
-  that would mean gating panel *mount* (not just tab selection) on Dockview activity for Blueprint/
-  Runtime/Graph, which is a Workbench/Dockview panel-lifecycle change out of scope for `DevilTea/deviltea-labs#30` — noted
-  here as known, current-state behavior rather than silently left undocumented.
+- **ELK layout worker**: fetched when the Dependencies view is first opened (Lab UX phase 3B). `layout-client.ts`'s `ensureElk()`
+  creates the `Worker` on the *first* `layoutGraph()` call, and that call comes from `DependenciesPanel.vue`'s `useDependencyGraph()`
+  (`watch(semanticGraph, ...)`), which runs as soon as the panel is mounted, Relations view included. Until phase 3B the Dependencies
+  panel was a canonical tab that Dockview mounted at load, so the worker was fetched on every load; it is now an expert view of the
+  Tools group, added (and mounted) only when it is opened, and so are Blueprint, Runtime and Selected widget. Runtime
+  state/property/method activity still never re-triggers a relayout.
 - History: when Monaco's engine was self-hosted (`DevilTea/deviltea-labs#30`), Monaco and ELK were both fetched on initial mount, and
   self-hosting moved neither into nor out of that path (it only removed the esm.sh dependency of a fetch that already happened). Since Lab UX
-  phase 1 Monaco is no longer part of it: Author opens on Structure and the editor mounts with the JSON view.
+  phase 1 Monaco is no longer part of it: Edit opens on Structure and the editor mounts with the JSON view; since Lab UX phase 3B ELK is
+  not either.
 - **Implementation panel + Shiki + curated raw-source chunks (`DevilTea/deviltea-labs#25` P3)**: unlike Monaco/ELK above,
   these genuinely stay lazy — `ImplementationPanel.vue` is registered in `Workbench.vue`'s `components`
   map through `defineAsyncComponent(() => import('./panels/ImplementationPanel.vue'))`, and the panel
   itself is only ever added to Dockview (`api.addPanel({ id: 'implementation', ... })`) the first time
   `ImplementationExplorerStore.open()` is called — from Preview's "View implementation" button,
-  Blueprint's selected-node detail, or the Survey tour's map-of-the-views link (step 2) — never at `onReady()` time the way
-  the seven canonical panels are. Verified by loading the built app fresh and driving each of those three
+  Blueprint's selected-node detail, the Tools menu or a tour step — never at `onReady()` time the way
+  the four canonical panels are. Verified by loading the built app fresh and driving each of those three
   entry points: no request for `ImplementationPanel-*.js` (which statically bundles
   `src/implementation/shiki-highlighter.ts` — `@shikijs/core`, `@shikijs/engine-javascript`, and the
   `typescript`/`vue`/`json` `tm-grammars` grammars + `tm-themes`' `one-dark-pro` theme) occurs before the
@@ -947,7 +946,7 @@ holds the same `getSnapshot()`/`subscribe()`-only discipline.
 
 ## Dependencies inspector
 
-The canonical readonly `Dependencies` Dockview panel owns two presentation views over the same current Document Blueprint facts. `Relations` (a focus-centric dependency inspector, readable at the default tool width) is the default view since issue #230 PR 3b; `Graph` is the opt-in topology view. Switching views is presentation-only: it preserves shared Document focus and never mutates semantic state. The active view is shared per store (`use-dependencies-view.ts`) so the Explain tab's "Open dependency graph" can switch it (and focus the Graph tab); "Reset layout" returns it to Relations.
+The readonly `Dependencies` panel (an expert view of the Tools menu since Lab UX phase 3B, opened in the Tools group below the Preview) owns two presentation views over the same current Document Blueprint facts. `Relations` (a focus-centric dependency inspector, readable at the width of the Preview column) is the default view since issue #230 PR 3b; `Graph` is the opt-in topology view. Switching views is presentation-only: it preserves shared Document focus and never mutates semantic state. The active view is shared per store (`use-dependencies-view.ts`) so the Explain tab's "Open dependency graph" can switch it (and focus the Graph tab); "Reset layout" returns it to Relations.
 
 `src/graph/` implements the authoritative Lab-side dependency projections. The Graph view continues to use this pipeline:
 
@@ -1234,10 +1233,25 @@ convenience over the Document commit path, not an authoritative history; redo do
   while nothing runs (a promotion that failed while the old Runtime survived) is "Preview shows the last working version"; the
   design names only the five main states.
 
-## Author workspace (Phase 3)
+## Edit workspace (the Author workspace of Phase 3)
 
-The canonical authored surface is the outer `Author` panel with three Lab-owned views: `Catalog`,
-`Structure`, and `JSON`. `AuthorJsonView.vue` holds the Monaco editor, its toolbar (the commit state and **Format**, which lives
+The canonical authored surface is the `Edit` tab (canonical panel `edit`, component `AuthorPanel.vue`; it was the `Author` panel until
+Lab UX phase 3B, and the component, its `author/*` children and their test ids keep that name). It has two Lab-owned views, switched by
+an in-panel segmented toggle (a `tablist` named "Edit views" / 編輯檢視, `author-view-structure` / `author-view-json`): `Structure`
+(the default) and `JSON`. The `Catalog` is no longer a third view: **Browse widget types** (`browse-widget-types`, in the toggle's
+row) opens it in a slide-over, `author/CatalogDialog.vue`, a native modal `<dialog>` through `useModalDialog` like the Lab's other
+dialogs: the page behind is inert (Tab stays in it), focus starts on its close button, Escape or the close button closes it and focus
+returns to the button that opened it, and it gives way to the narrow-viewport gate. It is a left-edge sheet over the Edit tab, never a
+view that replaces Structure or JSON. Its content is `AuthorCatalogView.vue`, unchanged.
+
+**Toggling to JSON reveals the selected widget** (Lab UX phase 3B): `AuthorJsonView.vue` mounts with the view, and on mount (unless
+it is there to show the problems, `problemsFocusPending`) it locates the chosen widget's Core source path
+(`inspectBlueprint(blueprint).getNode(focus).sourcePath`) in the current editor text (`locateJsonValue()`, `lab/json-locate.ts`,
+exact paths only) and asks Monaco to select that whole object and scroll it near the top (`revealRange(start, end, { focus: false })`):
+keyboard focus stays on the toggle. Nothing is revealed for the root the focus starts at (only a widget someone chose,
+`documentFocusChosen`), for text that does not parse, or for a widget that is not in the text.
+
+`AuthorJsonView.vue` holds the Monaco editor, its toolbar (the commit state and **Format**, which lives
 there since Lab UX phase 3) and the Problems list; its text commits as "Commit lifecycle" says. `Catalog` reads the immutable
 public `session.system.catalog` and public `WidgetPlugin.capabilities`; it never reads or derives from the
 curated `ShowcaseEntry.sources` Implementation Explorer registry. The names and capabilities come from Core (`system.catalog`;
@@ -1276,7 +1290,7 @@ Document's value back in the box and clears a refusal note (with nothing to rest
 `Infinity`) is shown at the field and sends nothing. A config that is not an object (a string,
 a list, a number) has no keys: it is edited whole, as JSON, and replacing it is the empty-path edit.
 
-**Narrow panes (Lab UX phase 2, report item 15).** With the tutorial rail open at 1280px the Author panel is about 480px wide, and the
+**Narrow panes (Lab UX phase 2, report item 15).** With the tutorial rail open at 1280px the Edit panel is about 460px wide, and the
 fields were squeezed to about 18px with the old Set value button over the remove button. The tree column is `clamp(9rem, 32%, 220px)`; every
 `ConfigFieldEditor` is a container (`@container`), and below 20rem of its own width a leaf's label goes on its own line above the control
 (`@max-xs:w-full`); boxes keep at least 120px (`min-w-30`), and the box row and the add rows wrap instead of
@@ -1300,7 +1314,7 @@ the box's `aria-describedby`; the reason alone, the outcome line above is the li
 (`draft-dirty`: it would replace that text), so Structure says so before anything is clicked: a notice above the editor ("The JSON has a syntax
 error, so nothing from it is applied. Fix it in the JSON view, or use Discard JSON changes, to edit here.", `structure-draft-notice`,
 `role="note"`, with **Open the JSON view**, which then puts keyboard focus on the JSON tab of the
-Author views, `author-view-json`) and the fields are locked (`structure-fields` `data-locked="true"`, dimmed; `ConfigFieldEditor` gets `busy`
+Edit views, `author-view-json`) and the fields are locked (`structure-fields` `data-locked="true"`, dimmed; `ConfigFieldEditor` gets `busy`
 and `locked`, so the controls keep focus and readability, carry `aria-disabled` and send nothing, and the text, number and JSON boxes are
 `readonly`, so nothing can be typed that would sit unsent in a box, and leaving a box sends nothing). When the lock lifts (the JSON parses
 again or is discarded, even without leaving Structure) every box shows the Document's value again, including text typed before the lock. The
@@ -1340,7 +1354,7 @@ Document commit path, not a history).
 ### Author recovery and diagnostics (Phase 4)
 
 `StatusDetails.vue` (the header's "Document and preview details" popover; it used to be the Author panel's own
-`AuthorStatusSurface.vue` box, folded into the popover by issue #230 PR 3b so the facts are shown once) is a Lab-owned status
+`AuthorStatusSurface.vue` box, folded into the popover by issue #230 PR 3b so the facts are shown once; the Author panel is the Edit tab since Lab UX phase 3B) is a Lab-owned status
 projection for the current Document. It reads the JSON text's Lab-only SourceParseError, Core's committed blueprint.sourceJsonCompatible and blueprint.status,
 Core's aggregate blueprint.diagnostics.length, Core inspection recovery counts, and the existing
 Document/Preview revision link status. It does not parse JSON itself (the session parses the text once per edit), perform a compatibility
@@ -1395,7 +1409,7 @@ Apply, Revert and the header's Format (it is in the JSON view's toolbar).
   date" (`up-to-date`). `data-testid="lab-status"`, `data-state` is the state, and the facts stay machine-readable for specs:
   `data-validity` (`valid` | `problems`, the committed Document; a syntax error is no longer counted as a Document problem),
   `data-problem-count`, `data-preview` (`current` | `stale` | `unavailable` | `failed`). With problems or a syntax error the chip
-  is a **button** (`UButton`, same attributes) that runs `store.showProblems()` in the current Author view; its accessible name is
+  is a **button** (`UButton`, same attributes) that runs `store.showProblems()` in the current Edit view; its accessible name is
   "<label>: show them". The chip itself is not a live region: a visually hidden `role="status"` next to it
   (`lab-status-announcement`) announces the chip's text as `announcementDelay()` (`lab/status.ts`) says: problems, an unavailable or
   lagging Preview once the state has held for 1 s; JSON that cannot be applied once typing has paused for 1.5 s while the editor has
@@ -1440,15 +1454,14 @@ Apply, Revert and the header's Format (it is in the JSON view's toolbar).
     that does not parse) and **Dismiss notice**. It is inline and has no timer; it applies only while the Document is still at
     that revision (`replacedNoticeVisible`), so Undo or any later commit ends it, and a showcase switch clears it. Its wrapper is a real `role="status"`
     element (not `display: contents`) that stays in the page, so the message is announced. `e2e/committed-edit-protection.spec.ts` pins every case.
-- `LabStore.authorView` (Catalog / Structure / JSON) starts on **Structure** (Lab UX phase 1; it was JSON) and then keeps what the user
-  chose, also across showcase switches; it is not saved across reloads. Specs that need Monaco or the Problems list open it with
-  `openAuthorJson()` (`e2e/fixtures.ts`). It lives in the store, not in `AuthorPanel`, so other surfaces can
-  open the JSON view; `showProblems()` activates Author and sets `problemsFocusPending`, and since Lab UX phase 2 stays in the open
-  Author view (from the Catalog it opens Structure); the mounted view consumes the flag (see "Problems in Structure"). `Workbench.vue` now also feeds
+- `LabStore.authorView` (Structure / JSON; the Catalog is a slide-over since Lab UX phase 3B) starts on **Structure** (Lab UX phase 1;
+  it was JSON) and then keeps what the user chose, also across showcase switches; it is not saved across reloads. Specs that need Monaco
+  or the Problems list open it with `openAuthorJson()` (`e2e/fixtures.ts`). It lives in the store, not in `AuthorPanel`, so other
+  surfaces can open the JSON view; `showProblems()` activates Edit and sets `problemsFocusPending`, and since Lab UX phase 2 stays in
+  the open Edit view; the mounted view consumes the flag (see "Problems in Structure"). `Workbench.vue` now also feeds
   Dockview's active panel back into `activeTab` (and never re-activates the panel already active, which moves DOM focus out of
   Monaco), so asking for a tab that is "already" `activeTab` in the store but no longer on screen still switches.
-- The tutorial rail is a docked column: a 320px flex item beside `Workbench` in `.lab-body` (below the header), see "Workbench layout
-  and the Selected widget pane". It was `position: fixed`, then `absolute`, and covered what was under it both times.
+- The tutorial rail is a docked column: a 320px flex item beside `Workbench` in `.lab-body` (below the header), see "Workbench layout". It was `position: fixed`, then `absolute`, and covered what was under it both times.
 
 ### Problems list and editor squiggles
 
@@ -1505,7 +1518,7 @@ JSON text's syntax error; no second validation path). `LabProblem.configPath` is
 field's control (or the field's or the header's problem list), or the list's first row for a problem with no widget. In JSON it moves focus to
 the Problems list as before. `lab/problems.unit.test.ts` pins the placement and claiming rules, `ConfigFieldEditor.unit.test.ts` the field markup,
 and `e2e/structure-problems.spec.ts` the browser behaviour (max below min at the field, a dependency diagnostic at the header, the list, "Show
-problems" from Structure, the Catalog and JSON).
+problems" from Structure and JSON; the Catalog is a modal slide-over since Lab UX phase 3B, so nothing can be pressed from it).
 
 **Deferred: precise locations for dependency diagnostics.** The report found that the squiggle and "Go to location" for a broken
 `visibleWhen.question` mark the widget's `"id"` instead of the bad value. Core's dependency diagnostics (`missing-dependency-target` and
@@ -1516,25 +1529,29 @@ reports a path.
 ### Stale-preview notice
 
 When the Preview lags the Document the notice above it says why and offers an action: "Your last change has N problems,
-so the preview still shows the last working version." with **Show problems** (`preview-show-problems`, `store.showProblems()`, which stays in
-the open Author view),
+so the preview still shows the last working version." with **Show problems** (`preview-show-problems`, `store.showProblems()`, which brings
+Edit to the front and stays in its open view),
 or, if the Document is valid but the Preview has not caught up, a plain "does not show your latest change yet" line without
 the button (a valid Document has no problems to show).
 `data-testid="preview-diverged-status"`; revision numbers appear only in the header's details popover.
 
 ### Separate inspector panels with shared presentation primitives (Phase 5)
 
-Blueprint and Runtime remain separate outer, canonical Dockview panels. `BlueprintPanel.vue` is the
+Blueprint and Runtime remain separate outer Dockview panels (the "Blueprint tree" and "Runtime tree" expert views of the Tools menu
+since Lab UX phase 3B). `BlueprintPanel.vue` is the
 current Document inspection surface for semantic status, diagnostics, recovery nodes, and Document
 focus; `RuntimePanel.vue` is the Preview-revision surface for passive Runtime state/property/method
 inspection and Preview focus. They must not gain a shared Blueprint/Runtime mode, shared revision state,
-or cross-revision `InspectionNodeId` mapping. Preview Inspect selects the Selected widget pane when
-Document/Preview revisions are linked (it selected Blueprint before) and Runtime when they diverge, and the hint next to the Inspect
-button names that panel ("Click a widget to open it in Selected widget / Runtime", `inspect-hint`; it said "focus it in Blueprint"
-until Lab UX phase 1, `e2e/inspect.spec.ts` pins both cases). Since Lab UX phase 2 a linked Inspect selection made while the Explain tab is
-the visible one stays in Explain (and the hint names Explain): the Explain panel reports its Dockview visibility through
-`use-explain-visibility.ts`, which `PreviewPanel.vue` reads (`e2e/explain.spec.ts`); Graph and Implementation retain
-their existing Document-scoped entry points.
+or cross-revision `InspectionNodeId` mapping.
+
+**Inspect** (Lab UX phase 3B; `PreviewPanel.vue`'s `inspectTarget`): while the Document and Preview revisions are linked, a picked
+widget becomes the shared Document focus and is shown where the user is: in the Edit tab when Edit is the tool group's visible tab
+(Structure selects it, nothing is switched), otherwise in **Explain**, which is brought to the front (the newcomer's view of one
+widget; it used to be the Selected widget pane, and Blueprint before that). While they diverge only the Preview Runtime knows the
+widget, so the **Runtime tree** opens (or is focused) in the Tools group, and the Edit or Explain tab stays. The hint next to the
+Inspect button names that place ("Click a widget to open it in Edit / Explain / Runtime tree", `inspect-hint`; `e2e/inspect.spec.ts`
+pins the three). The tool group's visible tab is `LabStore.toolGroupTab`; the Explain panel no longer reports its visibility
+(`use-explain-visibility.ts` is gone). Graph and Implementation retain their existing Document-scoped entry points.
 
 `src/components/inspector/InspectorPanelShell.vue` and `InspectorSplitLayout.vue` are intentionally
 small, props/slot-only presentation primitives. The shell owns only the repeated description-bar and
@@ -1543,18 +1560,25 @@ Runtime continue to provide their own data, status lines, diagnostics, recovery 
 handlers, and details components. Do not use these primitives as a semantic or focus abstraction, and
 do not merge the two outer panels merely to remove presentation duplication.
 
-### Workbench layout and the Selected widget pane (issue #230 PR 3b)
+### Workbench layout: Edit, Explain, Tools and the Tools group (Lab UX phase 3B; issue #230 PR 3b before it)
 
-**Layout.** The default layout is two Dockview groups: the tool group (Author, Explain, Selected widget, Blueprint, Runtime, Events, Dependencies;
-Author active) and Preview. The tool group is about half the workbench (48%, clamped to 420-940px; it was about 29%, which clipped
-Relations and the Implementation source). The layout is saved to `localStorage` (`widget-lab:layout`, value
+**Layout.** The default layout is two Dockview groups: the **tool group** with three canonical tabs, **Edit**, **Explain** and **Tools**
+(Edit active), and the **Preview**. The tool group is about half the workbench (48%, clamped to 420-940px; it was about 29%, which clipped
+Relations and the Implementation source). There is no third group until an expert view is opened: the **Tools group** is created on demand
+(see "The Tools tab and the Tools group" below). It replaced the six-tab tool group of issue #230 (Author, Explain, Selected widget,
+Blueprint, Runtime, Events, Dependencies), whose expert tabs pushed the newcomer's path (edit, see, understand) off screen; the
+design's principles are progressive disclosure and "never replace what the user is reading". The layout is saved to `localStorage` (`widget-lab:layout`, value
 `{ version, layout }` where `layout` is `DockviewApi.toJSON()`) 250ms after it settles and on `pagehide`, and restored by
 `Workbench.vue` on load. `src/lab/layout-storage.ts` (no Vue, storage injected) owns the format: a layout is used only if it has the
 current `LAYOUT_VERSION`, every canonical panel, panels that name registered components only, and a sized grid; anything else (invalid
 JSON, another version, a missing panel, an unknown component) reads as "none" and the default layout is built. Dockview's
 `fromJSON` can still throw for plausible data: that is caught, and the default is built. Whatever was stored and not usable is removed.
-Bump `LAYOUT_VERSION` whenever a change to the panels or their components would make an old saved layout wrong (version 1 already includes the Selected widget and Events panels; neither needed a bump, because a layout saved before a canonical panel existed lacks it and the check on canonical panels discards it anyway, once). All storage access is try/catch; blocked storage means "nothing saved". Panels opened on
-request (Implementation, Document Tools) are saved with the layout but stripped from the data before Dockview loads it
+Bump `LAYOUT_VERSION` whenever a change to the panels or their components would make an old saved layout wrong. It is **2** since Lab UX
+phase 3B (the canonical panels became `edit`, `explain`, `tools`, `preview`; the `author` component is gone), so every layout saved by the
+six-tab workbench is reset once to the default (`layout-storage.unit.test.ts`, `e2e/workbench-tools.spec.ts`); version 1 had absorbed the
+Selected widget, Events and Explain panels without a bump, because a layout saved before a canonical panel existed lacks it and fails
+the canonical-panel check anyway. All storage access is try/catch; blocked storage means "nothing saved". The expert views (every
+`lab/tools.ts` id: `LAZY_PANEL_IDS`) are saved with the layout but stripped from the data before Dockview loads it
 (`stripLazyPanels`, applied by `loadSavedLayout`), because their content depends on a request that load did not make; a group whose
 active panel was one of them activates its first remaining panel, and a group that held only such panels (a lazy panel dragged into a group of its own) is
 removed from the grid: its size goes to the previous sibling (the next one when it came first), a branch left with one child is replaced by it
@@ -1562,68 +1586,145 @@ removed from the grid: its size goes to the previous sibling (the next one when 
 `activeGroup`/`maximizedNode` are dropped when they pointed into the old tree, so the other dividers stay where the user put them. A grid it does not
 recognise (or one with nothing but lazy panels) is still unusable (default layout). After a restore `Workbench.vue` writes Dockview's active panel to `LabStore.activeTab` (the Dockview-to-store
 subscription is made later), so the store and the screen agree about the open tab. Dockview-vue also reports the restored active panel a moment later through
-`onDidActivePanelChange`, so no browser spec can tell the write from that event (`e2e/layout.spec.ts` asks for Author from outside Dockview after a restore and passes either way);
+`onDidActivePanelChange`, so no browser spec can tell the write from that event (`e2e/layout.spec.ts` asks for Edit from outside Dockview after a restore and passes either way);
 `Workbench.unit.test.ts` mounts the real Workbench over a saved layout with that event silenced and fails when the write is removed. Saved sizes are proportional on restore, so a layout from a wide window fits a narrow one. Tab titles are
 set when a layout is built or restored and follow a language switch. **Reset layout** (overflow menu; `WorkbenchLayoutStore` is a request
-bridge like Document Tools) clears the saved layout and rebuilds the default. The selected showcase is restored separately, by
-`?showcase=`.
+bridge like Document Tools) clears the saved layout and rebuilds the default, which closes every expert view (Dockview's `clear()` can
+leave the same two columns saved one branch deeper, with the root's orientation kept; a restore reads either). The selected showcase is
+restored separately, by `?showcase=`.
+
+**The Preview is rendered with Dockview's `always` renderer** (`renderer: 'always'` when it is added, and set again after a restore): its
+content lives in Dockview's overlay container and is positioned over its group. Splitting the Preview's column for the Tools group moves
+the group's element into a new grid branch; with the default renderer that moved the iframe in the DOM, which reloads it (the Preview
+went blank and lost its Runtime connection). Checked in a real browser: a marker set in the frame's window survives opening a view.
+
+**The Tools tab and the Tools group.** The Tools tab (`ToolsPanel.vue`, canonical panel `tools`) is a list of the expert views
+(`lab/tools.ts`: Blueprint tree, Runtime tree, Events log, Dependency graph and Relations, Selected widget, Document Tools,
+Implementation), each a button with its name and a one-line description (`aria-describedby`); the list is named "Expert views", Tab /
+Enter / Space operate it and the arrow keys, Home and End move between the entries. An open view is marked "Open" (`data-open`, also in its
+description); the Events log entry carries the unseen-Events count. Choosing one calls `useOpenTool()`. `Workbench.vue`'s
+`openToolPanel()` then:
+- focuses the view's tab when the view is open (`setActive()`), so asking again never adds a second tab;
+- otherwise adds it `within` the **Tools group**: a group that holds an expert view and none of the canonical panels;
+- with no such group (no view open yet, or the user dragged every view elsewhere), creates one **below the Preview**, half of the
+  Preview column's height (at least 240px). The left column is not touched, and the right column keeps its full width for the Preview and
+  for the views that need it (the Implementation source, Relations, the Graph). To the right of the Preview, three columns would leave
+  each about 350px at 1280.
+- moves keyboard focus to the view's Dockview tab (the group's selected `[role="tab"]`, next frame), so the tab name is announced; the
+  tool group's tab and its content stay as they were.
+
+The views use Dockview's default tab: a close button, and Delete or Backspace on the focused tab. Closing the last one removes the group,
+and the Preview gets its column back. `LabStore.openTools` (kept by `Workbench.vue` from `onDidAddPanel`/`onDidRemovePanel`) tells the
+menu which are open. A view is mounted only while it is open (it used to be mounted at load as a canonical tab); the Selected widget
+Runtime snapshot and the Events log are shared per store, so nothing is lost by that. Tab titles come from `lab/tools.ts` and follow a
+language switch; **Implementation sets its own title** from what it shows ("Implementation — sessions (MultipleChoice)", the plugin type
+in the Registered plugins mode, plain "Implementation" with nothing to show), through its panel API, so it follows the selection.
+`e2e/workbench-tools.spec.ts` pins the three tool tabs, every entry, re-open focus, the group's place, the keyboard, the Catalog
+slide-over, the JSON reveal, the version reset, 1280 with the rail and zh-TW.
+
+Everything that used to switch the tool group to an expert tab now opens or focuses its view in the Tools group: Inspect while diverged
+(the Runtime tree), Explain's "Open dependency graph" (`useDependenciesView().openGraph()` switches the view to Graph and opens
+Dependencies), the Preview's and the Blueprint tree's **View implementation** (both name their widget for assistive technology and in
+the tooltip: "View implementation of sessions (MultipleChoice)"), the overflow menu's Developer items, and the tutorial's links.
+**Show problems** still brings Edit to the front (the problems are shown there).
+
+**Decisions made in phase 3B (recorded here, not in the design).** Each serves the design's principles (progressive disclosure, never
+replace what the user is reading, plain language first) where the design left a choice open:
+- *Where the Tools group goes:* below the Preview, half of its column (above). Not to its right (three narrow columns) and not under the
+  tool group (that would shrink what the user is editing). **Known cost:** the Graph gets a short pane. The collapsed Survey fits at about
+  0.37 at 1440 x 900 (about 0.95 while Dependencies was a tab of the full-height tool group), so card text is small and the focus tags
+  often find no room until the user drags the divider up (at the Preview's minimum the Fit is about 0.84). `e2e/graph-readability.spec.ts`
+  measures the Graph's drawing with the Tools group given the column for that reason. A follow-up could open the Dependencies view with
+  more height or add a maximize action to the Tools group; neither is in this phase.
+- *The Preview keeps its iframe* through Dockview's `always` renderer, which the split above needs (above).
+- *Linked Inspect* stays in Edit while Edit is showing (Structure selects the widget), and opens Explain otherwise; Selected widget is no
+  longer a tab it can open. Diverged, it opens the Runtime tree beside the Preview, as the brief asks.
+- *Focus after opening a view* goes to the view's Dockview tab, for every opener, including Explain's "Open dependency graph" (it used to
+  land on the Graph view tab inside the panel).
+- *Expert views are not restored* after a reload, like Implementation and Document Tools before: the Tools group is created on demand.
+- *A tour's Finish or Skip* gives back the tool group's tab and the Edit view, and leaves the views it opened open (above).
+- *The Survey map* links the four areas only (Edit, Preview, Explain, Tools) and names the expert views in its text: one click to the menu,
+  where each has its description. The other tours' map steps keep their links to the views they name.
+- *Tour links that opened Selected widget* open the Selected widget view, not Explain: their text is about Method rows, declared Events or
+  the declaration, which Explain does not show (it hides Methods).
+- *The unseen-Events count* is on the Tools tab and next to the Events log entry of the menu; the Events log's own tab has none (it is
+  the log). The Tools menu keeps the log recording before it is opened.
+- *Implementation's tab* names "<id> (<type>)" for the selected widget and the plugin type in Registered plugins mode.
+- *The Catalog slide-over* is a native modal `<dialog>` (the Lab's dialog pattern, `useModalDialog`) at the left edge over Edit, not Nuxt
+  UI's `USlideover`, so every Lab dialog shares one focus, Escape and narrow-viewport behaviour. "Show problems" from the Catalog no longer
+  exists (the dialog is modal), so its spec case was dropped.
+- *The Edit tab is 編輯 in zh-TW* (Author was 編寫), and the panel id is `edit` (the component and its children keep their `Author*` names).
+- *The expert views use Dockview's default tab*: its close button, and Delete or Backspace on the focused tab (Dockview's own keyboard
+  handling), rather than a custom tab. Dockview closes *any* focused tab on those keys, a canonical one included, and opening a view now
+  puts focus on tabs often, so `Workbench.vue` stops the keys in the capture phase for a tab drawn by `NonClosableTab.vue`
+  (`data-non-closable`; `e2e/workbench-tools.spec.ts`). This was already possible before phase 3B.
+- *The per-node detail* was not merged further (see "Merging the per-node detail" below).
 
 **Tutorial rail.** `TutorialRail.vue` is a 320px flex column beside `Workbench` inside `.lab-body`. `Workbench.vue` already observes
 its own size, so Dockview re-lays out when the rail opens or closes, and the rail never covers the header, the overflow menu, the
-Dockview groups or the Preview frame (the survey's own Language select). With the rail open at 1280px the tool area is about 460px, narrower than the three
+Dockview groups or the Preview frame (the survey's own Language select). With the rail open at 1280px the tool group is about 460px and
+the Preview column (and so the Tools group) about 500px, narrower than the three
 Relations columns need (about 680px), so `RelationsView.vue` stacks them (Used by, the focus, Depends on) and scrolls vertically below 680px of **pane** width
-(a container query, so dragging the divider changes it too) instead of scrolling sideways. `e2e/layout.spec.ts` measures this at 1280, 1440 and 1920.
+(a container query, so dragging the divider changes it too) instead of scrolling sideways. `e2e/layout.spec.ts` measures this at 1280, 1440 and 1920, and
+`e2e/workbench-tools.spec.ts` checks at 1280 with the rail open that a view opens beside the Preview with nothing overlapping or scrolling sideways.
 
 **One tour per showcase.** `src/tutorial/tours.ts` lists the tours (`survey`, `trip-budget`, `quote-rules`, `onboarding`, `document-repair`, `renderer-packs`): the id is the showcase's id, and each entry carries the script, the default preset a start reloads and the draft-confirmation message. `use-tutorial.ts` owns one engine per tour and an `activeTourId` that follows the open showcase while no tour runs (the showcase's own tour, or the Survey's for the hidden Sandbox); a tour that is running or paused belongs to its showcase and ends when another one opens, so the rail never describes a showcase that is not open. The Preview frame evaluates the stages of any listed tour (`preview-host/protocol.ts` accepts the ids in `TOUR_IDS`). A new showcase tour is one script, one `tours.ts` entry and its zh-TW strings (`i18n/trip-budget-messages.ts`, `i18n/quote-rules-messages.ts`, `i18n/onboarding-messages.ts` and `i18n/document-repair-messages.ts` are the models).
 
-**A tour gives the user's place and work back (Lab UX phase 2, report item 14).** `beginTour()` records the tool group's own tab and the
-Author view, and the tour's **Finish** or **Skip tour** restores both (`restorePlaceBeforeTour()`). The tab is `LabStore.toolGroupTab`, which
-`Workbench.vue` keeps from Dockview (the canonical panel shown in Author's group, `null` for Implementation or Document Tools), never
-`activeTab`: that one is shared by both Dockview groups and is `preview` once the Preview was touched, and activating the Preview's group
-again left its frame blank (the trip tour spec). The place is recorded afresh on every start or restart that begins outside a tour (idle
+**A tour gives the user's place and work back (Lab UX phase 2, report item 14).** `beginTour()` records the tool group's own tab (Edit,
+Explain or Tools) and the Edit view, and the tour's **Finish** or **Skip tour** restores both (`restorePlaceBeforeTour()`). The tab is
+`LabStore.toolGroupTab`, which `Workbench.vue` keeps from Dockview (the canonical panel shown in Edit's group, `null` while an expert view
+the user dragged into that group is shown), never `activeTab`: that one is shared by every Dockview group and is `preview` once the
+Preview was touched, and activating the Preview's group again left its frame blank (the trip tour spec). Expert views the tour opened in
+the Tools group are left open: they sit beside the Preview, named and closable, and closing what the user may still be reading would
+replace it. The place is recorded afresh on every start or restart that begins outside a tour (idle
 or completed), so a user who moved since the last tour gets their new place back; a start while a tour runs or is paused keeps the place
 recorded when it began. A start whose reload fails forgets the place. Pausing keeps the tour's place, and a tour that ends because its
 showcase was left restores nothing (the user chose where to go). A start reloads the tour's
 default preset: on the tour's own showcase that is an ordinary preset commit, so committed edits are not asked about and the store's
 replaced-document notice offers Undo (see "Header, the status chip and draft protection"); `decideDeterministicStart()` asks only about
 JSON text that does not parse, or, when the start switches showcase (from the hidden Sandbox, which has no tour), about committed edits too, with its own
-message (`START_DISCARDS_EDITS_MESSAGE`, or `START_DISCARDS_DRAFT_AND_EDITS_MESSAGE` naming the draft too). `TutorialActions.activateTab(tab, authorView?)` can also open an Author view.
+message (`START_DISCARDS_EDITS_MESSAGE`, or `START_DISCARDS_DRAFT_AND_EDITS_MESSAGE` naming the draft too).
 
-**The Survey tour teaches editing.** `survey-script.ts` has ten steps: the map of the views comes second (Author, Preview, Explain, Selected widget,
-Events, Blueprint, Runtime, Dependencies, Implementation, each a link), and `edit-and-undo` comes after the answer steps (a committed edit
-restarts the Preview, so the answers those steps build on would start over). It opens Author > Structure on `mode` (`data-tutorial-target`
+**Tour navigation (Lab UX phase 3B).** `TutorialActions` has `activateTab(tab, authorView?)` for the four canonical tabs (`edit`,
+`explain`, `tools`, `preview`; for `edit` it can also open Structure or JSON) and `openTool(tool)` for the expert views, which opens or
+focuses the view in the Tools group (`App.vue` hands `createTutorialStore()` a `createToolOpener()`), so a step never replaces the tab it
+was showing. Every step link that opened an expert tab opens its view now (the onboarding tour's "See next() in Selected widget", "Open
+the Events log", the trip tour's "Follow the chain in Relations", ...), and the prose names views, not tabs ("the Events log", "the
+Runtime tree (in Tools)", "Open Edit"). The map steps of the other five tours start with "Tools, beside the Preview:" and name the views
+as the menu does (Blueprint tree, Runtime tree, Events log); their links are those views.
+
+**The Survey tour teaches editing.** `survey-script.ts` has ten steps: the map of the views comes second and names the four areas (Edit,
+Preview, Explain, Tools, each a link; the Tools part lists the expert views, one click away in the menu), and `edit-and-undo` comes after the answer steps (a committed edit
+restarts the Preview, so the answers those steps build on would start over). It opens Edit > Structure on `mode` (`data-tutorial-target`
 `author-structure` is the Structure editor pane) and is gated on the **committed Document**, not the Preview: the first stage completes when
 `mode`'s authored `config.label` differs from the default in any language or shape, the second when it is the default again (Undo). The
 survey's language is Runtime State and every commit restarts the Preview in the first language, so a Preview-side gate never completed for
 a visitor who read the survey in 中文 and edited `zh-TW`. `TutorialRuntimeReader.readAuthoredConfig` reads the Document's authored config;
 the parent's reader (`createDocumentReader()`) has it and the frame's does not, so `use-tutorial.ts` walks the stages whose predicate holds
 against the Document first, lets the frame continue from there, walks them again, and also rechecks on every Document revision (an invalid
-commit replaces no Runtime). The spotlight is applied after the render, in the next frame, and again when the Author view changes (the
+commit replaces no Runtime). The spotlight is applied after the render, in the next frame, and again when the Edit view changes (the
 Structure pane is a new element after JSON). The map says that
-selecting a widget (Inspect, or the Structure tree) makes Explain show what it is and why it behaves this way; its TODO for phase 3 is
-only to drop the views the IA moves into Tools.
+selecting a widget (Inspect, or the Structure tree) makes Explain show what it is and why it behaves this way.
 
-**Selected widget.** `SelectedWidgetPanel.vue` (canonical panel `widget`) is the first piece of the Explain area: one widget's
+**Selected widget.** `SelectedWidgetPanel.vue` (the `widget` expert view of the Tools menu since Lab UX phase 3B) is one widget's
 declaration and Runtime values together. The widget is the shared Document focus (the Blueprint tree, Relations/Graph and Preview
 Inspect all set it). Left (stacked below 600px of pane width, by container query) `BlueprintNodeDetails` (`embedded`): identity,
 location, config, slots, members, diagnostics; right `RuntimeNodeDetails` (`embedded`) over the same Preview connection the Runtime
 panel uses (`useSelectedRuntimeWidget()`, shared by both). The Runtime half only exists while the Preview shows the Document's
 revision (Preview focus is the linked mapping of Document focus); otherwise the pane says why (`data-runtime-state`: `diverged`,
 `no-preview`, `unresolved`, `unavailable`, `loading`, `ready`) instead of mixing revisions. Blueprint and Runtime stay as
-they were; the pane reuses their detail components and does not replace them. Both panels stay mounted while their tab is hidden, so the Runtime snapshot is one
+they were; the pane reuses their detail components and does not replace them. Both panels stay mounted while their tab is hidden (once opened), so the Runtime snapshot is one
 shared source (`use-selected-runtime-widget.ts`, one per store): requested once per selection, and only while at least one panel reports itself visible
 (`usePanelVisibility(params.api)`, Dockview's `isVisible`/`onDidVisibilityChange`). A panel that is not visible reads `null`, so the member rows under it, which subscribe
 to the remote Runtime, are not rendered and hold no subscription. The linked/diverged rules (`runtimeState`, the message that says why there are no values)
 live in `use-selected-widget-runtime.ts` since Lab UX phase 2, shared with the Explain tab.
 
-**The Explain tab (Lab UX phase 2, M13).** `ExplainPanel.vue` (canonical panel `explain`, tab "Explain" / 說明, right after Author) explains
-one widget for a newcomer, in its final shape (the design's phase 3 keeps it; the Selected widget and Dependencies tabs stay until phase 3 moves
-or removes them). It explains only a widget someone **chose**: `InspectorFocusStore.isDocumentFocusChosen()` (`LabStore.documentFocusChosen`)
+**The Explain tab (Lab UX phase 2, M13).** `ExplainPanel.vue` (canonical panel `explain`, tab "Explain" / 說明, right after Edit) explains
+one widget for a newcomer, in its final shape (phase 3B only moved the Selected widget and Dependencies tabs into Tools). It explains only a widget someone **chose**: `InspectorFocusStore.isDocumentFocusChosen()` (`LabStore.documentFocusChosen`)
 is true after a `setFocus` call or a linked Inspect selection, and false for the root the focus starts at and falls back to when a commit drops
 the selected widget, so Explain never explains the root by default and shows one card instead ("Click a widget in the Preview (Inspect) or in the
 Structure tree..."; while the revisions diverge Inspect opens Runtime, so the card says the preview shows an older version and points to the
-Structure tree only). Top to bottom, each part its own component in `components/explain/` so phase 3 can show Selected widget, Blueprint and
-Runtime details through the same pieces:
+Structure tree only). Top to bottom, each part its own component in `components/explain/`:
 1. **Identity** (`ExplainIdentity.vue`): `#id` and the type, and the plugin's generated summary (`pluginDocsOf(docs, type).summary`, line wraps
    joined), whose Markdown code spans `DocProse.vue` draws as `<code>` instead of raw backticks. There is no generic "label" for a widget (a label
    is a plugin's own config, such as the survey's `{ en, zh-TW }` objects), so the id is shown.
@@ -1650,8 +1751,9 @@ Runtime details through the same pieces:
    otherwise the shared message.
 4. **Used by / Depends on** (`ExplainRelations.vue`): the widget-focus `projectRelations()` model, one entry per other widget with its member pairs
    ("visible reads value"); a resolved widget is a button that sets the shared Document focus. "Open dependency graph" calls
-   `useDependenciesView().openGraph()`, which switches the Dependencies panel to Graph, activates its tab and moves keyboard focus to the Graph view
-   tab (the panel's own focus target for a view switch), so focus never falls back to the page. The view is shared per store for this (it used to be
+   `useDependenciesView().openGraph()`, which switches the Dependencies panel to Graph and opens (or focuses) the Dependencies view in the Tools
+   group; keyboard focus goes to that view's tab, like every view opened from elsewhere (it went to the panel's Graph view tab while Dependencies
+   was a tab of the tool group), so it never falls back to the page, and Explain stays on screen. The view is shared per store for this (it used to be
    panel-local) and stays presentation-only; "Reset layout" puts it back to Relations (`reset()`, called by `Workbench.vue`), as the rebuilt panel
    did when it owned the view. The zh-TW headings are 被誰使用／依賴的 widget, 使用它的 widget and 它依賴的 widget: Relations' 依賴於 reads as
    unfinished as a heading on its own.
@@ -1662,22 +1764,30 @@ which shows the current document (rN)", or, while diverged or without a Preview,
 Selected widget rules). `data-runtime-state` on `data-testid=explain` is `none` with nothing chosen. Tests: `explain/why.unit.test.ts`,
 `lib/prose.unit.test.ts`, `lab/focus.unit.test.ts` (chosen focus), `i18n/explain-messages.unit.test.ts` (every literal has zh-TW with the same
 placeholders) and `e2e/explain.spec.ts` (empty card and tab order, Inspect with a live value that changes after answering, Used by moves the selection,
-Open dependency graph, the diverged wording, zh-TW). A new canonical panel needed no `LAYOUT_VERSION` bump: a saved layout without it fails the
-canonical-panel check and the default is built once (`layout-storage.unit.test.ts`, `e2e/layout.spec.ts`).
+Open dependency graph, the diverged wording, zh-TW).
+
+**Merging the per-node detail (design, last paragraph of "Explain tab").** Selected widget, the Blueprint tree's per-node detail, the
+Runtime tree's per-node detail and Explain already render one widget through the same two components, `BlueprintNodeDetails` and
+`RuntimeNodeDetails` (with `embedded` / `hideMethods`), over the same shared Runtime snapshot (`use-selected-runtime-widget.ts`) and the
+same linked/diverged rules (`use-selected-widget-runtime.ts`). Phase 3B did not merge them further: what is left differs on purpose
+(Blueprint and Runtime must keep their own revision scope, status lines and tree; Explain hides Methods and adds the why list), and a
+shared wrapper would only move that branching into one component without a user-visible gain.
 
 **Events (audit U09).** Events are visible in two places. *Declared*: `components/events/DeclaredEvents.vue` lists a plugin's Events
 (name and description, verbatim and untranslated, no payload schema because Core publishes none; an Event without documentation shows its
 name only) in the Catalog and in `BlueprintNodeDetails` (so also the Selected widget declaration and the Blueprint panel): the names from
-`inspectPlugin` / the Blueprint inspection's `events`, the descriptions from the showcase's generated documentation (`ShowcaseEntry.docs`). *Occurring*: `EventsPanel.vue` (canonical panel `events`, tab `Events`, after Runtime) is a live log over the Inspector
+`inspectPlugin` / the Blueprint inspection's `events`, the descriptions from the showcase's generated documentation (`ShowcaseEntry.docs`). *Occurring*: `EventsPanel.vue` (the `events` expert view, tab "Events log", opened from Tools) is a live log over the Inspector
 protocol only (`runtime.subscribeEvent` / `runtime.eventOccurred`, never a Core Runtime; it cannot emit). `composables/use-event-log.ts` is
 one shared source per store: it subscribes to every Event of every resolved widget in the current Preview connection's Blueprint
-snapshot, **whenever the Lab has a Preview connection and a consumer is mounted**, not only while the Events tab is the visible one: Events are
-push-only with no idle cost and Core has no replay, so a Submit pressed while another tab is open must be in the log when the tab is opened (Dockview
-mounts every canonical panel at load, so the panel is a consumer from the start). It releases every subscription when the connection is replaced
-(a commit, retry, remount) or the last consumer is disposed; a subscription answered after that is released at once. Entries that arrive while the panel is
-not visible (`usePanelVisibility`) are counted as unseen: the Events tab (`NonClosableTab.vue`, reading `useEventLogTabState()`, which subscribes to
-nothing) draws that count as a small badge and puts it in the tab's accessible name; a tab is not a live region, so nothing is announced per Event,
-and the count resets when the panel is visible. The state of the listening is spelled out (`listening`: `off`, `no-preview` = no valid Preview,
+snapshot, **whenever the Lab has a Preview connection and a consumer is mounted**, not only while the log is open and visible: Events are
+push-only with no idle cost and Core has no replay, so a Submit pressed before the log is opened must be in it when it is. Since Lab UX
+phase 3B the Tools menu (`ToolsPanel.vue`, canonical and mounted at load) is that consumer, one that is never "visible"; the log panel is
+one too while it is open. It releases every subscription when the connection is replaced
+(a commit, retry, remount) or the last consumer is disposed; a subscription answered after that is released at once. Entries that arrive while no
+log panel is visible (`usePanelVisibility`) are counted as unseen: the **Tools tab** (`NonClosableTab.vue`, reading `useEventLogTabState()`, which
+subscribes to nothing) draws that count as a small badge and puts it in the tab's accessible name ("Tools, 1 new"), and the menu shows it next to
+the Events log entry (in that entry's accessible name too); a tab is not a live region, so nothing is announced per Event, and the count resets
+when the log is visible. The state of the listening is spelled out (`listening`: `off`, `no-preview` = no valid Preview,
 `loading` = a valid Preview whose frame has not connected, `lost` = the frame was connected and is not, `no-events`, `listening`).
 Entries are `{ seq, at, revision, runtimeId, nodeId, widgetId, widgetType, event, args }`; `at` is when the Lab received it (the protocol
 carries no timestamp), `revision` is the Preview revision that emitted it, `args` are the Inspector's bounded `InspectableValue` DTOs shown
@@ -1746,22 +1856,25 @@ theme and the page colour before it has loaded. Keep the script in step with `ST
   chrome (HTML or the Graph's SVG labels) is under 11px (the Tailwind `text-[..px]` utilities and scoped CSS were raised; do not add a smaller one). A native checkbox
   is 16px with its label as the 24px target. The check is run by hand with a Playwright script that lists visible interactive elements under 24px and
   text nodes under 11px per surface, plus axe-core (tags wcag2a, wcag2aa, wcag21aa, wcag22aa and best-practice; both themes, 1440px) on Header, Author (JSON, Catalog,
-  Structure), Selected widget, Blueprint, Runtime and Dependencies (Relations, Graph); axe is deliberately not a dependency of the repository.
+  Structure; the Edit tab since Lab UX phase 3B), Selected widget, Blueprint, Runtime and Dependencies (Relations, Graph) in PR 3c; the Tools menu and the
+  Catalog slide-over of phase 3B have not been through it. axe is deliberately not a dependency of the repository.
   `e2e/polish.spec.ts` pins the Graph's sizes.
 - **Selected tab.** The selected Dockview tab of each group has the panel background and a 2px accent bar along its top edge (an inset
   `box-shadow`, so its size does not change), in both themes and whether or not its group has focus (it used to look like its hidden
-  siblings in a group without focus). The Author sub-tabs mark their selected view with a 2px bottom border and bold text, so the two
+  siblings in a group without focus). The Edit tab's Structure / JSON toggle (a segmented control since Lab UX phase 3B) marks its
+  selected view with the panel background, a 2px accent bar along its bottom edge (an inset `box-shadow`) and bold text, so the two
   levels never look alike. `e2e/polish.spec.ts` ("the selected workbench tab") reads the computed styles.
 - **Focus.** `dockview-theme.css` draws a 2px accent ring (inside the tab) on a Dockview tab or tab action reached with the keyboard (`:focus-visible`; Dockview's own
   1px divider-colour outline is `!important`, so the Lab's rule is too, and more specific). The Graph's expand/collapse toggles, cluster buttons and member
   cards have a 2px accent outline. Graph **edges** are one Tab stop walked with the arrow keys, with an accent band as
   the focus indicator (see "Dependencies inspector"); Relations remains the dense keyboard route to the same facts, and the Graph has **Zoom in / Zoom out** buttons next to Fit graph (the wheel and pinch already zoom).
-- **Language.** Navigation names are Taiwan Chinese: Author is 編寫, Explain 說明, Dependencies 相依性, Relations 關聯, Graph 關係圖, Catalog 目錄, Structure 結構 (tab titles
-  follow a language switch). **Widget vocabulary stays English** (Widget, Blueprint, Runtime, Preview, Document, State, Property, Method, Event, Source), and so do
+- **Language.** Navigation names are Taiwan Chinese: Edit is 編輯 (Author was 編寫 until Lab UX phase 3B; the tab edits, so it says so),
+  Explain 說明, Tools 工具, Dependencies 相依性, Relations 關聯, Graph 關係圖, Structure 結構, Browse widget types 瀏覽 widget 類型, and the expert
+  views Blueprint 樹 and Runtime 樹 (tab titles follow a language switch; `i18n/workbench-messages.ts`). **Widget vocabulary stays English** (Widget, Blueprint, Runtime, Preview, Document, State, Property, Method, Event, Source), and so do
   `JSON` and the product name. Since Lab UX phase 1 every tab title is translated: a name that is navigation around a Widget word mixes the two, as 選取的 widget
   already did: the Events log is "Events 紀錄" (its own message, `Events log`, so the Catalog's bare "Events" label stays), Document Tools "Document 工具", and
-  Implementation 實作 (the word "查看實作" already used). The panels opened on request follow a language switch like the canonical ones; specs reach them
-  through `openDeveloperTool()`, whose labels follow the page language. Source-owned text is never translated: Core diagnostics, plugin and schema descriptions, the survey's questions and the engine messages. The
+  Implementation 實作 (the word "查看實作" already used; its tab is 實作 — <widget>). The expert views follow a language switch like the canonical
+  tabs; specs reach them through `openTool()` (the menu entries' test ids) or `openDeveloperTool()`, whose labels follow the page language. Source-owned text is never translated: Core diagnostics, plugin and schema descriptions, the survey's questions and the engine messages. The
   survey examples' names and descriptions in the Examples menu are Lab copy and are translated. `i18n/pr3c-messages.unit.test.ts` fails when a literal passed to
   `i18n.t()` in the PR 3c surfaces has no zh-TW entry.
 - **Monaco contrast (U18).** `theme/monaco-themes.ts` is One Light and One Dark Pro with the colours that failed 4.5:1 on the editor background replaced by
@@ -1770,8 +1883,9 @@ theme and the page colour before it has loaded. Keep the script in step with `ST
 
 ### Document Tools developer panel (Phase 6)
 
-`DocumentToolsPanel.vue` is a lazy-added, closable developer surface in the left Dockview group, not a
-canonical panel and not an Author subview. Its header entry point and `use-document-tools.ts` request
+`DocumentToolsPanel.vue` is a lazy-added, closable developer surface, the `document-tools` expert view of the Tools menu (Lab UX phase
+3B: opened in the Tools group beside the Preview, from the menu or from the overflow menu's Developer submenu), not a
+canonical panel and not an Edit subview. Its header entry point and `use-document-tools.ts` request
 store parallel the Implementation explorer's lifecycle; `Workbench.vue` owns the actual Dockview
 `addPanel`/activation operation and does not increase the canonical non-closable panel count.
 
@@ -1828,7 +1942,11 @@ Browser specs reach the header's menus only through the helpers in `e2e/fixtures
 `setTheme`, `setLocale`, `openDeveloperTool`, `chooseTutorialMenuItem`, `answerDraftGuard`, `openStatusDetails`,
 `openDependenciesGraph` (Relations is the default Dependencies view; `loadPreset` knows the zh-TW names of the survey, trip, quote, onboarding, repair and renderer packs examples), and the `expectShowcase` /
 `expectLabStatus` / `expectDocumentStatus` / `expectPreviewStatus` assertions, which read the one status chip), never with ad-hoc menu
-clicks, so a future header change touches one file. JSON edits go through the `?lab-test` seam helpers `editJson` (type the text and leave
+clicks, so a future header change touches one file. They reach the workbench the same way (Lab UX phase 3B), never by a tab's name:
+`openEdit`, `openEditStructure`, `openAuthorJson` (Edit > JSON with Monaco loaded), `openExplain`, `openTool(page, id)` (the Tools menu
+entry, then waits until the view's tab is selected and focused; it leaves the Tools tab showing, as a click does), and the locators
+`workbenchTab(page, 'edit' | 'explain' | 'tools')`, `toolTab(page, id)` and `toolPanel(page, id)` (scope a locator to a view: the Edit tab
+beside the Tools group lists the same widgets in its Structure tree), all language-independent. JSON edits go through the `?lab-test` seam helpers `editJson` (type the text and leave
 the editor: committed at once when it parses) and `typeJson` (stay: committed after the pause); `e2e/json-commit.spec.ts` types into the
 real editor for the timing itself (pause, blur, coalescing). Two things to know when writing Monaco interaction specs: Playwright's Desktop Chrome user agent is a Windows one, so
 Monaco's Cmd/Ctrl is **Control** whatever the host OS is; and Monaco re-indents and auto-closes inserted text, so edit inside a

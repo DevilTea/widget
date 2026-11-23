@@ -3,8 +3,9 @@
 Private, never-published Widget Lab application shell for `@deviltea/widget-core` /
 `@deviltea/widget-vue` / `@deviltea/widget-inspector`: a workbench whose edits (Structure, or a live JSON Source editor)
 are committed as they are made, with Undo, a persistent Preview (an isolated iframe realm that owns the Runtime), an Explain tab that
-says what the selected widget is and why it behaves this way (its reads of other widgets with their live values), and
-readonly Blueprint/Runtime/Dependency Graph inspectors.
+says what the selected widget is and why it behaves this way (its reads of other widgets with their live values), and a Tools menu of
+readonly expert views (Blueprint and Runtime trees, the Events log, the Dependency Graph and Relations, and more) that open beside the
+Preview.
 
 See [AGENTS.md](AGENTS.md) for the architectural boundaries this app must keep (public-entry-point-only
 consumption of `@deviltea/widget-core`/`@deviltea/widget-vue`/`@deviltea/widget-inspector`, readonly inspectors, no
@@ -95,7 +96,7 @@ in the Preview and in a Web Worker that stands in for a backend. What it shows, 
 |---|---|---|
 | JSON-in/JSON-out evaluation without a renderer | `src/showcases/quote-rules/evaluate.ts` compiles the document, writes the answers (`Quote.answers`) into a fresh Runtime and returns `Quote.quote`; `quote.worker.ts` runs it in a module Web Worker with no DOM, and only JSON text crosses | Preview: "The same rules, run twice" shows the page's quote and the worker's side by side, where each ran (the worker has no `document` or `window`) and that the two are the same JSON; change any answer and both follow |
 | A schema library through Standard Schema | Valibot schemas validate every config and the State a customer writes; `guard()` (`standard-schema.ts`) turns each issue into a Core diagnostic with the library's own message | Preset "Invalid config": Problems lists six located diagnostics with Valibot's messages, verbatim; a quantity of 0 in the Preview is refused and the old value stays |
-| Config JSON Schema | each plugin's `config.schema` is the same Valibot schema object's JSON Schema (`~standard.jsonSchema`) | Author > Structure: a list of tiers with Add and Remove, number boxes, a switch and a choice list; Author > Catalog: the schema |
+| Config JSON Schema | each plugin's `config.schema` is the same Valibot schema object's JSON Schema (`~standard.jsonSchema`) | Edit > Structure: a list of tiers with Add and Remove, number boxes, a switch and a choice list; the Catalog (Edit > Browse widget types): the schema |
 | The isolated-exception receiver | `VolumeDiscount` has a deliberate defect: below its first tier its `compute` throws. Core isolates the exception, and the Preview installs `setIsolatedErrorHandler` and lists it | Preset "Buggy rule": set the A5 flyers quantity to 50 (with the poster that is 52 pieces, below the first tier, 100; any flyers quantity up to 97 does it). The page keeps the last amounts and says so; "Isolated exceptions" names the rule. The Lab cannot show it: Runtime and Selected widget keep the Property's last completed value |
 | Property chains and `resetState` | `Item.line` -> `Quote.subtotalCents` -> the rules' `adjustment` -> `Quote.taxableCents` -> `SalesTax.adjustment` -> `Quote.quote`; "Start over" is `runtime.resetState()` | Dependencies > Relations / Graph; the Preview |
 
@@ -113,12 +114,12 @@ Events and does the waiting for a simulated booking office. What it shows, and w
 
 | Core feature | In the showcase | Where to see it |
 |---|---|---|
-| Declared and emitted Events | `Onboarding` declares `stepChanged` and `completed`, `InductionStep` declares `slotRequested`, `slotConfirmed`, `slotDeclined` and `slotCancelled`; each is emitted by a Method that lists it in `emits`, with an object payload | Events tab: each Event with its widget, revision and expandable payload; Selected widget / Catalog: the declared Events with their descriptions |
-| A host listener | `renderers/onboarding-host.ts` subscribes with `runtime.getWidget(id).events.<name>.subscribe()` (a widget cannot subscribe to an Event): it moves focus to the heading of the step that was entered, asks the office on `slotRequested`, and queues a welcome message on `completed` | Preview: "What this page did about the Events" lists what the host did; the Events tab lists the same Events from outside |
-| Async work kept at the host | `requestSlot(date, time)` writes the request into State with a ticket and emits `slotRequested`, then returns; the host waits for the office and calls `settleBooking(ticket, outcome)`, which applies an answer only while its ticket is the newest. A callback's `emit` and `deps` stop working when it returns, so nothing inside Core could wait | Preview > Book your induction: the status says the request is with the office, the office desk lists it; the Events tab shows `slotRequested` first and `slotConfirmed` (or `slotDeclined`: the office always declines 17:00) when the host settles |
+| Declared and emitted Events | `Onboarding` declares `stepChanged` and `completed`, `InductionStep` declares `slotRequested`, `slotConfirmed`, `slotDeclined` and `slotCancelled`; each is emitted by a Method that lists it in `emits`, with an object payload | Events log: each Event with its widget, revision and expandable payload; Selected widget / Catalog: the declared Events with their descriptions |
+| A host listener | `renderers/onboarding-host.ts` subscribes with `runtime.getWidget(id).events.<name>.subscribe()` (a widget cannot subscribe to an Event): it moves focus to the heading of the step that was entered, asks the office on `slotRequested`, and queues a welcome message on `completed` | Preview: "What this page did about the Events" lists what the host did; the Events log lists the same Events from outside |
+| Async work kept at the host | `requestSlot(date, time)` writes the request into State with a ticket and emits `slotRequested`, then returns; the host waits for the office and calls `settleBooking(ticket, outcome)`, which applies an answer only while its ticket is the newest. A callback's `emit` and `deps` stop working when it returns, so nothing inside Core could wait | Preview > Book your induction: the status says the request is with the office, the office desk lists it; the Events log shows `slotRequested` first and `slotConfirmed` (or `slotDeclined`: the office always declines 17:00) when the host settles |
 | Cancellation and a stale answer | `cancelBooking()` emits `slotCancelled`; the host recalls the request. With "The office can recall a cancelled request" switched off, the late answer still arrives and `settleBooking` ignores it (it returns `false`, writes and emits nothing). A showcase switch and an unmount cancel every pending request | Preview: the two switches on the office desk and the activity list ("ignored the answer: ticket #1 is no longer the newest") |
 | Method argument validation | `goTo(index)` and `requestSlot(date, time)` check their arguments in `validateArgs` (with the config for the offered days and times): `invalid-method-arguments`, and `execute` never runs. What needs the Blueprint or another widget (`no-such-step`, `step-locked`, a request already waiting) is checked in `execute`: `invalid-method-result` | Preview: "Go to step number" (type 1.5, 9, 2) and the date box of the induction; the page's one alert shows the Core code and reason |
-| Method failures and diagnostics | a refused move writes and emits nothing; its diagnostic is the Method's latest failure | Events tab: "Method failure" entries (not Events); Selected widget / Runtime: the Method's row says "Last call failed" with code, reason and message, and the next successful call clears it |
+| Method failures and diagnostics | a refused move writes and emits nothing; its diagnostic is the Method's latest failure | Events log: "Method failure" entries (not Events); Selected widget / Runtime: the Method's row says "Last call failed" with code, reason and message, and the next successful call clears it |
 | Read-only and writing Methods | `Onboarding.canEnter(index)` neither writes State nor emits, so Core derives it as read-only (and `goTo` and `next` call it, so they lock the same steps); `next`, `back`, `goTo`, `finish` and the induction's three Methods write and emit | Dependencies > Relations: focus a Method (Runtime > a Property row, then the Method in Relations): `canEnter` has no W and no E badge, the others have both |
 
 The presets are `onboarding-default`, `onboarding-ready-to-book` (opens on the induction with the first three steps done),
@@ -159,7 +160,7 @@ network) inside the Preview frame. What it shows, and where in the Lab:
 |---|---|---|
 | One System, two renderer registries | both packs call `createWidgetVueRenderer` for the same eight plugin types and mount over the same Runtime; switching never disposes it | Preview: the renderer pack chooser; Runtime: the State, which holds no pack |
 | Named providers, no nearest-ancestor lookup | a field names its `Appearance` (`config.appearance`) and reads `density` through `dep.widget(id)`; a `DangerAction` names its `Notifier`; a name that matches no widget of that type is a located structure diagnostic | Dependencies (Relations); the "Draft with mistakes" example |
-| A Method that invokes another widget's Method | `DangerAction.confirm()` invokes the Notifier's `notify`, closes the question and emits `confirmed`; `notify` writes State and emits `notified` | Events tab (both Events, newest first); Relations marks `confirm` W and E |
+| A Method that invokes another widget's Method | `DangerAction.confirm()` invokes the Notifier's `notify`, closes the question and emits `confirmed`; `notify` writes State and emits `notified` | Events log (both Events, newest first); Relations marks `confirm` W and E |
 | Refused calls as diagnostics | `confirm()` without `ask()`, `ask()` twice and `dismiss()` of an unknown id write and emit nothing and are the Method's latest diagnostic | Selected widget / Runtime: the Method's row |
 | Overlays contained in the Preview | the confirmation is a native `<dialog>` (hand-written) or a `UModal` teleported into the Nuxt UI pack's own root; the Lab header stays operable while it is open and focus stays inside it | Preview: press "Archive workspace", then open the Examples menu |
 
@@ -173,7 +174,7 @@ Every edit is committed to the Document when it is made, and **Undo** takes it b
 
 The header is one row from 1280px up: the **Examples** menu (showcase and preset; it always names the showcase and the
 last loaded preset, or "edited" once the document changes), **one plain-language status chip** (*Up to date*, *N problems · Preview
-shows the last working version* — a button that shows them in the open Author view —, *JSON syntax error — not applied*, *Preview
+shows the last working version* — a button that shows them in the open Edit view —, *JSON syntax error — not applied*, *Preview
 unavailable*, and for a moment after a change that restarted the preview *Preview restarted*), with revisions, linkage, the JSON
 text's state, Source JSON compatibility, Blueprint status and recovery facts in an info popover; the edit actions (**Undo**, and
 **Discard JSON changes** only while the JSON does not parse); and an overflow menu with Tutorial, Theme, **Lab language**, **Reset
@@ -191,17 +192,17 @@ layout** and a Developer submenu (Implementation, Document Tools).
   cannot bring it back; with JSON that does not parse as well, one dialog names both. Loading a preset or starting the tutorial over an
   edited document does not ask: it can be undone, and a notice above the preview says "Loaded “…”. Undo to get your edits back."
   with an **Undo** button.
-- After a change that leaves problems, the Author JSON view lists them under the editor (Core's code and message verbatim,
+- After a change that leaves problems, the Edit tab's JSON view lists them under the editor (Core's code and message verbatim,
   or the JSON syntax error); each row jumps to its place in the JSON, which also gets error squiggles. Structure shows the same
   problems at the fields they are about, at the widget for the others, and lists the other widgets' problems with a way to each.
   The preview shows a plain-language notice with **Show problems** while it still shows the last working version; it, and the
-  header's problems button, show the problems in the open Author view.
+  header's problems button, show the problems in the open Edit view.
 
 ## Editing a widget's config (Structure) and what the Lab says when something fails
 
-- **Author > Structure** edits the selected widget's config with controls that follow the plugin's config JSON Schema: a switch for a boolean, a
+- **Edit > Structure** edits the selected widget's config with controls that follow the plugin's config JSON Schema: a switch for a boolean, a
   number box (Core checks the limits), a list for an enum, a text box for a string, and Add / Remove for optional fields and list items where the schema allows
-  them. Author opens on Structure. A switch or a list commits at once; a text or number box commits on Enter or when you leave it, and Esc puts the
+  them. Edit opens on Structure. A switch or a list commits at once; a text or number box commits on Enter or when you leave it, and Esc puts the
   document's value back. Every change goes through the same Document commit (Undo, the status chip and Problems keep working). While the JSON view has
   a syntax error, Structure says so above the fields and locks them until the JSON parses or is discarded. Without a schema, values
   are typed by what they hold and anything else is edited as JSON.
@@ -209,22 +210,38 @@ layout** and a Developer submenu (Implementation, Document Tools).
 - If the Preview frame cannot load, the Preview pane says so with the cause and a **Try again** button, and the header chip reads "Preview unavailable".
 - Graph: an always-visible key explains the badges, the line styles and the direction of an edge, edge labels appear on hover, and Zoom in / Zoom out buttons sit beside Fit graph. Cards are spread out, edges are Bezier curves that pass between the cards, and every edge ends in an arrowhead on the member it depends on (`A → B` means A depends on B: the Relations view lists B under "Depends on" for A and A under "Used by" for B). While a widget or member is selected, its edges turn blue and are tagged "Depends on #x" (they leave it) or "Used by #x" (they arrive at it), every other edge fades, and a tag with no room is left out (Relations has the full list).
 
-## Layout, the Selected widget pane and the tutorial rail
+## Layout: Edit, Explain and Tools, the expert views and the tutorial rail
 
-The tool area (Author, **Selected widget**, Blueprint, Runtime, **Events**, Dependencies) takes about half the window by default. The Dockview layout
-(divider position, active tab) is saved in the browser and restored on reload; a saved layout from an older Lab, or a corrupt one, is
-ignored. **Reset layout** in the overflow menu goes back to the default. The tutorial rail is a docked column beside the workbench: it
-never covers the header, menus or the Preview, and Structure stays usable beside it at 1280px (a field's label moves above the box when
-the pane is narrow). The Survey tour maps the views early (Explain included), then has you change a label in Structure, watch the Preview, and press Undo;
-when a tour ends or is skipped, the tab and Author view you had before it are back.
+The tool group on the left has three tabs and takes about half the window by default (Lab UX phase 3B):
 
-**Selected widget** explains one widget in one place: what the source declares for it (identity, config, slots, members,
-diagnostics) next to its live State and Property values. Choose the widget with Inspect in the Preview, or in Blueprint or
-Dependencies. Values open into a tree instead of being clipped; anything the Inspector snapshot left out (depth, entry or string
+- **Edit** (the default): the document as **Structure**, or as **JSON** with the in-panel toggle. Switching to JSON selects and scrolls
+  to the lines of the widget you selected. **Browse widget types** opens the Catalog (every widget type with its documentation, config
+  schema and Events, and **Copy catalog JSON**) in a slide-over: Escape or its close button puts you back where you were.
+- **Explain**: what the selected widget is and why it behaves this way.
+- **Tools**: a menu of expert views, each with one line saying what it shows: Blueprint tree, Runtime tree, Events log, Dependency
+  graph and Relations, Selected widget, Document Tools and Implementation. Choosing one opens it as its own named, closable tab in a
+  **Tools group below the Preview** (the first one splits the Preview's column; closing the last gives it back), and asking again for
+  an open view brings its tab to the front. What you were reading on the left stays where it is.
+
+Inspect in the Preview selects the widget in Structure while Edit is open and opens Explain otherwise; while the Preview shows an
+older version than the document, it opens the Runtime tree instead. "View implementation" (the Preview's, and the Blueprint tree's)
+names its widget, and so does the Implementation tab ("Implementation — sessions (MultipleChoice)").
+
+The Dockview layout (divider position, the tool group's tab) is saved in the browser and restored on reload, without the Tools group;
+a saved layout from an older Lab (such as the six-tab layout before phase 3B), or a corrupt one, is ignored once. **Reset layout** in
+the overflow menu goes back to the default. The tutorial rail is a docked column beside the workbench: it never covers the header,
+menus or the Preview, and Structure stays usable beside it at 1280px (a field's label moves above the box when the pane is narrow).
+The Survey tour maps the four areas early (Edit, Preview, Explain, Tools), then has you change a label in Structure, watch the Preview,
+and press Undo; tour steps that point at an expert view open it in the Tools group. When a tour ends or is skipped, the tool group's
+tab and Edit view you had before it are back (expert views it opened stay open).
+
+**Selected widget** (Tools) explains one widget in one place: what the source declares for it (identity, config, slots, members,
+diagnostics) next to its live State and Property values. Choose the widget with Inspect in the Preview, or in the Structure tree,
+the Blueprint tree or Dependencies. Values open into a tree instead of being clipped; anything the Inspector snapshot left out (depth, entry or string
 limits) is marked as such. Config shows the resolved value, with the authored one a click away when it differs. Dependencies opens on
 Relations; the Graph is one click away.
 
-**Events** lists what the running widgets emit, as it happens: time, Preview revision, widget, Event name and an expandable payload (the Survey emits `submitted` when you Submit valid answers). It also lists Method failures, labelled "Method failure" because they are not Events: the code, reason and message of a Method's latest failed call (a Submit with errors fails `submit()` with `invalid-method-result` / `answer-errors`), with its arguments or result in an expandable tree; Selected widget and Runtime show the same latest failure on the Method's row, and the next successful call clears it. A "Show" filter picks Events, Method failures or both. The declared Events of every widget type are in the Catalog and in the Selected widget declaration. The log records whenever the Preview is running, also while another tab is open (the Events tab shows how many entries arrived since you last looked), keeps the latest 500 entries and says when older ones were dropped; Pause, Clear, filters (widget, Event, only the selected widget) and a click on an entry's widget to select it are there too.
+**Events** lists what the running widgets emit, as it happens: time, Preview revision, widget, Event name and an expandable payload (the Survey emits `submitted` when you Submit valid answers). It also lists Method failures, labelled "Method failure" because they are not Events: the code, reason and message of a Method's latest failed call (a Submit with errors fails `submit()` with `invalid-method-result` / `answer-errors`), with its arguments or result in an expandable tree; Selected widget and Runtime show the same latest failure on the Method's row, and the next successful call clears it. A "Show" filter picks Events, Method failures or both. The declared Events of every widget type are in the Catalog and in the Selected widget declaration. The log records whenever the Preview is running, also before you open it and while another view hides it (the Tools tab, and the Events log entry of its menu, show how many entries arrived since you last looked), keeps the latest 500 entries and says when older ones were dropped; Pause, Clear, filters (widget, Event, only the selected widget) and a click on an entry's widget to select it are there too.
 
 ## Dependency Graph
 
