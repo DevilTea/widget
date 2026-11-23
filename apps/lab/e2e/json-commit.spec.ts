@@ -86,13 +86,21 @@ test('typing commits after the pause, once, not on every keystroke', async ({ pa
 })
 
 test('leaving the editor commits at once, without waiting for the pause', async ({ page }) => {
+	await page.clock.install()
 	await openAuthorJson(page)
 	await selectRootIdInMonaco(page, 'root')
+	// The page's clock stops before the keystroke, so the pause's 750 ms timer it starts cannot fire while the editor is left.
+	// (Ahead of the page's time: the clock cannot be set back, and time passes until the call arrives.)
+	await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000))
 	await page.keyboard.insertText('left')
 	await leaveEditor(page)
-	// Read right away: the blur commit is synchronous up to the Preview promotion.
+	// Monaco reports the editor's blur one task after the DOM blur that drops its `focused` class (its focus tracker defers
+	// the event with a 0 ms timer, so a focus move within the editor is no blur), and the blur commit runs in that task: let
+	// the short timers run, well short of the pause, then the Document already holds the text.
+	await page.clock.runFor(300)
 	expect(rootId(await documentSourceText(page)))
 		.toBe('left')
+	await page.clock.resume()
 	await expectDocumentStatus(page, { valid: true })
 })
 
@@ -102,7 +110,8 @@ test('one focus session is one Undo entry; a new focus session is a new one', as
 	await selectRootIdInMonaco(page, 'root')
 	await page.keyboard.insertText('one')
 	await leaveEditor(page)
-	expect(rootId(await documentSourceText(page)))
+	// The blur commit lands one task after the `focused` class drops (see the test above).
+	await expect.poll(async () => rootId(await documentSourceText(page)))
 		.toBe('one')
 
 	// Session 2: two bursts with a pause between them (two commits), then a third edit committed by the click on Undo.
