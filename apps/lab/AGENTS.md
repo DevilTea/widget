@@ -1029,7 +1029,7 @@ BlueprintInspection -> projectSemanticGraph() -> toElkGraph() -> ELK layout -> t
   Edge operation is encoded primarily by stroke treatment (reads thin solid, writes stronger solid,
   invokes dashed). Since PR 3c (audit U11) every edge label (the aggregate counts too) is hidden until its edge is hovered or selected, because neighbouring
   labels ran into each other; all text is 11px or more (members 12px, node footprints `VERTEX_WIDTH` 200 x 36, `COLLAPSED_CLUSTER` 240 x 88 to fit it), and `GraphKey.vue`,
-  a row above the canvas that is always visible, says what S, P, M, W, E, ! and the three line styles mean, so the Legend popover is only the long form.
+  a row above the canvas (folded behind its Key button in a pane shorter than 360px, see "The Graph key folds in a short pane"), says what S, P, M, W, E, ! and the three line styles mean, so the Legend popover is only the long form.
   Edges are drawn by `GraphDependencyEdge.vue` (registered under `GRAPH_EDGE_TYPE`): Bezier curves through ELK's route
   points, starting and ending on the card borders where ELK spread them, so several edges of one card stay apart and none
   runs behind a card; without route points it falls back to Vue Flow's own handle positions. The key's first item states
@@ -1139,26 +1139,43 @@ type, id, member count and Collapse button together at the left (the identity bu
 Collapse button at the far right would be out of view, and so would the keyboard focus that moves to it after the expansion. Re-expanding a
 widget after a collapse frames it again. Shared focus changes and Runtime activity still never refit or zoom. The manual zoom floor still
 follows the whole layout's Fit (`manualMinZoom()`), also after framing. Measured in the browser (`e2e/graph-readability.spec.ts`):
-expanding #sessions or #hotel gives 0.917 (member text 11.0px) in the default Tools pane (749 x 252 at 1440 x 900, 666 x 202 at 1280 x 800)
+expanding #sessions or #hotel gives 0.917 (member text 11.0px) in the default Tools pane (749 x 305 at 1440 x 900 and 666 x 255 at 1280 x 800 with the Graph key folded, below; 749 x 252 and 666 x 202 with it shown)
 and maximized (1440 x 739, 1280 x 639); **Fit graph** afterwards gives the whole layout (maximized at 1440 x 900: #sessions 0.649, #hotel
 0.331; in the default pane 0.223 and 0.114). The cost: an expanded widget's edges to the other widgets are not all in view; Fit graph shows
 them, and Relations lists them all. `e2e/graph.spec.ts` and `e2e/dependencies.spec.ts` press Fit graph where they then click a card the
 framing leaves out of view, as a person would.
 
 **Minimap.** `GraphCanvas.vue` draws `@vue-flow/minimap`'s `MiniMap` (pinned in the catalog at 1.5.4, peer `@vue-flow/core` ^1.23.0
-against our 1.48.2; it bundles its own d3-zoom, so it is a `defineAsyncComponent` loaded the first time it is shown) in the canvas's bottom right corner, inside the canvas, so it covers neither the Graph key nor
-the toolbar (both are above the canvas). It is 168 x 112, themed with the Lab tokens (surface panel, cards in a muted mix, the expanded widget
+against our 1.48.2; it bundles its own d3-zoom, so it is a `defineAsyncComponent` loaded the first time it is shown) in the canvas's bottom right
+corner, inside the canvas, so it covers neither the Graph key nor the toolbar (both are above the canvas). Its size follows the canvas
+(`minimapSize()`): 19% of the canvas width with the graph's aspect ratio, within 96 x 64 and 200 x 120 (144 x 92 in the default Tools pane
+at 1440 x 900, 129 x 82 at 1280 x 800, borders included). It is themed with the Lab tokens (surface panel, cards in a muted mix, the expanded widget
 outlined, the area outside the viewport shaded, the viewport rectangle in the accent colour; CSS fills beat the component's presentation
 attributes, and its own white stylesheet is not imported). Dragging it pans (its `pannable` option, the zoom unchanged); a click centres the
 viewport on that point at the current zoom (`setCenter()`; d3-zoom swallows the click that ends a drag); wheel zoom on it is off. It is
 `aria-hidden="true"` with no accessible name: it repeats what the canvas shows, has no keyboard operation and no tab stop, and the zoom
 buttons, Fit graph and Relations are the keyboard and screen-reader routes. It is shown only while part of the graph (the cards and curves,
-as Fit sees them) is out of view by more than a pixel *and* the canvas is at least 360 x 260 (`isMinimapUseful()`, `MINIMAP_MIN_PANE`):
-with everything in view it adds nothing, and in a smaller canvas it would hide much of what it maps. So it shows after expanding a large
-widget with the Tools group maximized, or after zooming in, and never in the default Tools pane (252px high at 1440 x 900). It can cover a
-focus tag in its corner; the tags are placed before the minimap is known and are not moved for it. `e2e/graph-readability.spec.ts` covers
-when it shows and hides, its place, dragging and clicking it, and its light and dark colours; `src/graph/viewport-plan.unit.test.ts` the
-geometry.
+as Fit sees them) is out of view by more than a pixel, the canvas is at least 320 x 160 (`isMinimapUseful()`, `MINIMAP_MIN_PANE`), and
+no focus tag is under it: with everything in view it adds nothing, and in a smaller canvas (the default pane of a 1440 x 600 window, 155px
+high) it would hide much of what it maps. The default Tools pane, where most people see the Graph and where an expanded widget is framed in
+the least room, shows it; it sits in the bottom right corner and the framed widget's header (type, id, Collapse) at the top left, so they do
+not meet (asserted at 1440 x 900 and 1280 x 800). **Focus tags (coordinator decision):** the minimap is not shown while its box on screen
+(margin and border included) would cover a focus tag's box or leader line on screen. Making it an obstacle of the tag placement was the
+other option and was not taken: the tags are placed in flow units once per zoom bucket (`use-graph-tags.ts`) while the minimap is fixed to
+the screen, so it would mean placing every tag again on every pan step, and tags moving while the graph is dragged. The minimap therefore
+comes and goes as a tag is panned under it. `e2e/graph-readability.spec.ts` covers when it shows and hides (default pane, a 1440 x 600
+window, a tag panned under it and back), its size and place, dragging and clicking it, and its light and dark colours;
+`src/graph/viewport-plan.unit.test.ts` the geometry.
+
+**The Graph key folds in a short pane (coordinator decision).** The key (`GraphKey.vue`) is a standing row above the canvas, separate from
+the Legend popover (the long form). At the width of the default Tools pane it wraps to two lines and took about 50 of the roughly 300px the
+key and the canvas share. `DependenciesPanel.vue` measures the view area (key plus canvas; measured whichever view, Relations or Graph, is
+showing, so the state is known before the Graph is first drawn and fitted; a hidden Dockview tab measures 0 and is ignored), and while it is
+shorter than 360px the key starts folded. A **Key** button (標記說明) in the Graph toolbar, beside Legend, shows or folds it: `aria-expanded`
+is its state and `aria-controls` names the key, which keeps its own accessible name "Graph key"; a press is kept as the person's choice for
+that panel. Maximized, and in any pane 360px or taller, the key is shown as before (the Key button then reads expanded).
+`e2e/graph-readability.spec.ts` ("the Graph key starts folded ...") and `e2e/polish.spec.ts` (the key's content, opened with the button,
+in English and zh-TW) cover it.
 
 Fit may reach 0.05 (for a Document larger
 than the showcases); afterwards the manual zoom floor (wheel, pinch, **Zoom out**) is `min(fit, max(0.1, fit / 4))`, so a small graph (the Survey

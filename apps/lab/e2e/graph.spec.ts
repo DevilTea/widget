@@ -427,6 +427,9 @@ test('focusing a member highlights subgraph and dims unrelated nodes', async ({ 
 	const member = page.locator('.vue-flow__node[data-id="4:property:required"] .graph-node--member')
 	await expect(member)
 		.toBeVisible({ timeout: 15_000 })
+	// Expanding frames #phone at a readable zoom, where the minimap in the canvas corner covers this member: Fit graph first.
+	await page.getByRole('button', { name: 'Fit graph' })
+		.click()
 
 	await member.click()
 

@@ -5,6 +5,7 @@
 
 import { describe, expect, it } from 'vitest'
 import {
+	bottomRightRect,
 	clusterToFrame,
 	fitMargin,
 	fitZoom,
@@ -14,9 +15,14 @@ import {
 	manualMinZoom,
 	MEMBER_FONT_PX,
 	MIN_SCREEN_TEXT_PX,
+	MINIMAP_MAX_SIZE,
 	MINIMAP_MIN_PANE,
+	MINIMAP_MIN_SIZE,
+	minimapSize,
 	planExpandViewport,
 	readableZoom,
+	rectsOverlap,
+	toScreenRect,
 } from './viewport-plan'
 
 const LIMITS = { min: 0.05, max: 2 }
@@ -209,17 +215,68 @@ describe('the minimap', () => {
 			.toBe(true)
 	})
 
-	it('is hidden in a pane smaller than 360 x 260, and before anything is measured', () => {
+	it('is shown in the default Tools pane, hidden in a pane smaller than 320 x 160, and before anything is measured', () => {
 		expect(MINIMAP_MIN_PANE)
-			.toEqual({ width: 360, height: 260 })
+			.toEqual({ width: 320, height: 160 })
 		const zoomedIn = { x: 0, y: 0, zoom: 1 }
+		// The default Tools pane at 1440 x 900 and 1280 x 800, with the key shown (the smallest it gets).
 		expect(isMinimapUseful(content, { width: 749, height: 252 }, zoomedIn))
+			.toBe(true)
+		expect(isMinimapUseful(content, { width: 666, height: 202 }, zoomedIn))
+			.toBe(true)
+		expect(isMinimapUseful(content, { width: 319, height: 600 }, zoomedIn))
 			.toBe(false)
-		expect(isMinimapUseful(content, { width: 359, height: 600 }, zoomedIn))
+		expect(isMinimapUseful(content, { width: 600, height: 159 }, zoomedIn))
 			.toBe(false)
-		expect(isMinimapUseful(content, { width: 360, height: 260 }, zoomedIn))
+		expect(isMinimapUseful(content, { width: 320, height: 160 }, zoomedIn))
 			.toBe(true)
 		expect(isMinimapUseful(null, pane, zoomedIn))
 			.toBe(false)
+	})
+
+	it('gives way to a focus tag under it, not to one elsewhere', () => {
+		const zoomedIn = { x: 0, y: 0, zoom: 1 }
+		const map = bottomRightRect(pane, { width: 200, height: 120 }, 8)
+		expect(map)
+			.toEqual({ x: 1232, y: 611, width: 200, height: 120 })
+		expect(isMinimapUseful(content, pane, zoomedIn, map, [{ x: 100, y: 100, width: 120, height: 24 }]))
+			.toBe(true)
+		expect(isMinimapUseful(content, pane, zoomedIn, map, [{ x: 100, y: 100, width: 120, height: 24 }, { x: 1200, y: 640, width: 120, height: 24 }]))
+			.toBe(false)
+		// Touching edges do not overlap.
+		expect(rectsOverlap({ x: 0, y: 0, width: 10, height: 10 }, { x: 10, y: 0, width: 10, height: 10 }))
+			.toBe(false)
+	})
+
+	it('maps a flow box to the screen at the viewport', () => {
+		expect(toScreenRect({ x: 100, y: 50, width: 40, height: 20 }, { x: -30, y: 10, zoom: 0.5 }))
+			.toEqual({ x: 20, y: 35, width: 20, height: 10 })
+	})
+})
+
+describe('minimapSize', () => {
+	it('is about a fifth of the canvas wide, with the graph\'s aspect ratio, within 96 x 64 and 200 x 120', () => {
+		expect(MINIMAP_MIN_SIZE)
+			.toEqual({ width: 96, height: 64 })
+		expect(MINIMAP_MAX_SIZE)
+			.toEqual({ width: 200, height: 120 })
+		// 19% of 749 is 142; a 2:1 graph gives 71 high.
+		expect(minimapSize({ width: 749, height: 300 }, { x: 0, y: 0, width: 2000, height: 1000 }))
+			.toEqual({ width: 142, height: 71 })
+		// The widest it gets.
+		expect(minimapSize({ width: 1440, height: 739 }, { x: 0, y: 0, width: 2000, height: 1000 }))
+			.toEqual({ width: 200, height: 100 })
+		// Never narrower than 96.
+		expect(minimapSize({ width: 320, height: 160 }, { x: 0, y: 0, width: 2000, height: 1000 }).width)
+			.toBe(96)
+	})
+
+	it('keeps a tall graph within 120 high (narrower) and a flat one at 64 high at least', () => {
+		expect(minimapSize({ width: 1440, height: 739 }, { x: 0, y: 0, width: 1000, height: 1000 }))
+			.toEqual({ width: 120, height: 120 })
+		expect(minimapSize({ width: 1440, height: 739 }, { x: 0, y: 0, width: 1000, height: 3000 }))
+			.toEqual({ width: 96, height: 120 })
+		expect(minimapSize({ width: 749, height: 300 }, { x: 0, y: 0, width: 6000, height: 1000 }))
+			.toEqual({ width: 142, height: 64 })
 	})
 })

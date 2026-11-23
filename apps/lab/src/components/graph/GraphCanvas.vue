@@ -26,7 +26,7 @@ import { useGraphTags } from '../../composables/use-graph-tags'
 import { useLabI18n } from '../../composables/use-lab-i18n'
 import { edgeKeyboardOrder, edgeName, edgeTabStop, isEdgeNavigationKey, nextEdgeId } from '../../graph/edge-a11y'
 import { tagSize } from '../../graph/tag-placement'
-import { isMinimapUseful, manualMinZoom, MEMBER_FONT_PX, planExpandViewport } from '../../graph/viewport-plan'
+import { bottomRightRect, isMinimapUseful, manualMinZoom, MEMBER_FONT_PX, minimapSize, planExpandViewport, toScreenRect } from '../../graph/viewport-plan'
 import { GRAPH_EDGE_TYPE } from '../../graph/vue-flow'
 import { ARROW_KINDS, arrowMarkerId, ZOOM_BUCKETS, zoomBucket } from '../../graph/zoom-scale'
 import GraphDependencyEdge from './GraphDependencyEdge.vue'
@@ -245,17 +245,42 @@ watch(() => props.layoutVersion, () => {
 
 /**
  * The minimap (`@vue-flow/minimap`): the cards in miniature with the viewport as a rectangle; dragging it pans, a click centres the
- * viewport on that point at the current zoom. Shown only while part of the graph is out of view and the canvas is at least 360 x 260
- * (`isMinimapUseful()`). It is `aria-hidden`: it repeats what the canvas shows, has no keyboard operation and no tab stop, and the
- * zoom buttons, Fit graph and Relations are the keyboard and screen-reader routes.
+ * viewport on that point at the current zoom. Shown only while part of the graph is out of view, the canvas is at least 320 x 160 and
+ * no focus tag is under it (`isMinimapUseful()`); about a fifth of the canvas wide (`minimapSize()`). It is `aria-hidden`: it repeats
+ * what the canvas shows, has no keyboard operation and no tab stop, and the zoom buttons, Fit graph and Relations are the keyboard and
+ * screen-reader routes.
  */
-const MINIMAP_SIZE = { width: 168, height: 112 } as const
+/** Its distance from the canvas edges, bound into the stylesheet, and its 1px border on each side. */
+const MINIMAP_MARGIN = 8
+const MINIMAP_BORDER = 1
+const minimapMargin = `${MINIMAP_MARGIN}px`
 /**
  * Loaded the first time it is shown: the package bundles its own copy of d3-zoom, about 57 KB raw / 19 KB gzip on the eager main
  * chunk when imported statically, for a panel most sessions never see.
  */
 const MiniMap = defineAsyncComponent(async () => (await import('@vue-flow/minimap')).MiniMap)
-const showMinimap = computed(() => isMinimapUseful(contentBounds.value, dimensions.value, viewport.value))
+const minimapDrawing = computed(() => contentBounds.value === null ? null : minimapSize(dimensions.value, contentBounds.value))
+/** The focus tags on screen (box and leader line): the minimap gives way to them. */
+const tagScreenRects = computed(() => [...tagPlacements.value.values()].map((tag) => {
+	let left = tag.x - tag.width / 2
+	let top = tag.y - tag.height / 2
+	let right = left + tag.width
+	let bottom = top + tag.height
+	for (const point of tag.leader === undefined ? [] : [tag.leader.from, tag.leader.to]) {
+		left = Math.min(left, point.x)
+		top = Math.min(top, point.y)
+		right = Math.max(right, point.x)
+		bottom = Math.max(bottom, point.y)
+	}
+	return toScreenRect({ x: left, y: top, width: right - left, height: bottom - top }, viewport.value)
+}))
+const showMinimap = computed(() => {
+	const drawing = minimapDrawing.value
+	if (drawing === null)
+		return false
+	const box = bottomRightRect(dimensions.value, { width: drawing.width + 2 * MINIMAP_BORDER, height: drawing.height + 2 * MINIMAP_BORDER }, MINIMAP_MARGIN)
+	return isMinimapUseful(contentBounds.value, dimensions.value, viewport.value, box, tagScreenRects.value)
+})
 
 function minimapNodeClass(node: GraphNode): string {
 	if (node.type === 'cluster')
@@ -572,8 +597,8 @@ function memberKindShort(kind: string): string {
 				aria-hidden="true"
 				position="bottom-right"
 				pannable
-				:width="MINIMAP_SIZE.width"
-				:height="MINIMAP_SIZE.height"
+				:width="minimapDrawing?.width"
+				:height="minimapDrawing?.height"
 				:ariaLabel="null"
 				:nodeClassName="minimapNodeClass"
 				:nodeBorderRadius="6"
@@ -1318,7 +1343,7 @@ function memberKindShort(kind: string): string {
  * fills beat the presentation attributes the component sets.
  */
 .graph-minimap {
-	margin: 8px;
+	margin: v-bind(minimapMargin);
 	overflow: hidden;
 	border: 1px solid var(--lab-color-border);
 	border-radius: var(--lab-radius);

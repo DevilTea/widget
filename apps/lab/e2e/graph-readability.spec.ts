@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import { expandGraphWidget, expect, graphWidgetCard, maximizeTools, openDependenciesGraph, setLocale, test } from './fixtures'
+import { expandGraphWidget, expect, graphWidgetCard, maximizeTools, openDependenciesGraph, openTool, setLocale, test } from './fixtures'
 
 /**
  * Issue #230, "the Graph is hard to read": what a person sees in the real browser. The cards are spread out, every dependency
@@ -432,8 +432,8 @@ test('collapsing, Collapse all and a new semantic graph fit the whole layout; re
 })
 
 /**
- * The minimap (`@vue-flow/minimap`): shown while part of the graph is out of view in a canvas of at least 360 x 260, aria-hidden and
- * without tab stops, in a corner of the canvas (so it covers neither the key nor the toolbar), themed with the Lab tokens.
+ * The minimap (`@vue-flow/minimap`): shown while part of the graph is out of view in a canvas of at least 320 x 160 and no focus tag
+ * is under it, aria-hidden and without tab stops, in a corner of the canvas (so it covers neither the key nor the toolbar), themed with the Lab tokens.
  */
 const minimap = (page: Page) => page.getByTestId('graph-minimap')
 
@@ -480,17 +480,162 @@ test('the minimap shows while the expanded widget is framed, and hides when the 
 		.toBeVisible()
 })
 
-test('the minimap is hidden in a canvas smaller than 360 x 260, the default Tools pane at 1440 x 900', async ({ page }) => {
-	await page.setViewportSize({ width: 1440, height: 900 })
-	await openGraph(page, 'trip-budget', { expand: 'hotel', maximize: false })
+// The default Tools pane is where most people see the Graph, and where an expanded widget is framed in the least room: the minimap
+// shows there too, sized to the canvas, in the bottom right corner, clear of the expanded widget's header (top left).
+for (const size of [{ width: 1440, height: 900 }, { width: 1280, height: 800 }] as const) {
+	test(`the minimap shows in the default Tools pane at ${size.width} x ${size.height}, sized to the canvas, clear of the expanded widget's header`, async ({ page }) => {
+		await page.setViewportSize(size)
+		await openGraph(page, 'trip-budget', { expand: 'hotel', maximize: false })
+		await expect(minimap(page))
+			.toBeVisible()
+		const expanded = await readExpanded(page)
+		const map = (await minimap(page)
+			.boundingBox())!
+		// About a fifth of the canvas wide (19%, plus its border), within 96 x 64 and 200 x 120.
+		expect(map.width)
+			.toBeGreaterThanOrEqual(96)
+		expect(map.width)
+			.toBeLessThanOrEqual(202)
+		expect(Math.abs(map.width - 2 - expanded.canvas.width * 0.19))
+			.toBeLessThan(2)
+		expect(map.height)
+			.toBeGreaterThanOrEqual(64)
+		expect(map.height)
+			.toBeLessThanOrEqual(122)
+		expect(map.x + map.width)
+			.toBeLessThanOrEqual(expanded.canvas.x + expanded.canvas.width)
+		expect(map.y + map.height)
+			.toBeLessThanOrEqual(expanded.canvas.y + expanded.canvas.height)
+		for (const [name, rect] of [['type and id', expanded.title], ['Collapse button', expanded.collapse]] as const) {
+			const overlaps = rect.x < map.x + map.width && map.x < rect.x + rect.width && rect.y < map.y + map.height && map.y < rect.y + rect.height
+			expect(overlaps, `the minimap covers the ${name}`)
+				.toBe(false)
+		}
+	})
+}
+
+test('the minimap is hidden in a canvas lower than 160px (a 1440 x 600 window)', async ({ page }) => {
+	await page.setViewportSize({ width: 1440, height: 600 })
+	await page.goto('/?showcase=trip-budget')
+	await openTool(page, 'dependencies')
+	// The keyboard route to the Graph tab and the zoom buttons: in a pane this low, the Relations card reaches over the toolbar.
+	await page.getByRole('tablist', { name: 'Dependencies views' })
+		.getByRole('tab', { name: 'Relations' })
+		.focus()
+	await page.keyboard.press('ArrowRight')
+	await expect(page.locator('.graph-node--cluster')
+		.first())
+		.toBeVisible({ timeout: 15_000 })
+	await settleViewport(page)
 	const canvas = (await page.locator('.vue-flow')
 		.boundingBox())!
 	expect(canvas.height)
-		.toBeLessThan(260)
+		.toBeLessThan(160)
+	const fitted = (await readGraph(page)).zoom
+	for (let press = 0; press < 4; press++) {
+		await page.getByTestId('graph-zoom-in')
+			.focus()
+		await page.keyboard.press('Enter')
+	}
+	await settleViewport(page)
+	// Zoomed in: part of the graph is out of view, so only the size of the canvas keeps the minimap away.
 	expect((await readGraph(page)).zoom)
-		.toBeCloseTo(11 / 12, 3)
+		.toBeGreaterThan(fitted * 2)
 	await expect(minimap(page))
 		.toHaveCount(0)
+})
+
+test('the minimap gives way to a focus tag that would be under it, and comes back when the tag is clear', async ({ page }) => {
+	await page.setViewportSize({ width: 1440, height: 900 })
+	await openGraph(page, 'trip-budget', { expand: 'hotel' })
+	await page.locator('.graph-member-card', { hasText: 'shares' })
+		.click()
+	await expect(page.locator('.graph-tag-layer .graph-tag')
+		.first())
+		.toBeVisible()
+	await expect(minimap(page))
+		.toBeVisible()
+	const map = (await minimap(page)
+		.boundingBox())!
+	const tag = (await page.locator('.graph-tag-layer .graph-tag .graph-tag-bg')
+		.first()
+		.boundingBox())!
+	// Drag the canvas (from an empty spot of the pane) so the tag's centre lands on the minimap's centre, then back.
+	const delta = { x: map.x + map.width / 2 - (tag.x + tag.width / 2), y: map.y + map.height / 2 - (tag.y + tag.height / 2) }
+	await dragPane(page, delta)
+	await expect(minimap(page))
+		.toHaveCount(0)
+	await dragPane(page, { x: -delta.x, y: -delta.y })
+	await expect(minimap(page))
+		.toBeVisible()
+})
+
+/** Drags the Graph canvas by `delta` screen px, from an empty spot of the pane (not a card, not an edge). */
+async function dragPane(page: Page, delta: Point): Promise<void> {
+	const canvas = (await page.locator('.vue-flow')
+		.boundingBox())!
+	const start = await page.evaluate(({ canvas, delta }) => {
+		for (let y = canvas.y + 10; y < canvas.y + canvas.height - 10; y += 7) {
+			for (let x = canvas.x + 10; x < canvas.x + canvas.width - 10; x += 7) {
+				const end = { x: x + delta.x, y: y + delta.y }
+				const inside = end.x > canvas.x + 2 && end.x < canvas.x + canvas.width - 2 && end.y > canvas.y + 2 && end.y < canvas.y + canvas.height - 2
+				if (inside && document.elementFromPoint(x, y)?.classList.contains('vue-flow__pane') === true)
+					return { x, y }
+			}
+		}
+		return null
+	}, { canvas, delta })
+	expect(start, 'an empty spot of the pane to drag from')
+		.not
+		.toBeNull()
+	await page.mouse.move(start!.x, start!.y)
+	await page.mouse.down()
+	await page.mouse.move(start!.x + delta.x, start!.y + delta.y, { steps: 8 })
+	await page.mouse.up()
+}
+
+/**
+ * The Graph key folds away in a short pane (the view area under 360px): at the width of the default Tools pane it wraps to two lines
+ * and took about 50 of the canvas's 300px. The Key button shows it; maximized, it is shown as before.
+ */
+test('the Graph key starts folded in the default Tools pane, the Key button shows it, and maximized it is shown', async ({ page }) => {
+	await page.setViewportSize({ width: 1440, height: 900 })
+	await openGraph(page, 'survey', { maximize: false })
+	const key = page.getByTestId('graph-key')
+	const toggle = page.getByRole('button', { name: 'Key', exact: true })
+	await expect(key)
+		.toBeHidden()
+	await expect(toggle)
+		.toHaveAttribute('aria-expanded', 'false')
+	expect(await toggle.getAttribute('aria-controls'))
+		.toBe(await key.getAttribute('id'))
+	const folded = (await page.locator('.vue-flow')
+		.boundingBox())!
+	expect(folded.height)
+		.toBeGreaterThanOrEqual(295)
+
+	await toggle.click()
+	await expect(key)
+		.toBeVisible()
+	await expect(key)
+		.toHaveAccessibleName('Graph key')
+	await expect(toggle)
+		.toHaveAttribute('aria-expanded', 'true')
+	await expect.poll(async () => (await page.locator('.vue-flow')
+		.boundingBox())!.height)
+		.toBeLessThan(folded.height - 20)
+	await toggle.click()
+	await expect(key)
+		.toBeHidden()
+
+	// A fresh Lab, maximized: the key is shown and the button says so.
+	await page.goto('/?showcase=survey')
+	await openDependenciesGraph(page)
+	await maximizeTools(page)
+	await expect(page.getByTestId('graph-key'))
+		.toBeVisible()
+	await expect(page.getByRole('button', { name: 'Key', exact: true }))
+		.toHaveAttribute('aria-expanded', 'true')
 })
 
 test('dragging the minimap pans the canvas at the same zoom, and a click centres the viewport on that point', async ({ page }) => {

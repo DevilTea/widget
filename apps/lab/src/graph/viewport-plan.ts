@@ -123,8 +123,49 @@ export function clusterToFrame<Graph>(previous: LayoutGeneration<Graph> | null, 
 	return previous.expandedClusterId === next.expandedClusterId ? null : next.expandedClusterId
 }
 
-/** The minimap needs at least this much canvas to be any use; below it, it would cover most of what it maps. */
-export const MINIMAP_MIN_PANE: Size = { width: 360, height: 260 }
+/**
+ * The minimap needs at least this much canvas to be any use; below it, it would cover most of what it maps. The default Tools pane
+ * (about 749 x 300 at 1440 x 900 and 666 x 250 at 1280 x 800 with the Graph key folded) is above it.
+ */
+export const MINIMAP_MIN_PANE: Size = { width: 320, height: 160 }
+/** The minimap's width is this share of the canvas width, within `MINIMAP_MIN_SIZE` and `MINIMAP_MAX_SIZE`. */
+export const MINIMAP_WIDTH_SHARE = 0.19
+export const MINIMAP_MIN_SIZE: Size = { width: 96, height: 64 }
+export const MINIMAP_MAX_SIZE: Size = { width: 200, height: 120 }
+
+/**
+ * The size of the minimap's drawing for a canvas and the graph (`content`, flow units): about a fifth of the canvas width, with
+ * the graph's aspect ratio, within 96 x 64 and 200 x 120. A graph much wider or taller than that range allows is letterboxed by
+ * the minimap itself.
+ */
+export function minimapSize(pane: Size, content: Rect): Size {
+	const clampTo = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value))
+	const aspect = content.width > 0 && content.height > 0 ? content.width / content.height : MINIMAP_MAX_SIZE.width / MINIMAP_MAX_SIZE.height
+	let width = clampTo(pane.width * MINIMAP_WIDTH_SHARE, MINIMAP_MIN_SIZE.width, MINIMAP_MAX_SIZE.width)
+	let height = width / aspect
+	if (height > MINIMAP_MAX_SIZE.height) {
+		height = MINIMAP_MAX_SIZE.height
+		width = clampTo(height * aspect, MINIMAP_MIN_SIZE.width, width)
+	}
+	else if (height < MINIMAP_MIN_SIZE.height) {
+		height = MINIMAP_MIN_SIZE.height
+	}
+	return { width: Math.round(width), height: Math.round(height) }
+}
+
+/** Where a box of `size` sits in the bottom right corner of the pane, `margin` px from both edges, in screen px from the pane's top left. */
+export function bottomRightRect(pane: Size, size: Size, margin: number): Rect {
+	return { x: pane.width - margin - size.width, y: pane.height - margin - size.height, width: size.width, height: size.height }
+}
+
+/** A box in flow units, in screen px from the pane's top left at `viewport`. */
+export function toScreenRect(rect: Rect, viewport: Viewport): Rect {
+	return { x: rect.x * viewport.zoom + viewport.x, y: rect.y * viewport.zoom + viewport.y, width: rect.width * viewport.zoom, height: rect.height * viewport.zoom }
+}
+
+export function rectsOverlap(a: Rect, b: Rect): boolean {
+	return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+}
 
 /** Whether `content` (flow units) lies inside the pane at `viewport`, within `tolerance` screen px. */
 export function isContentInView(content: Rect, pane: Size, viewport: Viewport, tolerance = 1): boolean {
@@ -137,10 +178,15 @@ export function isContentInView(content: Rect, pane: Size, viewport: Viewport, t
 
 /**
  * The minimap is shown only while part of the graph is out of view and the pane is at least `MINIMAP_MIN_PANE`: with everything in
- * view it has nothing to add, and in a tiny pane it would hide the graph it maps.
+ * view it has nothing to add, and in a tiny pane it would hide the graph it maps. It also gives way to the focus tags: when
+ * `minimap` (its box on screen) would cover any of `tags` (their boxes on screen), it is not shown. The tags are placed in flow
+ * units once per zoom bucket (`composables/use-graph-tags.ts`) while the minimap is fixed to the screen, so making it an obstacle of
+ * the placement would place every tag again on every pan step, and the tags would move as the graph is dragged.
  */
-export function isMinimapUseful(content: Rect | null, pane: Size, viewport: Viewport): boolean {
+export function isMinimapUseful(content: Rect | null, pane: Size, viewport: Viewport, minimap?: Rect, tags: readonly Rect[] = []): boolean {
 	if (content === null || pane.width < MINIMAP_MIN_PANE.width || pane.height < MINIMAP_MIN_PANE.height)
 		return false
-	return !isContentInView(content, pane, viewport)
+	if (isContentInView(content, pane, viewport))
+		return false
+	return minimap === undefined || !tags.some(tag => rectsOverlap(tag, minimap))
 }

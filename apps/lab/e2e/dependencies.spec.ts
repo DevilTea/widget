@@ -55,6 +55,9 @@ test('Relations inspects shared Document focus and switching back to Graph prese
 	const phoneRequired = page.locator('.vue-flow__node[data-id="4:property:required"] .graph-node--member')
 	await expect(phoneRequired)
 		.toBeVisible({ timeout: 15_000 })
+	// Expanding frames #phone at a readable zoom, where the minimap in the canvas corner covers this member: Fit graph first.
+	await page.getByRole('button', { name: 'Fit graph' })
+		.click()
 	await phoneRequired.click()
 
 	const graphTransform = page.locator('.vue-flow__transformationpane')

@@ -15,7 +15,7 @@ import type { InspectionNodeId } from '@deviltea/widget-core/inspection'
 import type { DependenciesView } from '../../composables/use-dependencies-view'
 import type { GraphVertexKind } from '../../graph/types'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
-import { computed, nextTick, useTemplateRef, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, useTemplateRef, watch } from 'vue'
 import { useDependenciesView } from '../../composables/use-dependencies-view'
 import { useDependencyGraph } from '../../composables/use-dependency-graph'
 import { useGraphEdgeSelection } from '../../composables/use-graph-edge-selection'
@@ -161,6 +161,40 @@ watch(() => layoutState.value.status, (status) => {
 		pendingToggleFocus = null
 })
 
+/**
+ * The Graph key folds away in a short pane. The key is a row above the canvas that wraps to two lines at the width of the default
+ * Tools pane, where it took about 50 of the 300px the Graph has. While the view area (key plus canvas) is shorter than
+ * `KEY_FOLD_BELOW_PX` it starts folded; the Key button shows it, and a press is kept as the person's choice for this panel. The
+ * view area is measured whichever view is showing, so the key is decided before the Graph is first drawn and fitted.
+ */
+const KEY_FOLD_BELOW_PX = 360
+const viewArea = useTemplateRef<HTMLElement>('viewArea')
+const viewAreaHeight = ref(0)
+const keyChoice = ref<boolean | null>(null)
+const keyShown = computed(() => keyChoice.value ?? !(viewAreaHeight.value > 0 && viewAreaHeight.value < KEY_FOLD_BELOW_PX))
+const graphKeyId = useId()
+let viewAreaObserver: ResizeObserver | null = null
+
+function measureViewArea(): void {
+	const height = viewArea.value?.getBoundingClientRect().height ?? 0
+	// A hidden Dockview tab measures 0: keep the last real height.
+	if (height > 0)
+		viewAreaHeight.value = height
+}
+
+onMounted(() => {
+	measureViewArea()
+	if (viewArea.value !== null) {
+		viewAreaObserver = new ResizeObserver(measureViewArea)
+		viewAreaObserver.observe(viewArea.value)
+	}
+})
+
+onBeforeUnmount(() => {
+	viewAreaObserver?.disconnect()
+	viewAreaObserver = null
+})
+
 function onEdgeClick(edgeId: string): void {
 	for (const edge of flow.value?.edges ?? []) {
 		if (edge.id === edgeId) {
@@ -291,6 +325,16 @@ const statusLabel = computed(() => {
 					{{ i18n.t('Collapse all') }}
 				</button>
 				<GraphLegend />
+				<button
+					type="button"
+					data-testid="graph-key-toggle"
+					:aria-expanded="keyShown"
+					:aria-controls="graphKeyId"
+					class="p-[3px_8px] min-h-[24px] text-[11px] rounded-lab border border-lab-border bg-lab-surface-alt text-lab-text cursor-pointer"
+					@click="keyChoice = !keyShown"
+				>
+					{{ i18n.t('Key') }}
+				</button>
 				<span
 					v-if="statusLabel"
 					class="ml-auto"
@@ -299,7 +343,10 @@ const statusLabel = computed(() => {
 		</div>
 
 		<!-- Main view area (v-show preserves Graph DOM state & zoom/pan across view switching) -->
-		<div class="flex-auto min-h-0 relative flex flex-col">
+		<div
+			ref="viewArea"
+			class="flex-auto min-h-0 relative flex flex-col"
+		>
 			<!-- Graph View -->
 			<div
 				v-show="activeView === 'graph'"
@@ -310,7 +357,10 @@ const statusLabel = computed(() => {
 				tabindex="0"
 				class="dependencies-graph-view flex-auto min-h-0 relative flex flex-col"
 			>
-				<GraphKey />
+				<GraphKey
+					v-show="keyShown"
+					:id="graphKeyId"
+				/>
 				<div class="flex-auto min-h-0 relative">
 					<GraphCanvas
 						v-if="flow !== null"
