@@ -48,13 +48,14 @@ interface RenderedGraph {
 }
 
 /** `expand`: the id of the one widget to expand (one widget is expanded at a time, issue #254). */
-async function openGraph(page: Page, showcase: 'survey' | 'trip-budget', options: { expand?: string } = {}): Promise<void> {
+async function openGraph(page: Page, showcase: 'survey' | 'trip-budget', options: { expand?: string, maximize?: boolean } = {}): Promise<void> {
 	await page.goto(`/?showcase=${showcase}`)
 	await openDependenciesGraph(page)
 	await expect(page.locator('.graph-node--cluster')
 		.first())
 		.toBeVisible({ timeout: 15_000 })
-	await giveGraphTheWorkbench(page)
+	if (options.maximize !== false)
+		await giveGraphTheWorkbench(page)
 	if (options.expand !== undefined) {
 		await expandGraphWidget(page, options.expand)
 		await expect(page.locator('.graph-node--member')
@@ -240,6 +241,16 @@ test('the Survey Fit at 1440 x 900 (Tools maximized) keeps the card text at 11px
 		.toBeGreaterThanOrEqual(10.9)
 })
 
+// Not maximized, the Tools group has half of the Preview's column: the collapsed Survey fits at about 0.37 at 1440 x 900 (measured). The
+// Graph is not meant to be read there (Maximize is), but this keeps that default from shrinking further unnoticed.
+test('at the Tools group\'s default size the Survey Fit stays at 0.3 or more', async ({ page }) => {
+	await page.setViewportSize({ width: 1440, height: 900 })
+	await openGraph(page, 'survey', { maximize: false })
+	const { zoom } = await readGraph(page)
+	expect(zoom)
+		.toBeGreaterThanOrEqual(0.3)
+})
+
 test('the Survey Fit at 1280 x 800 (Tools maximized) keeps the card text close to 11px (it was 9.7px and 8.9px)', async ({ page }) => {
 	await page.setViewportSize({ width: 1280, height: 800 })
 	await openGraph(page, 'survey')
@@ -253,22 +264,24 @@ test('the Survey Fit at 1280 x 800 (Tools maximized) keeps the card text close t
 })
 
 // Issue #254: one widget is expanded at a time, and expanding it refits the whole new layout. The largest widgets (the lowest Fit,
-// measured with the real ELK in `graph-readability.unit.test.ts`) are the Survey's #sessions (0.415 at 1440 x 900) and the Trip
-// budget's #hotel (0.196); fully expanded they were 0.27 and about 0.06. Those were measured in the full-height tool group of issue #230;
-// with the Tools group maximized (Lab UX phase 3B) the pane is larger and the Fit is about 0.65 and 0.33, so the values above are kept
-// as floors (no less readable than #230), and "every card in view" below is what holds the Fit from zooming past the graph.
-for (const { showcase, widget, fit } of [
-	{ showcase: 'survey', widget: 'sessions', fit: 0.415 },
-	{ showcase: 'trip-budget', widget: 'hotel', fit: 0.196 },
+// measured with the real ELK in `graph-readability.unit.test.ts`) are the Survey's #sessions and the Trip budget's #hotel; fully
+// expanded they were 0.27 and about 0.06. In issue #230's full-height tool group their Fit was 0.415 and 0.196; with the Tools group
+// maximized (Lab UX phase 3B) it is measured at 0.649 and 0.331 at 1440 x 900, the centres of the bands below. A band on both sides,
+// so a Fit that grows past the graph fails as well as one that shrinks.
+for (const { showcase, widget, fit, band } of [
+	{ showcase: 'survey', widget: 'sessions', fit: 0.65, band: 0.05 },
+	{ showcase: 'trip-budget', widget: 'hotel', fit: 0.33, band: 0.04 },
 ] as const) {
-	test(`expanding #${widget} fits the whole ${showcase} at ${fit} or more, every card in view`, async ({ page }) => {
+	test(`expanding #${widget} fits the whole ${showcase} at about ${fit} (Tools maximized), every card in view`, async ({ page }) => {
 		await page.setViewportSize({ width: 1440, height: 900 })
 		await openGraph(page, showcase, { expand: widget })
 		const canvas = (await page.locator('.vue-flow')
 			.boundingBox())!
 		const { zoom, cards } = await readGraph(page)
 		expect(zoom)
-			.toBeGreaterThanOrEqual(fit)
+			.toBeGreaterThan(fit - band)
+		expect(zoom)
+			.toBeLessThan(fit + band)
 		expect(cards.length)
 			.toBeGreaterThan(10)
 		for (const card of cards) {
