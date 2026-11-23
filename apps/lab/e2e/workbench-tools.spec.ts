@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test'
 import type { ToolId } from './fixtures'
-import { chooseTutorialMenuItem, expect, openEditStructure, openExplain, openTool, previewFrame, setLocale, test, toolsMenu, toolTab, workbenchTab } from './fixtures'
+import { chooseTutorialMenuItem, expect, loadPreset, maximizeTools, openDeveloperTool, openEditStructure, openExplain, openTool, previewFrame, setLocale, test, toolsMaximizeButton, toolsMenu, toolTab, workbenchTab } from './fixtures'
 
 /**
  * Lab UX phase 3B (design "information architecture"): the tool group is Edit / Explain / Tools. Tools is a menu of the expert
@@ -26,6 +26,12 @@ function groupOf(page: Page, tab: Locator): Locator {
 }
 
 const previewTab = (page: Page): Locator => page.getByRole('tab', { name: 'Preview', exact: true })
+
+/** The area a group takes on screen (0 while another group is maximized). */
+async function area(group: Locator): Promise<number> {
+	const box = await group.boundingBox()
+	return box === null ? 0 : Math.round(box.width * box.height)
+}
 
 type Box = NonNullable<Awaited<ReturnType<Locator['boundingBox']>>>
 function intersects(a: Box, b: Box): boolean {
@@ -214,6 +220,132 @@ test.describe('the Tools group beside the Preview', () => {
 			.toHaveAttribute('aria-selected', 'true')
 		await expect(page.getByTestId('explain-identity'))
 			.toBeVisible()
+	})
+})
+
+test.describe('maximizing the Tools group', () => {
+	test('Maximize covers the workbench with the Tools group and Restore gives Edit/Explain and the Preview back, focus staying on the button', async ({ page }) => {
+		await page.setViewportSize({ width: 1440, height: 900 })
+		await openLab(page)
+		// No view, no Tools group, no button.
+		await expect(toolsMaximizeButton(page))
+			.toHaveCount(0)
+		await openTool(page, 'runtime')
+		const button = toolsMaximizeButton(page)
+		await expect(button)
+			.toHaveAccessibleName('Maximize tools')
+		await expect(button)
+			.not
+			.toHaveAttribute('aria-pressed', /.*/)
+		const tools = groupOf(page, toolTab(page, 'runtime'))
+
+		// From the keyboard.
+		await button.focus()
+		await page.keyboard.press('Enter')
+		await expect(button)
+			.toHaveAttribute('data-maximized', 'true')
+		await expect(button)
+			.toHaveAccessibleName('Restore tools')
+		await expect(button)
+			.toBeFocused()
+		// Dockview hides the other groups by giving them no room.
+		await expect.poll(() => area(groupOf(page, workbenchTab(page, 'edit'))))
+			.toBe(0)
+		await expect.poll(() => area(groupOf(page, previewTab(page))))
+			.toBe(0)
+		await expect(page.getByTestId('preview-frame'))
+			.toBeHidden()
+		const box = (await tools.boundingBox())!
+		const workbench = (await page.locator('.workbench')
+			.boundingBox())!
+		expect(box.width)
+			.toBeCloseTo(workbench.width, 0)
+		expect(box.height)
+			.toBeCloseTo(workbench.height, 0)
+		// Not saved: the Tools group is not restored, and neither is its maximized state.
+		await expect.poll(() => page.evaluate(key => localStorage.getItem(key)
+			?.includes('maximizedNode') ?? false, LAYOUT_KEY))
+			.toBe(false)
+
+		await page.keyboard.press('Space')
+		await expect(button)
+			.toHaveAttribute('data-maximized', 'false')
+		await expect(button)
+			.toHaveAccessibleName('Maximize tools')
+		await expect(button)
+			.toBeFocused()
+		await expect.poll(() => area(groupOf(page, workbenchTab(page, 'edit'))))
+			.toBeGreaterThan(100_000)
+		await expect(page.getByTestId('preview-frame'))
+			.toBeVisible()
+		// Escape restores nothing (it belongs to dialogs, menus and Monaco): a mouse press is the other way.
+		await button.click()
+		await page.keyboard.press('Escape')
+		await expect(button)
+			.toHaveAttribute('data-maximized', 'true')
+		await button.click()
+		await expect(button)
+			.toHaveAttribute('data-maximized', 'false')
+	})
+
+	test('while maximized, a view opened from the header joins the maximized group; bringing Edit to the front restores', async ({ page }) => {
+		await page.setViewportSize({ width: 1440, height: 900 })
+		await openLab(page)
+		await openTool(page, 'runtime')
+		await maximizeTools(page)
+		// The Developer menu is in the header, which stays on screen: the view opens in the Tools group, which stays maximized.
+		await openDeveloperTool(page, 'document-tools')
+		await expect(toolsMaximizeButton(page))
+			.toHaveAttribute('data-maximized', 'true')
+		await expect(groupOf(page, toolTab(page, 'document-tools'))
+			.locator('.dv-tab'))
+			.toHaveCount(2)
+		expect(await area(groupOf(page, workbenchTab(page, 'edit'))))
+			.toBe(0)
+		// "Show problems" brings Edit to the front: Dockview leaves the maximized group to show it.
+		await loadPreset(page, 'survey-ai-draft')
+		await expect(page.getByTestId('lab-status'))
+			.toHaveAttribute('data-state', 'problems')
+		await page.getByTestId('lab-status')
+			.click()
+		await expect(workbenchTab(page, 'edit'))
+			.toHaveAttribute('aria-selected', 'true')
+		await expect.poll(() => area(groupOf(page, workbenchTab(page, 'edit'))))
+			.toBeGreaterThan(100_000)
+		await expect(toolsMaximizeButton(page))
+			.toHaveAttribute('data-maximized', 'false')
+	})
+
+	test('closing the last view of a maximized Tools group, or Reset layout, leaves no blank workbench', async ({ page }) => {
+		await page.setViewportSize({ width: 1440, height: 900 })
+		await openLab(page)
+		const runtime = await openTool(page, 'runtime')
+		await maximizeTools(page)
+		await runtime.focus()
+		await page.keyboard.press('Delete')
+		await expect(runtime)
+			.toHaveCount(0)
+		await expect(workbenchTab(page, 'tools'))
+			.toBeVisible()
+		await expect(page.getByTestId('preview-frame'))
+			.toBeVisible()
+		await expect(page.locator('.dv-groupview'))
+			.toHaveCount(2)
+
+		await openTool(page, 'events')
+		await maximizeTools(page)
+		await page.getByTestId('overflow-menu')
+			.click()
+		await page.getByRole('menuitem', { name: 'Reset layout', exact: true })
+			.click()
+		await expect(workbenchTab(page, 'edit'))
+			.toHaveAttribute('aria-selected', 'true')
+		await expect(page.getByTestId('preview-frame'))
+			.toBeVisible()
+		await expect(toolsMaximizeButton(page))
+			.toHaveCount(0)
+		await expect(page.locator('.dv-groupview'))
+			.toHaveCount(2)
 	})
 })
 
@@ -433,6 +565,13 @@ test.describe('zh-TW', () => {
 			.click()
 		await expect(page.getByTestId('browse-widget-types'))
 			.toHaveText('瀏覽 widget 類型')
+		await expect(toolsMaximizeButton(page))
+			.toHaveAccessibleName('放大工具區')
+		await maximizeTools(page)
+		await expect(toolsMaximizeButton(page))
+			.toHaveAccessibleName('還原工具區')
+		await toolsMaximizeButton(page)
+			.click()
 
 		// A language switch renames the open views too.
 		await setLocale(page, 'en')

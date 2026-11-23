@@ -251,12 +251,20 @@ export function loadSavedLayout(storage: LayoutStorage | null = browserLayoutSto
 	}
 }
 
-/** Returns whether the layout was stored. */
+/**
+ * Returns whether the layout was stored. A maximized group (the Tools group's Maximize, Lab UX phase 3B) is never stored: the
+ * Tools group itself is not restored, so its maximized state is not either (`grid.maximizedNode` is left out).
+ */
 export function saveLayout(layout: unknown, storage: LayoutStorage | null = browserLayoutStorage()): boolean {
 	if (storage === null || !isPlausibleLayout(layout))
 		return false
 	try {
-		storage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify({ version: LAYOUT_VERSION, layout }))
+		const grid = layout.grid as Record<string, unknown>
+		const stored = 'maximizedNode' in grid
+			? { ...layout, grid: Object.fromEntries(Object.entries(grid)
+					.filter(([key]) => key !== 'maximizedNode')) }
+			: layout
+		storage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify({ version: LAYOUT_VERSION, layout: stored }))
 		return true
 	}
 	catch {

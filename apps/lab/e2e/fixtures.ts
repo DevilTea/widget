@@ -389,6 +389,19 @@ export async function openTool(page: Page, tool: ToolId): Promise<Locator> {
 	return tab
 }
 
+/** The Tools group's Maximize / Restore button (its header action; there is none while no view is open). */
+export function toolsMaximizeButton(page: Page): Locator {
+	return page.getByTestId('tools-maximize')
+}
+
+/** Maximizes the Tools group over the workbench and waits until it is. */
+export async function maximizeTools(page: Page): Promise<void> {
+	await toolsMaximizeButton(page)
+		.click()
+	await expect(toolsMaximizeButton(page))
+		.toHaveAttribute('data-maximized', 'true')
+}
+
 /** The content of the Tools menu (the Tools tab's panel). */
 export function toolsMenu(page: Page): Locator {
 	return page.getByTestId('tools-menu')

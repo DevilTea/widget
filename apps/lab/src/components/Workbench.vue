@@ -31,6 +31,7 @@ import RuntimePanel from './panels/RuntimePanel.vue'
 import SelectedWidgetPanel from './panels/SelectedWidgetPanel.vue'
 import ToolsPanel from './panels/ToolsPanel.vue'
 import PreviewPanel from './preview/PreviewPanel.vue'
+import ToolsGroupActions from './ToolsGroupActions.vue'
 
 const store = useLabStore()
 const i18n = useLabI18n()
@@ -85,6 +86,9 @@ const components: Record<string, VueComponent> = {
 const tabComponents: Record<string, VueComponent> = {
 	nonClosable: NonClosableTab as unknown as VueComponent,
 }
+
+// The right-hand header action of every group; it draws the Tools group's Maximize / Restore button and nothing elsewhere.
+const headerActions = ToolsGroupActions as unknown as VueComponent
 
 /** How much of the right column's height a newly created Tools group takes from the Preview. */
 const TOOLS_GROUP_SHARE = 0.5
@@ -252,12 +256,22 @@ function watchLayoutResetRequests(api: DockviewApi): void {
 		() => workbenchLayout.resetRequestTick.value,
 		() => {
 			clearSavedLayout()
+			// A maximized Tools group is left first, so nothing of it outlives the rebuilt default.
+			if (api.hasMaximizedGroup())
+				api.exitMaximizedGroup()
 			// The Dependencies view is shared per store, not the rebuilt panel's own state: a reset starts it over at Relations too.
 			dependenciesView.reset()
 			api.clear()
 			buildDefaultLayout(api)
 			store.activeTab.value = 'edit'
 			api.getPanel('edit')?.api.setActive()
+			// The rebuilt grid has the size the old one had, so Dockview sees no resize and never positions the Preview's overlay
+			// (the `always` renderer): it stayed hidden until the window was resized. A forced layout positions it.
+			requestAnimationFrame(() => {
+				const el = workbenchEl.value
+				if (el !== null)
+					api.layout(el.clientWidth, el.clientHeight, true)
+			})
 		},
 	))
 }
@@ -267,6 +281,9 @@ function trackOpenTools(api: DockviewApi): void {
 	const sync = (): void => {
 		store.openTools.value = new Set(api.panels.map(panel => panel.id)
 			.filter(isToolId))
+		// Dockview leaves a maximized group when that group goes away; this only makes sure no maximized state outlives the last view.
+		if (store.openTools.value.size === 0 && api.hasMaximizedGroup())
+			api.exitMaximizedGroup()
 	}
 	sync()
 	const added = api.onDidAddPanel(sync)
@@ -305,8 +322,13 @@ function watchTabActivation(api: DockviewApi): void {
 			// Activating moves DOM focus (into the panel's group), so never re-activate what the user already
 			// activated themselves: that is what a tab click echoed through `activeTab` would otherwise do,
 			// stealing focus from, say, the Monaco editor the user just clicked into.
+			const panel = api.getPanel(tab)
+			// A canonical tab asked for while the Tools group is maximized (Show problems, a tour step) is shown: the maximized
+			// group is restored first, so the tab is not activated behind it.
+			if (panel !== undefined && api.hasMaximizedGroup() && !panel.group.api.isMaximized())
+				api.exitMaximizedGroup()
 			if (api.activePanel?.id !== tab)
-				api.getPanel(tab)?.api.setActive()
+				panel?.api.setActive()
 		},
 	)
 	// The tool group's own shown panel (Lab UX phase 2): `activeTab` follows whichever group is active, often the Preview's
@@ -416,6 +438,7 @@ function watchToolOpenRequests(api: DockviewApi): void {
 			:theme="labTheme"
 			:components="components"
 			:tabComponents="tabComponents"
+			:rightHeaderActionsComponent="headerActions"
 			@ready="onReady"
 		/>
 	</div>

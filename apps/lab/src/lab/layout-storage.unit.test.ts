@@ -164,6 +164,23 @@ describe('load, save and clear', () => {
 			.toEqual(realLayout())
 	})
 
+	it('never stores a maximized group (the Tools group\'s Maximize is not restored, like the group itself)', () => {
+		const storage = memoryStorage()
+		const layout = realLayout()
+		;(layout.grid as Record<string, unknown>).maximizedNode = { location: [1, 1] }
+		expect(saveLayout(layout, storage))
+			.toBe(true)
+		const stored = JSON.parse(storage.data.get(LAYOUT_STORAGE_KEY)!)
+		expect(stored.layout.grid)
+			.not
+			.toHaveProperty('maximizedNode')
+		expect(stored.layout)
+			.toEqual(realLayout())
+		// The layout handed in is not modified.
+		expect(layout.grid)
+			.toHaveProperty('maximizedNode')
+	})
+
 	it('does not store something it would not read back', () => {
 		const storage = memoryStorage()
 		expect(saveLayout({ grid: {}, panels: {} }, storage))

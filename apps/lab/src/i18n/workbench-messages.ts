@@ -27,6 +27,8 @@ const zhTWWorkbenchMessages: Readonly<Record<string, string>> = {
 	'The selected widget\'s declaration and its live values side by side.': '選取的 widget 的宣告與即時值，並排呈現。',
 	'The last change as a SourcePatch, a conflict check and the separated source, for developers.': '給開發者：上一次變更的 SourcePatch、衝突檢查與分離後的 source。',
 	'The plugin and renderer code behind the selected widget\'s type.': '選取的 widget 所屬 type 背後的 plugin 與 renderer 程式碼。',
+	'Maximize tools': '放大工具區',
+	'Restore tools': '還原工具區',
 	'Implementation — {subject}': '實作 — {subject}',
 	'View implementation of {widget}': '查看 {widget} 的實作',
 }
