@@ -6,11 +6,14 @@
  * dependency, with the dependency's target (`dependency.target.widgetId`), but not the config path the id came from: a plugin
  * builds its dependencies in code from config values, so only a tool that reads the config can say where the id is written.
  * `referenceConfigPaths()` is that reading:
- * 1. in the owner widget's config, every value the schema marks as a widget reference and that equals the target id;
+ * 1. in the owner widget's config, every value the schema marks as a widget reference and that equals the target id (for
+ *    `missing-dependency-capability` / `-member`, only where the target's type is not one the reference allows);
  * 2. with at least one match, the problem is at those paths (several matches are several locations, all wrong);
  * 3. with none (no `@widgetRef` tag, an id that does not come from config, a `self`, `root` or `parent` target, a code the
  *    rule does not apply to), `null`: the caller keeps the widget-level placement.
- * The text is never searched.
+ * The text is never searched. Only a string value whose own schema carries the mark is matched: an id written as an object key
+ * (trip-budget's `percents`), or as a `string[]` item or a dictionary value (whose mark the generator writes on the list or the
+ * dictionary, not on the value), is not found and the problem stays at the widget; nothing is located wrongly.
  *
  * Pure and framework-free (no Vue, no Lab store, no i18n), so another inspector tool can take it as it is; the only import is
  * `config-schema.ts`, which is pure too. `explain/why.ts` reads the `@widgetRef` mark through the same helpers.
@@ -20,14 +23,19 @@ import type { ConfigPath, FieldModel, JsonSchema } from './config-schema'
 import { describeField } from './config-schema'
 
 /**
- * The dependency diagnostic codes whose target id, when the config writes it in a widget reference, is located at that value.
- * Each says the id names nothing this dependency can use, so changing the value is a fix:
- * - `missing-dependency-target`: no widget has the id (a typo);
- * - `missing-dependency-capability`, `missing-dependency-member`: the widget it names has no such capability or member (the
- *   wrong widget is named).
- * Left out: `ambiguous-dependency-target` (several widgets share the id; no value can choose between them, the fix is a unique
- * id, and those widgets already carry `duplicate-widget-id`), `unresolved-dependency-target` (the reference is right, the target widget is broken and has its own diagnostic
- * there) and `property-dependency-has-side-effects` (the plugin's code reads a Method that writes; no config value is wrong).
+ * The dependency diagnostic codes the rule applies to, by what Core says each one means:
+ * - `missing-dependency-target`: no widget of the Document has the target id, so a config value that writes the id names
+ *   nothing; it is located at that value.
+ * - `missing-dependency-capability`, `missing-dependency-member`: the widget with the target id exists, and its plugin lacks
+ *   the capability or the member the dependency's operation needs. It is located at the value only when that widget's type
+ *   (Core's `related` location of the target) is not one of the types the schema allows there (`@widgetRef A | B`): the value
+ *   names a widget the plugin's own contract rules out. When the type is allowed, the value keeps the contract, the fault is in
+ *   what the plugin reads, and the problem stays at the widget.
+ * Left out:
+ * - `ambiguous-dependency-target`: several widgets share the id; no value can choose between them (the fix is a unique id),
+ *   and those widgets already carry `duplicate-widget-id`;
+ * - `unresolved-dependency-target`: the target widget did not resolve and has its own diagnostic there;
+ * - `property-dependency-has-side-effects`: a Property depends on a Method that writes State or emits, which is the plugin's code.
  */
 export const LOCATED_DEPENDENCY_CODES: ReadonlySet<string> = new Set([
 	'missing-dependency-target',
@@ -35,10 +43,18 @@ export const LOCATED_DEPENDENCY_CODES: ReadonlySet<string> = new Set([
 	'missing-dependency-member',
 ])
 
+/** The codes located only when the target's type is outside the reference's allowed types. */
+const TYPE_CHECKED_CODES: ReadonlySet<string> = new Set(['missing-dependency-capability', 'missing-dependency-member'])
+
 /** The facts of a diagnostic the matcher reads: Core's `code` and, for a dependency diagnostic, its `dependency`. */
 export interface ReferenceDiagnosticFacts {
 	readonly code: string
 	readonly dependency?: BlueprintDependencyReference
+	/**
+	 * The plugin type of the widget the target id names, from Core's `related` location of the target; `null` or absent when the
+	 * diagnostic does not give it (then a type-checked code stays at the widget).
+	 */
+	readonly targetType?: string | null
 }
 
 /** The plugin types the schema allows for the config value at `path`, or `null` when the schema does not mark it as a widget reference. */
@@ -138,7 +154,14 @@ export function referenceConfigPaths(
 	const target = facts.dependency?.target
 	if (!LOCATED_DEPENDENCY_CODES.has(facts.code) || target?.type !== 'widget')
 		return null
+	const typeChecked = TYPE_CHECKED_CODES.has(facts.code)
+	const targetType = facts.targetType ?? null
+	if (typeChecked && targetType === null)
+		return null
 	const paths = stringValuePaths(rawConfig, target.widgetId)
-		.filter(path => widgetRefAt(path) !== null)
+		.filter((path) => {
+			const types = widgetRefAt(path)
+			return types !== null && (!typeChecked || !types.includes(targetType!))
+		})
 	return paths.length === 0 ? null : paths
 }

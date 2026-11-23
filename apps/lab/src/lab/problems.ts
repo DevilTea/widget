@@ -147,6 +147,21 @@ function isWidgetLevel(diagnostic: BlueprintDiagnostic): boolean {
 }
 
 /**
+ * The plugin type of the widget a dependency diagnostic's target id names: Core lists the target as a `related` widget
+ * location (`missing-dependency-capability`, `missing-dependency-member`); `null` when it does not.
+ */
+function targetTypeOf(diagnostic: BlueprintDiagnostic): string | null {
+	if (!('dependency' in diagnostic) || diagnostic.dependency.target.type !== 'widget' || !('related' in diagnostic) || diagnostic.related === undefined)
+		return null
+	const widgetId = diagnostic.dependency.target.widgetId
+	for (const related of diagnostic.related) {
+		if (related.type === 'widget' && related.node.resolved && related.node.id === widgetId)
+			return related.node.type
+	}
+	return null
+}
+
+/**
  * The config paths of a dependency diagnostic's broken widget reference in its owner widget's authored config (`source.config`,
  * the committed Document's fragment), read with the owner plugin's config schema; `null` when it stays at the widget.
  */
@@ -165,7 +180,7 @@ function referenceLocations(
 		return null
 	const source: unknown = owner.source
 	const rawConfig = typeof source === 'object' && source !== null && !Array.isArray(source) ? (source as { readonly config?: unknown }).config : undefined
-	const paths = referenceConfigPaths(diagnostic, rawConfig, schemaWidgetRefs(schema, rawConfig))
+	const paths = referenceConfigPaths({ code: diagnostic.code, dependency: diagnostic.dependency, targetType: targetTypeOf(diagnostic) }, rawConfig, schemaWidgetRefs(schema, rawConfig))
 	return paths === null ? null : paths.map(configPath => ({ sourcePath: [...nodePath, 'config', ...configPath], configPath }))
 }
 

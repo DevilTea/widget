@@ -1,5 +1,6 @@
 import type { BlueprintDependencyReference } from '@deviltea/widget-core'
 import type { JsonSchema } from './config-schema'
+import type { ReferenceDiagnosticFacts } from './reference-locations'
 import { describe, expect, it } from 'vitest'
 import { getShowcase } from '../showcases/registry'
 import { LOCATED_DEPENDENCY_CODES, referenceConfigPaths, schemaWidgetRefs, stringValuePaths, widgetRefTypesOf } from './reference-locations'
@@ -56,7 +57,7 @@ function missing(widgetId: string, code = 'missing-dependency-target'): { code: 
 	}
 }
 
-function locate(facts: { code: string, dependency?: BlueprintDependencyReference }, config: unknown, configSchema: JsonSchema | null = schema) {
+function locate(facts: ReferenceDiagnosticFacts, config: unknown, configSchema: JsonSchema | null = schema) {
 	return referenceConfigPaths(facts, config, schemaWidgetRefs(configSchema, config))
 }
 
@@ -117,27 +118,43 @@ describe('referenceConfigPaths', () => {
 		const config = { visibleWhen: { question: 'mdoe', op: 'answered' } }
 		const operation = { type: 'state-get', key: 'language' } as const
 		for (const target of [{ type: 'self' }, { type: 'root' }, { type: 'parent', optional: false }] as const) {
-			expect(locate({ code: 'missing-dependency-member', dependency: { target, operation } }, config))
+			expect(locate({ code: 'missing-dependency-target', dependency: { target, operation } }, config))
+				.toBeNull()
+			expect(locate({ code: 'missing-dependency-member', dependency: { target, operation }, targetType: 'Survey' }, config))
 				.toBeNull()
 		}
 	})
 
-	it('applies to the codes whose target id names nothing usable, and not to the others', () => {
+	it('applies to missing-dependency-target, capability and member, and not to the others', () => {
 		const config = { visibleWhen: { question: 'mdoe', op: 'answered' } }
 		expect([...LOCATED_DEPENDENCY_CODES].sort())
 			.toEqual(['missing-dependency-capability', 'missing-dependency-member', 'missing-dependency-target'])
-		for (const code of LOCATED_DEPENDENCY_CODES) {
-			expect(locate(missing('mdoe', code), config))
-				.toEqual([['visibleWhen', 'question']])
-		}
+		expect(locate(missing('mdoe'), config))
+			.toEqual([['visibleWhen', 'question']])
 		// ambiguous: no value can choose between widgets that share the id (they carry duplicate-widget-id).
 		for (const code of ['ambiguous-dependency-target', 'unresolved-dependency-target', 'property-dependency-has-side-effects', 'invalid-widget-config']) {
-			expect(locate(missing('mdoe', code), config))
+			expect(locate({ ...missing('mdoe', code), targetType: 'Survey' }, config))
 				.toBeNull()
 		}
 		// A diagnostic without a dependency.
 		expect(locate({ code: 'missing-dependency-target' }, config))
 			.toBeNull()
+	})
+
+	it('locates a missing capability or member only when the target\'s type is outside the reference\'s allowed types', () => {
+		// `visibleWhen.question` allows SingleChoice | Numeric.
+		const config = { visibleWhen: { question: 'open-day', op: 'answered' } }
+		for (const code of ['missing-dependency-capability', 'missing-dependency-member']) {
+			// A Survey is not an allowed type: the value names a widget the contract rules out.
+			expect(locate({ ...missing('open-day', code), targetType: 'Survey' }, config))
+				.toEqual([['visibleWhen', 'question']])
+			// A Numeric is allowed: the value keeps the contract, the plugin reads what the type lacks; it stays at the widget.
+			expect(locate({ ...missing('open-day', code), targetType: 'Numeric' }, config))
+				.toBeNull()
+			// Without the target's type, it cannot be decided: it stays at the widget.
+			expect(locate(missing('open-day', code), config))
+				.toBeNull()
+		}
 	})
 
 	it('reads the generated survey schema: a rule condition nested in `all` is a widget reference', () => {

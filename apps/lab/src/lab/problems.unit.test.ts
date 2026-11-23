@@ -226,6 +226,20 @@ describe('a broken widget reference is located at its config value (reference-lo
 			.toEqual(withoutSchemas)
 	})
 
+	it('locates a missing member at the value when the target\'s type is not one the reference allows (a condition on the Survey itself)', () => {
+		const showcase = getShowcase('survey')!
+		const text = showcase.defaultPreset.sourceText
+			.replace('"visibleWhen": { "question": "mode", "op": "equals", "value": "onsite" }', '"visibleWhen": { "question": "open-day", "op": "equals", "value": "onsite" }')
+		const { withSchemas } = compiled(JSON.parse(text))
+		const located = withSchemas.filter(problem => problem.code === 'missing-dependency-member' || problem.code === 'missing-dependency-capability')
+		expect(located)
+			.toHaveLength(1)
+		expect(located[0])
+			.toMatchObject({ configPath: ['visibleWhen', 'question'], widgetLevel: false })
+		expect(textOf(text, problemSpan(located[0]!, text)))
+			.toBe('"open-day"')
+	})
+
 	it('keeps a dependency diagnostic the rule does not apply to at the widget: a condition on an unresolved widget', () => {
 		// `rating` is the AI draft's question of an unknown type: the reference is right, the target is broken
 		// (`unresolved-dependency-target`, which has its own `unknown-widget-type` there), so it stays widget-level.
