@@ -6,6 +6,9 @@ A rating question: pick a number on a scale.
 
 `config` is the resolved config: `{ question: I18nText; scale: number; }`.
 
+- `question`: The question asked.
+- `scale`: The highest value of the scale; the lowest is 1.
+
 ## State
 
 | Name | Type | authorWritable | Description |
@@ -29,6 +32,7 @@ Chooses a value.
 ## Events
 
 - `rated(value: number)`: A value was chosen.
+  - `value`: The chosen value.
 
 ## Slots
 
@@ -39,14 +43,15 @@ No slots: `WidgetSlot` is not on the surface.
 The diagnostics of this type's State, Properties and Methods are a union discriminated by `reason`: `details` is present exactly when the reason has a payload, and has its type.
 
 - `out-of-range` (`details: { min: number; max: number; received: number; }`): The value is outside the scale.
+  - `min`: The lowest allowed value.
+  - `max`: The highest allowed value.
+  - `received`: The value given.
 
 ## Referenced types
 
 ```text
 // apps/widget-skills/fixtures/survey-system.ts
-/**
- * Text per language, keyed by language tag (`en`, `zh-TW`).
- * @remarks At least one language should be present; the renderer falls back to the first one.
- */
 export type I18nText = Record<string, string>
 ```
+
+- `I18nText`: Text per language, keyed by language tag (`en`, `zh-TW`). At least one language should be present; the renderer falls back to the first one.

@@ -1,6 +1,6 @@
 # Interfaces of surveySystem
 
-Read from the types; the member documentation is whatever JSDoc the Interfaces carry today.
+Read from the types. The descriptions are written in each plugin's builder (`plugin.docs`), not here.
 
 ## Survey (`SurveyInterfaces`)
 
@@ -29,7 +29,7 @@ reasons['out-of-range']: { min: number; max: number; received: number; }
 ## Choice (`ChoiceInterfaces`)
 
 ```text
-config: { raw: { question: I18nText; options: ChoiceOption[]; multiple?: boolean | undefined; followUp?: string | undefined; }, resolved: { question: I18nText; options: readonly ChoiceOption[]; multiple: boolean; followUp: string | null; } }
+config: { raw: { question: I18nText; options: ChoiceOption[]; multiple?: boolean | undefined; followUp?: WidgetRef<"Rating" | "Choice"> | undefined; }, resolved: { question: I18nText; options: readonly ChoiceOption[]; multiple: boolean; followUp: string | null; } }
 state.selected: readonly string[]
 properties.answered: boolean
 methods.select(id: string): readonly string[]

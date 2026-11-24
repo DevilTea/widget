@@ -115,7 +115,7 @@ async function main(): Promise<number> {
 			.padStart(7)}  ${path}`)
 	const errors = check.problems.filter(problem => problem.severity === 'error').length
 	process.stdout.write(`${sizes.join('\n')}\n${removed.map(path => `removed stale ${path}\n`)
-		.join('')}${check.documented}/${check.members} members documented; --check would report ${errors} error(s) and ${check.problems.length - errors} warning(s).\n`)
+		.join('')}${check.documented}/${check.members} descriptions documented; --check would report ${errors} error(s) and ${check.problems.length - errors} warning(s).\n`)
 	return 0
 }
 

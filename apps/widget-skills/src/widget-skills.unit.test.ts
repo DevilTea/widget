@@ -1,10 +1,11 @@
-import type { JsonSchema, SystemIr } from './index'
+import type { JsonSchema, RuntimeFacts, Shape, SystemIr } from './index'
 import { readdirSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { inspectPlugin } from '@deviltea/widget-core/inspection'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { surveySystem } from '../fixtures/survey-system'
+import { shapesSystem } from './fixtures/shapes-system'
 import { undocumentedSystem } from './fixtures/undocumented-system'
 import { applyRuntimeFacts, checkIr, collectRuntimeFacts, createFlatConverter, emitConfigSchema, emitDocs, emitFullSchema, emitLlmSchema, extractIr, FlatConversionError, generateFiles, validateSchema } from './index'
 
@@ -51,7 +52,7 @@ function invalidSources(): [string, unknown][] {
 describe('extractIr on the fixture System', () => {
 	it('lists the plugin types in registration order and agrees with the runtime', () => {
 		expect(ir.irVersion)
-			.toBe(2)
+			.toBe(3)
 		expect(ir.plugins.map(plugin => plugin.type))
 			.toEqual(['Survey', 'Rating', 'Choice', 'Note'])
 		expect(ir.plugins.map(plugin => plugin.type))
@@ -62,7 +63,7 @@ describe('extractIr on the fixture System', () => {
 			.toEqual(surveySystem.catalog.widgets.map(widget => ({ ...widget.capabilities })))
 	})
 
-	it('reads the plugin summary and remarks from the JSDoc of the Interfaces type', () => {
+	it('reads the plugin summary and remarks from plugin.docs (the first paragraph, then the rest)', () => {
 		expect(ir.plugins[0]!)
 			.toMatchObject({
 				interfacesName: 'SurveyInterfaces',
@@ -70,18 +71,18 @@ describe('extractIr on the fixture System', () => {
 			})
 	})
 
-	it('reads slot records in all three forms, with their JSDoc', () => {
+	it('reads slot records in all three forms, with their descriptions', () => {
 		expect(ir.plugins[0]!.slots)
 			.toEqual([
-				{ name: 'header', doc: { summary: 'Anything shown above the questions.', remarks: '', tags: {}, unknownTags: [] }, expected: null, contract: null, expectationText: 'WidgetChild' },
+				{ name: 'header', doc: { summary: 'Anything shown above the questions.', remarks: '' }, expected: null, contract: null, expectationText: 'WidgetChild' },
 				{
 					name: 'questions',
-					doc: { summary: 'The questions, in order.', remarks: 'Every question exposes whether it was answered.', tags: {}, unknownTags: [] },
+					doc: { summary: 'The questions, in order.', remarks: 'Every question exposes whether it was answered.' },
 					expected: ['Rating', 'Choice'],
 					contract: '{ properties: { answered: boolean; }; }',
 					expectationText: 'WidgetContract<{ properties: { answered: boolean } }, \'Rating\' | \'Choice\'>',
 				},
-				{ name: 'footer', doc: { summary: 'Closing notes shown under the questions.', remarks: '', tags: {}, unknownTags: [] }, expected: ['Note'], contract: null, expectationText: '\'Note\'' },
+				{ name: 'footer', doc: { summary: 'Closing notes shown under the questions.', remarks: '' }, expected: ['Note'], contract: null, expectationText: '\'Note\'' },
 			])
 		// A contract without `Types` names no plugin type: any widget with the members.
 		expect(fixtureIr.plugins[0]!.slots.map(slot => [slot.name, slot.expected, slot.contract]))
@@ -91,7 +92,7 @@ describe('extractIr on the fixture System', () => {
 			.toMatchObject({ slots: [], capabilities: { slots: false } })
 	})
 
-	it('reads each reason with its payload type and JSDoc; a void reason has no payload', () => {
+	it('reads each reason with its payload type and docs; a void reason has no payload', () => {
 		const survey = ir.plugins[0]!
 		expect(survey.reasons!.map(reason => [reason.name, reason.payload?.typeText ?? null, reason.doc.summary]))
 			.toEqual([
@@ -104,7 +105,7 @@ describe('extractIr on the fixture System', () => {
 			.toBeNull()
 	})
 
-	it('reads config JSDoc, omittability, members, signatures and labelled payloads', () => {
+	it('reads the config docs, omittability, members, signatures and labelled payloads', () => {
 		const [survey, rating, choice, note] = ir.plugins
 		expect(survey!.config)
 			.toMatchObject({ doc: { summary: 'How the survey is titled and where it is sent.' }, rawText: 'SurveyRawConfig', rawShape: { kind: 'ref', name: 'SurveyRawConfig' }, omittable: false })
@@ -116,12 +117,31 @@ describe('extractIr on the fixture System', () => {
 			.toEqual([['selected', false]])
 		expect(rating!.methods[0]!)
 			.toMatchObject({ signature: 'rate(value: number): number', params: [{ name: 'value', doc: 'The value, from 1 to the scale.' }], returnsDoc: 'The chosen value.' })
-		expect(survey!.events.map(event => [event.name, event.payload.map(item => [item.label, item.typeText])]))
-			.toEqual([['submitted', [['summary', 'SubmitSummary']]]])
-		expect(ir.types.SurveyRawConfig!.shape)
-			.toMatchObject({ kind: 'object', properties: [{ name: 'title' }, { name: 'maxQuestions', optional: true, doc: { tags: { minimum: '1', maximum: '20', default: '10' } } }, { name: 'submitUrl', doc: { tags: { format: 'uri' } } }] })
+		expect(survey!.events.map(event => [event.name, event.payload.map(item => [item.label, item.typeText, item.doc])]))
+			.toEqual([['submitted', [['summary', 'SubmitSummary', 'How many questions were answered, of how many.']]]])
+		// A docs position that holds a named type itself (`config.raw`) describes the type.
+		expect(ir.types.SurveyRawConfig!)
+			.toMatchObject({ doc: { summary: 'The raw config of a survey.' }, shape: { kind: 'object', properties: [{ name: 'title' }, { name: 'maxQuestions', optional: true, doc: { summary: 'The most questions the survey may hold: from 1 to 20; 10 when left out.' } }, { name: 'submitUrl', doc: { summary: 'Where the answers are sent: a URI.' } }] } })
+		// Type docs (`defineTypeDocs` + `ref`): the type's own description, its remarks, and its fields.
 		expect(ir.types.I18nText!)
-			.toMatchObject({ file: 'apps/widget-skills/fixtures/survey-system.ts', shape: { kind: 'record', value: { kind: 'string' } } })
+			.toMatchObject({ file: 'apps/widget-skills/fixtures/survey-system.ts', shape: { kind: 'record', value: { kind: 'string' } }, doc: { summary: 'Text per language, keyed by language tag (`en`, `zh-TW`).', remarks: 'At least one language should be present; the renderer falls back to the first one.' } })
+		expect(ir.types.ChoiceOption!.shape)
+			.toMatchObject({ kind: 'object', properties: [{ name: 'id', doc: { summary: expect.stringContaining('unique within the question') } }, { name: 'label', doc: { summary: 'The label shown for the option.' } }] })
+		// The resolved config carries its own field docs.
+		expect(survey!.config!.resolvedShape)
+			.toMatchObject({ kind: 'object', properties: [{ name: 'title' }, { name: 'maxQuestions' }, { name: 'submitUrl', doc: { summary: 'Where the answers are sent, or `null` when they are not sent anywhere.' } }] })
+	})
+
+	it('reads a WidgetRef as a string that names plugin types, without JSDoc', () => {
+		const choice = ir.plugins[2]!
+		const raw = choice.config!.rawShape as Extract<Shape, { kind: 'object' }>
+		expect(raw.properties.find(property => property.name === 'followUp'))
+			.toMatchObject({ optional: true, shape: { kind: 'string', widgetRef: ['Rating', 'Choice'] }, doc: { summary: 'A question shown once this one is answered.' } })
+		// The resolved `string | null` is no reference.
+		const resolved = choice.config!.resolvedShape as Extract<Shape, { kind: 'object' }>
+		expect(resolved.properties.find(property => property.name === 'followUp')!.shape)
+			.toEqual({ kind: 'union', members: [{ kind: 'string' }, { kind: 'null' }] })
+		expect(Object.keys(ir.types)).not.toContain('WidgetRef')
 	})
 
 	it('records every name and capability the types and the runtime disagree on', () => {
@@ -180,22 +200,24 @@ describe('emitConfigSchema', () => {
 			})
 		const raw = (schema.$defs as Record<string, JsonSchema>).type_SurveyRawConfig!
 		expect((raw.properties as Record<string, JsonSchema>).maxQuestions)
-			.toEqual({ type: 'number', minimum: 1, maximum: 20, default: 10, description: 'The most questions the survey may hold.' })
+			.toEqual({ type: 'number', description: 'The most questions the survey may hold: from 1 to 20; 10 when left out.' })
 		expect((raw.properties as Record<string, JsonSchema>).submitUrl)
-			.toEqual({ type: 'string', format: 'uri', description: 'Where the answers are sent.' })
+			.toEqual({ type: 'string', description: 'Where the answers are sent: a URI.' })
 		expect(Object.keys(schema.$defs as object))
 			.toEqual(['type_SurveyRawConfig', 'type_I18nText'])
 	})
 
-	it('allows null for an omittable config, writes @widgetRef as prose, and is null without a config', () => {
+	it('allows null for an omittable config, annotates a WidgetRef with its types and the sentence, and is null without a config', () => {
 		expect(emitConfigSchema(ir, ir.plugins[3]!)!.anyOf)
 			.toEqual([expect.objectContaining({ type: 'object' }), { type: 'null' }])
 		const choice = emitConfigSchema(ir, ir.plugins[2]!)!
 		const properties = choice.properties as Record<string, JsonSchema>
 		expect(properties.followUp!.description)
 			.toBe('A question shown once this one is answered. Must be the id of a widget of type Rating | Choice in the same document.')
+		expect(properties.followUp!['x-widgetRef'])
+			.toEqual(['Rating', 'Choice'])
 		expect(properties.options)
-			.toMatchObject({ type: 'array', minItems: 2 })
+			.toEqual({ type: 'array', items: { $ref: '#/$defs/type_ChoiceOption' }, description: 'The options, in the order shown: at least two.' })
 		expect(emitConfigSchema(ir, { ...ir.plugins[3]!, config: null }))
 			.toBeNull()
 	})
@@ -309,52 +331,72 @@ function profileViolations(schema: JsonSchema): string[] {
 	return violations
 }
 
-describe('array and dictionary constraints, named types behind optional properties, unnamed recursion', () => {
-	let constraintsIr: SystemIr
+describe('shapes: named types behind optional properties, recursion, widget references, no constraint keywords', () => {
+	let shapesIr: SystemIr
 	beforeAll(() => {
-		constraintsIr = extractIr({ modulePath: resolve(here, 'fixtures/constraints-system.ts'), exportName: 'constraintsSystem', tsconfigPath, cwd: root })
+		shapesIr = extractIr({
+			modulePath: resolve(here, 'fixtures/shapes-system.ts'),
+			exportName: 'shapesSystem',
+			tsconfigPath,
+			runtime: collectRuntimeFacts(shapesSystem, inspectPlugin as never),
+			cwd: root,
+		})
 	}, 180_000)
 
-	const validForm = { fields: ['a', 'b'], weights: { a: 1 }, retries: null, extraFields: null, hidden: ['h'], step: 1, people: [], limit: null, title: 't' }
+	const validForm = { fields: ['a', 'b'], weights: { a: 1 }, retries: null, extraFields: null, hidden: ['h'], step: 1, people: [], limit: null, title: 't', reviewers: ['other'] }
 
 	const formProperties = (): Record<string, JsonSchema> => {
-		const schema = emitConfigSchema(constraintsIr, constraintsIr.plugins[0]!)!
+		const schema = emitConfigSchema(shapesIr, shapesIr.plugins[0]!)!
 		return ((schema.$defs as Record<string, JsonSchema>).type_FormRawConfig!.properties) as Record<string, JsonSchema>
 	}
 
-	it('writes the new tags as keywords; a string or number tag on an array or a dictionary constrains each item or value', () => {
+	it('states the shape only: a constraint is the prose of the description, never a keyword', () => {
 		const properties = formProperties()
 		expect(properties.fields)
-			.toEqual({ type: 'array', items: { type: 'string', pattern: '^[a-z]+$' }, minItems: 1, uniqueItems: true, description: 'The field names, each once.' })
+			.toEqual({ type: 'array', items: { type: 'string', description: 'A field name.' }, description: 'The field names, each once: at least one, each matching `^[a-z]+$`.' })
 		expect(properties.weights)
-			.toEqual({
-				type: 'object',
-				additionalProperties: { type: 'number', exclusiveMinimum: 0 },
-				minProperties: 1,
-				maxProperties: 8,
-				propertyNames: { pattern: '^[a-z]+$' },
-				description: 'Weight per field name.',
-			})
+			.toEqual({ type: 'object', additionalProperties: { type: 'number' }, description: 'Weight per field name: from 1 to 8 entries, keys matching `^[a-z]+$`, each weight above 0.' })
 		expect(properties.pageSize)
-			.toEqual({ type: 'integer', minimum: 1, description: 'How many fields are shown per page.' })
-	})
-
-	it('validates the new keywords', () => {
-		const schema = emitConfigSchema(constraintsIr, constraintsIr.plugins[0]!)!
-		expect(validateSchema(schema, { ...validForm, pageSize: 2 }))
+			.toEqual({ type: 'number', description: 'How many fields are shown per page: a whole number, at least 1.' })
+		expect(properties.step)
+			.toEqual({ enum: [1, 100, 500], description: 'The step.' })
+		const schema = emitConfigSchema(shapesIr, shapesIr.plugins[0]!)!
+		expect(validateSchema(schema, validForm))
 			.toEqual([])
+		// What the prose rules out is `validate`'s to refuse: the schema accepts it.
 		expect(validateSchema(schema, { ...validForm, fields: ['a', 'a'], weights: {}, pageSize: 1.5 }))
-			.toEqual(['/fields: items are not unique', '/weights: fewer than 1 properties', '/pageSize: expected integer, got number'])
-		expect(validateSchema(schema, { ...validForm, weights: { a: 1, b: 1, c: 1, d: 1, e: 1, f: 1, g: 1, h: 1, Hi: 0 } }))
-			.toEqual(['/weights: more than 8 properties', '/weights/Hi: not above 0'])
+			.toEqual([])
+		const keywords = new Set<string>()
+		const walk = (node: unknown): void => {
+			if (typeof node !== 'object' || node === null)
+				return
+			for (const [key, value] of Object.entries(node)) {
+				keywords.add(key)
+				walk(value)
+			}
+		}
+		walk(emitFullSchema(shapesIr))
+		for (const keyword of ['minimum', 'maximum', 'exclusiveMinimum', 'multipleOf', 'minLength', 'maxLength', 'minItems', 'maxItems', 'uniqueItems', 'minProperties', 'maxProperties', 'propertyNames', 'pattern', 'format', 'default', 'examples']) {
+			expect(keywords.has(keyword), keyword)
+				.toBe(false)
+		}
 	})
 
-	it('keeps the name of a type behind an optional property and inside a written union', () => {
+	it('keeps the name of a type behind an optional property and inside a written union, with its type docs', () => {
 		const properties = formProperties()
 		expect(properties.visibleWhen)
 			.toEqual({ $ref: '#/$defs/type_Rule', description: 'Show the form only while this holds.' })
 		expect(properties.required)
 			.toEqual({ anyOf: [{ type: 'boolean' }, { $ref: '#/$defs/type_Rule' }], description: 'Whether the form must be filled in: always, never, or while a rule holds.' })
+		const rule = (emitConfigSchema(shapesIr, shapesIr.plugins[0]!)!.$defs as Record<string, JsonSchema>).type_Rule!
+		expect(rule.description)
+			.toBe('A condition on another field, or a combination of conditions.')
+		// The recursive type docs (a `ref` thunk) document the inner Rule too.
+		expect(rule.anyOf)
+			.toEqual([
+				{ type: 'object', properties: { field: { type: 'string', description: 'The field that must be filled in.' } }, required: ['field'], additionalProperties: false },
+				{ type: 'object', properties: { all: { type: 'array', items: { $ref: '#/$defs/type_Rule' }, description: 'Conditions that must all hold.' } }, required: ['all'], additionalProperties: false },
+			])
 	})
 
 	it('leaves an unnamed recursive type untyped instead of expanding it', () => {
@@ -362,57 +404,33 @@ describe('array and dictionary constraints, named types behind optional properti
 			.toEqual({ description: 'Anything the host stores with the form.' })
 	})
 
-	it('places a tag through a union with null: beside the anyOf, or in its number branch for @integer', () => {
+	it('reads a union with null and the aliases of an array and of a nullable number', () => {
 		const properties = formProperties()
 		expect(properties.retries)
-			.toEqual({ anyOf: [{ type: 'integer' }, { type: 'null' }], minimum: 0, description: 'Retries, or `null` for the default.' })
-		expect(properties.extraFields)
-			.toEqual({ anyOf: [{ type: 'array', items: { type: 'string' } }, { type: 'null' }], uniqueItems: true, items: { pattern: '^[a-z]+$' }, description: 'Extra field names, or `null` for none.' })
-	})
-
-	it('places a tag through a named type beside the $ref, items included, and @integer on a literal enum', () => {
-		const properties = formProperties()
+			.toEqual({ anyOf: [{ type: 'number' }, { type: 'null' }], description: 'Retries, a whole number of at least 0, or `null` for the default.' })
 		expect(properties.hidden)
-			.toEqual({ $ref: '#/$defs/type_Names', minItems: 1, items: { pattern: '^[a-z]+$' }, description: 'Hidden field names.' })
-		expect(properties.step)
-			.toEqual({ enum: [1, 100, 500], type: 'integer', description: 'The step.' })
-		const schema = emitConfigSchema(constraintsIr, constraintsIr.plugins[0]!)!
-		expect(validateSchema(schema, { ...validForm, retries: 1.5, extraFields: ['a', 'a'], hidden: [] }))
-			.toEqual(['/retries: matches no anyOf branch (/retries: expected integer, got number | /retries: expected null, got number)', '/extraFields: items are not unique', '/hidden: fewer than 1 items'])
-	})
-
-	it('emits nothing for a tag that lands nowhere, and --check reports it', () => {
-		const properties = formProperties()
-		expect(properties.people)
-			.toEqual({ type: 'array', items: { $ref: '#/$defs/type_Person' }, description: 'The people (a pattern on a list of objects lands nowhere).' })
+			.toEqual({ $ref: '#/$defs/type_Names', description: 'Hidden field names: at least one, each matching `^[a-z]+$`.' })
 		expect(properties.limit)
-			.toEqual({ $ref: '#/$defs/type_MaybeCount', description: 'The limit (`@integer` beside a reference to a type with `null` lands nowhere).' })
-		expect(properties.title)
-			.toEqual({ type: 'string', description: 'The title (`@uniqueItems` on a string lands nowhere).' })
-		expect(checkIr(constraintsIr).problems.filter(problem => problem.kind === 'misplaced-tag')
-			.map(problem => problem.message))
-			.toEqual([
-				'type FormRawConfig.people: @pattern constrains nothing on this value, so no schema states it.',
-				'type FormRawConfig.limit: @integer constrains nothing on this value, so no schema states it.',
-				'type FormRawConfig.title: @uniqueItems constrains nothing on this value, so no schema states it.',
-			])
+			.toEqual({ $ref: '#/$defs/type_MaybeCount', description: 'The limit, or `null` for none.' })
+		expect(properties.people)
+			.toEqual({ type: 'array', items: { $ref: '#/$defs/type_Person' }, description: 'The people.' })
+		expect((emitConfigSchema(shapesIr, shapesIr.plugins[0]!)!.$defs as Record<string, JsonSchema>).type_Person)
+			.toEqual({ type: 'object', properties: { name: { type: 'string', description: 'The name.' } }, required: ['name'], additionalProperties: false })
 	})
 
-	it('states the tags as prose in the LLM profile, saying where each one lands', () => {
-		const schema = emitLlmSchema(constraintsIr)
-		expect(profileViolations(schema))
+	it('reads WidgetRef inside a list: the items are annotated widget references', () => {
+		expect(formProperties().reviewers)
+			.toEqual({ type: 'array', items: { 'type': 'string', 'x-widgetRef': ['Form'], 'description': 'Must be the id of a widget of type Form in the same document.' }, description: 'The Forms that review this one.' })
+		expect(profileViolations(emitLlmSchema(shapesIr)))
 			.toEqual([])
-		const properties = ((schema.$defs as Record<string, JsonSchema>).type_FormRawConfig!.properties) as Record<string, JsonSchema>
-		expect(properties.fields!.description)
-			.toBe('The field names, each once. Constraints: minItems: 1. no two items are equal. each item: pattern: ^[a-z]+$.')
-		expect(properties.pageSize)
-			.toEqual({ type: 'number', description: 'How many fields are shown per page. Constraints: integer. minimum: 1. Optional: leave the key out when unused.' })
-		expect(properties.weights!.description)
-			.toContain('Constraints: every key matches ^[a-z]+$. at least 1 entries. at most 8 entries. each value: exclusiveMinimum: 0.')
-		expect(properties.hidden!.description)
-			.toBe('Hidden field names. Constraints: minItems: 1. each item: pattern: ^[a-z]+$.')
-		expect(properties.people!.description)
-			.toBe('The people (a pattern on a list of objects lands nowhere).')
+	})
+
+	it('shares the entry of a type documented the same way in two places: the check passes', () => {
+		// FormRawConfig is the raw and the resolved config, with the same docs.
+		expect(checkIr(shapesIr))
+			.toMatchObject({ ok: true, problems: [] })
+		expect(shapesIr.types.FormRawConfig!.doc.summary)
+			.toBe('The raw config of a Form.')
 	})
 })
 
@@ -507,11 +525,11 @@ describe('emitLlmSchema', () => {
 			.toBe('A survey: a header, the questions in order, and a footer note. The root of a survey document. It counts the answered questions through the `questions` contract. Slots: header (any widget): Anything shown above the questions.; questions (Rating, Choice): The questions, in order.; footer (Note): Closing notes shown under the questions.')
 	})
 
-	it('puts constraints and the config JSDoc into descriptions, not keywords', () => {
+	it('puts the descriptions, constraints included, into prose, not keywords', () => {
 		const defs = emitLlmSchema(ir).$defs as Record<string, JsonSchema>
 		const maxQuestions = (defs.type_SurveyRawConfig!.properties as Record<string, JsonSchema>).maxQuestions!
 		expect(maxQuestions)
-			.toEqual({ type: 'number', description: 'The most questions the survey may hold. Constraints: minimum: 1. maximum: 20. default: 10. Optional: leave the key out when unused.' })
+			.toEqual({ type: 'number', description: 'The most questions the survey may hold: from 1 to 20; 10 when left out. Optional: leave the key out when unused.' })
 		expect(((defs.node_Survey!.properties as Record<string, JsonSchema>).config!).description)
 			.toBe('How the survey is titled and where it is sent.')
 		expect(defs.node_Survey!.required)
@@ -590,42 +608,113 @@ describe('flat and tree converters', () => {
 })
 
 describe('--check', () => {
-	it('passes on the fully documented fixture System', () => {
+	/** The --check problems of the fixture System after `edit` changed its `plugin.docs` as the runtime reports them. */
+	const problemsWith = (edit: (facts: RuntimeFacts) => void) => {
+		const facts = collectRuntimeFacts(surveySystem, inspectPlugin as never)
+		edit(facts)
+		const copy = structuredClone(ir)
+		copy.mismatches = []
+		applyRuntimeFacts(copy, facts)
+		return checkIr(copy).problems
+	}
+	type Node = NonNullable<NonNullable<RuntimeFacts['plugins'][number]['docs']>['types'][string]>
+	const fieldsOf = (node: Node | null | undefined): Record<string, Node | null> => node!.fields!
+
+	it('passes on the fully documented fixture System, counting every description once', () => {
 		const result = checkIr(ir)
 		expect(result)
 			.toMatchObject({ ok: true, problems: [] })
 		expect(result.documented)
 			.toBe(result.members)
+		expect(result.members)
+			.toBe(69)
 	})
 
-	it('fails on the undocumented fixture plugin, naming the member, the config, the slot, the reason and the unknown tag', () => {
+	it('reports each undocumented marker with its plugin and docs path', () => {
 		const result = checkIr(fixtureIr)
 		expect(result.ok)
 			.toBe(false)
 		expect(result.problems)
 			.toEqual([
-				{ kind: 'missing-doc', severity: 'error', where: 'Counter.config', message: 'Counter.config has no JSDoc.' },
-				{ kind: 'missing-doc', severity: 'error', where: 'Counter.slots.items', message: 'Counter.slots.items has no JSDoc.' },
-				{ kind: 'missing-doc', severity: 'error', where: 'Counter.state.step', message: 'Counter.state.step has no JSDoc.' },
-				{ kind: 'unknown-tag', severity: 'error', where: 'Counter.state.limit', message: 'Counter.state.limit uses the unknown tag @madeUpTag.' },
-				{ kind: 'missing-doc', severity: 'error', where: 'Counter.methods.add(by)', message: 'Counter.methods.add has no @param for "by".' },
-				{ kind: 'missing-doc', severity: 'error', where: 'Counter.methods.add(options).silent', message: 'Counter.methods.add(options).silent has no JSDoc.' },
-				{ kind: 'missing-doc', severity: 'error', where: 'Counter.reasons.too-large', message: 'Counter.reasons.too-large has no JSDoc.' },
-				{ kind: 'missing-doc', severity: 'error', where: 'Counter.reasons.too-large.limit', message: 'Counter.reasons.too-large.limit has no JSDoc.' },
+				{ kind: 'undocumented', severity: 'error', where: 'Counter: config', message: 'Counter: config is undocumented.' },
+				{ kind: 'undocumented', severity: 'error', where: 'Counter: slots.items', message: 'Counter: slots.items is undocumented.' },
+				{ kind: 'undocumented', severity: 'error', where: 'Counter: state.step', message: 'Counter: state.step is undocumented.' },
+				{ kind: 'undocumented', severity: 'error', where: 'Counter: methods.add.params.0', message: 'Counter: methods.add.params.0 is undocumented.' },
+				{ kind: 'undocumented', severity: 'error', where: 'Counter: methods.add.params.1.fields.silent', message: 'Counter: methods.add.params.1.fields.silent is undocumented.' },
+				{ kind: 'undocumented', severity: 'error', where: 'Counter: reasons.too-large.details.fields.limit', message: 'Counter: reasons.too-large.details.fields.limit is undocumented.' },
 			])
-		expect(fixtureIr.plugins[0]!.state[0]!.doc)
-			.toEqual({ summary: 'The current count.', remarks: '', tags: { minimum: '0' }, unknownTags: [] })
+		expect(result)
+			.toMatchObject({ members: 14, documented: 8 })
+		// `undocumented` on the config waives the docs of `raw` and `resolved`: nothing is reported missing below it.
+		expect(fixtureIr.plugins[0]!.state.map(member => member.doc.summary))
+			.toEqual(['The current count, at least 0.', '', 'The largest count.'])
 	})
 
-	it('treats a named type a reason payload uses like one config.raw uses', () => {
-		const copy = structuredClone(ir)
-		copy.types.SubmitSummary!.doc.summary = ''
-		// Only an Event payload uses SubmitSummary: a warning.
-		expect(checkIr(copy).problems)
-			.toEqual([{ kind: 'missing-doc', severity: 'warning', where: 'type SubmitSummary', message: 'type SubmitSummary has no JSDoc.' }])
-		copy.plugins[1]!.reasons![0]!.payload = { typeText: 'SubmitSummary', shape: { kind: 'ref', name: 'SubmitSummary' } }
-		expect(checkIr(copy).problems.map(problem => problem.severity))
-			.toEqual(['error'])
+	it('cross-checks the names of plugin.docs against the types: members, fields and positions', () => {
+		const problems = problemsWith((facts) => {
+			const survey = facts.plugins[0]!.docs!
+			const rating = facts.plugins[1]!.docs!
+			delete (survey.state as Record<string, unknown>).submitted
+			;(survey.methods as Record<string, unknown>).extra = { description: 'Not a Method of the types.' }
+			fieldsOf(rating.config!.raw).colour = { description: 'Not a field of the types.' }
+			delete fieldsOf(rating.config!.raw).scale
+			rating.methods!.rate!.params = [{ description: 'The value.' }, { description: 'One too many.' }]
+		})
+		expect(problems.map(problem => [problem.kind, problem.where]))
+			.toEqual([
+				['name-mismatch', 'Survey: state'],
+				['name-mismatch', 'Survey: methods'],
+				['name-mismatch', 'Rating: config.raw.fields.colour'],
+				['missing-doc', 'Rating: config.raw.fields.scale'],
+				['name-mismatch', 'Rating: methods.rate.params'],
+			])
+		expect(problems.map(problem => problem.message))
+			.toEqual([
+				'Survey: state: declared in the types but not in plugin.docs: submitted.',
+				'Survey: methods: in plugin.docs but not declared in the types: extra.',
+				'Rating: config.raw.fields.colour documents a field the type does not have.',
+				'Rating: config.raw.fields.scale is missing: the type declares the field "scale".',
+				'Rating: methods.rate.params has 2 entries, but the types declare 1 position(s).',
+			])
+	})
+
+	it('reports a ref whose type docs name is not the name of the type there', () => {
+		const problems = problemsWith((facts) => {
+			fieldsOf(facts.plugins[0]!.docs!.config!.raw).title!.ref = 'SubmitSummary'
+		})
+		expect(problems)
+			.toContainEqual({
+				kind: 'name-mismatch',
+				severity: 'error',
+				where: 'Survey: config.raw.fields.title.ref',
+				message: 'Survey: config.raw.fields.title refers to the type docs "SubmitSummary", but the type there is I18nText: the type docs name is the type\'s $defs entry, so it must be the type\'s name.',
+			})
+	})
+
+	it('reports a named type documented two ways: two type docs with one name, or inline docs that differ', () => {
+		const typeDocs = problemsWith((facts) => {
+			facts.plugins[1]!.docs!.types.I18nText = { description: 'Another text per language.' }
+		})
+		expect(typeDocs.map(problem => [problem.kind, problem.where]))
+			.toEqual([['docs-conflict', 'Rating: types.I18nText']])
+		const inline = problemsWith((facts) => {
+			fieldsOf(facts.plugins[2]!.docs!.config!.raw).options!.items = { fields: { id: { description: 'An id.' }, label: { description: 'A label.', ref: 'I18nText' } } }
+		})
+		expect(inline)
+			.toEqual([{
+				kind: 'docs-conflict',
+				severity: 'error',
+				where: 'Choice: config.raw.fields.options.items',
+				message: 'Choice: config.raw.fields.options.items documents ChoiceOption differently from Choice: types.ChoiceOption, and ChoiceOption has one $defs entry: document it once with defineTypeDocs and refer to it with ref.',
+			}])
+	})
+
+	it('cannot check without the runtime: no plugin.docs was read', () => {
+		const typesOnly = structuredClone(ir)
+		typesOnly.prose = false
+		typesOnly.docsIssues = []
+		expect(checkIr(typesOnly).problems.map(problem => problem.kind))
+			.toEqual(['no-docs'])
 	})
 })
 
@@ -648,13 +737,23 @@ describe('emitDocs', () => {
 					footer: { summary: 'Closing notes shown under the questions.', expectedTypes: ['Note'] },
 				},
 				state: { submitted: { summary: 'Whether the survey was sent.', type: 'boolean', authorWritable: false } },
-				properties: { progress: { type: 'number', tags: { minimum: '0', maximum: '1' } } },
+				properties: { progress: { type: 'number', summary: 'The share of answered questions, from 0 to 1.', tags: {} } },
 				methods: { submit: { signature: 'submit(): boolean', params: [], returns: { type: 'boolean', summary: 'Whether the survey was sent by this call.' } } },
-				events: { submitted: { summary: 'The survey was sent.', payload: [{ label: 'summary', type: 'SubmitSummary' }] } },
+				events: { submitted: { summary: 'The survey was sent.', payload: [{ label: 'summary', type: 'SubmitSummary', summary: 'How many questions were answered, of how many.' }] } },
 				reasons: { 'empty-title': { details: null }, 'too-many-questions': { details: '{ max: number; count: number; }' } },
 			})
 		expect(docs.plugins.Rating!.methods!.rate!.params)
 			.toEqual([{ name: 'value', type: 'number', optional: false, summary: 'The value, from 1 to the scale.' }])
+		// A widget reference is named where @widgetRef was: the field's tags.
+		expect(docs.types.ChoiceOption!.fields!.label)
+			.toMatchObject({ summary: 'The label shown for the option.', tags: {}, optional: false })
+	})
+
+	it('names the types of a widget reference in the tags of the member that holds it', () => {
+		const copy = structuredClone(ir)
+		copy.plugins[1]!.state[0]!.shape = { kind: 'union', members: [{ kind: 'string', widgetRef: ['Rating', 'Choice'] }, { kind: 'null' }] }
+		expect(emitDocs(copy).plugins.Rating!.state!.value!.tags)
+			.toEqual({ widgetRef: 'Rating | Choice' })
 	})
 
 	it('writes null for an undeclared capability', () => {
@@ -695,7 +794,7 @@ describe('the committed example output', () => {
 			.toContain(JSON.stringify(example, null, 2))
 	})
 
-	it('does not send readers to the private package, and describes the 0.3 API only', () => {
+	it('does not send readers to the private package, and describes the 0.4 builder: descriptions beside each definition, no JSDoc and no constraint tags', () => {
 		const files = generateFiles(ir)
 		const authoring = files['skills/survey-system-source-json-authoring/SKILL.md']!
 		expect(authoring).not.toContain('@deviltea/widget-skills')
@@ -707,12 +806,23 @@ describe('the committed example output', () => {
 			.toContain('returns the Method\'s value on success and `null` on failure')
 		expect(renderer).not.toContain('packages/vue/src')
 		const plugin = files['skills/widget-plugin-authoring/SKILL.md']!
-		expect(plugin).not.toContain('.description(')
+		expect(plugin)
+			.toContain('.description(')
+		for (const term of ['.events({', '.reasons({', 'WidgetRef<', 'defineTypeDocs', 'undocumented']) {
+			expect(`${plugin}\n${files['skills/widget-plugin-authoring/references/plugin-docs.md']!}`, term)
+				.toContain(term)
+		}
 		expect(plugin).not.toContain('Upcoming')
 		expect(plugin)
-			.toContain('`interfaces → config? → slots? → structure? → state? → properties? → methods? → events? → done`')
-		for (const content of Object.values(files))
+			.toContain('`description → interfaces → config? → slots? → structure? → state? → properties? → methods? → events? → reasons? → done`')
+		for (const [path, content] of Object.entries(files)) {
 			expect(content).not.toContain('writes nothing and emits nothing')
+			if (!path.endsWith('.json')) {
+				expect(content, path).not.toContain('JSDoc')
+				for (const tag of ['@minimum', '@pattern', '@widgetRef', '@remarks', '@param', '@returns', '@default'])
+					expect(content, `${path} ${tag}`).not.toContain(tag)
+			}
+		}
 	})
 
 	it('documents the reasons and their details for repair and for renderers', () => {

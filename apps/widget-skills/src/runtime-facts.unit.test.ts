@@ -21,17 +21,16 @@ afterAll(() => rmSync(scratch, { recursive: true, force: true }))
 /** A Badge plugin with the given State members, each a number. */
 function systemSource(members: readonly string[]): string {
 	return [
-		'import { createWidgetPlugin, createWidgetSystem, undocumented } from \'@deviltea/widget-core\'',
-		'/** A badge. */',
+		'import { createWidgetPlugin, createWidgetSystem } from \'@deviltea/widget-core\'',
 		'interface BadgeInterfaces {',
 		'\tstate: {',
-		...members.map(member => `\t\t/** ${member}. */\n\t\t${member}: number`),
+		...members.map(member => `\t\t${member}: number`),
 		'\t}',
 		'}',
 		'const Badge = createWidgetPlugin(\'Badge\')',
-		'\t.description(undocumented)',
+		'\t.description(\'A badge.\')',
 		'\t.interfaces<BadgeInterfaces>()',
-		`\t.state(state => state${members.map(member => `.${member}({ description: undocumented, validate: (input): input is number => typeof input === 'number', default: () => 0${member === 'count' ? ', authorWritable: true' : ''} })`)
+		`\t.state(state => state${members.map(member => `.${member}({ description: '${member}.', validate: (input): input is number => typeof input === 'number', default: () => 0${member === 'count' ? ', authorWritable: true' : ''} })`)
 			.join('')})`,
 		'\t.done()',
 		'export const system = createWidgetSystem({ plugins: [Badge] as const })',
@@ -65,7 +64,7 @@ describe('importRuntimeFacts', () => {
 		const system = isolatedSystem()
 		const result = await createDocsCache({ cacheDir: null, root: system.directory })
 			.load('badge', { module: system.module, export: 'system', tsconfig: system.tsconfig, sourceTsconfig: system.sourceTsconfig })
-		// `authorWritable` comes from inspectPlugin: the worker imported the System and Core's inspection entry.
+		// `authorWritable` comes from inspectPlugin and the summary from plugin.docs: the worker imported the System and Core's inspection entry.
 		expect(result.docs.plugins.Badge!.state)
 			.toMatchObject({ count: { summary: 'count.', authorWritable: true } })
 

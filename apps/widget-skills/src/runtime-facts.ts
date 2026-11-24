@@ -1,12 +1,12 @@
 /**
- * Reads the runtime side of a System (`system.catalog` and `inspectPlugin`) into plain data, so the extractor
- * can cross-check the names it read from the types.
+ * Reads the runtime side of a System (`system.catalog`, `inspectPlugin` and each `plugin.docs`) into plain data: the
+ * extractor cross-checks the names it read from the types, and takes every description from `plugin.docs`.
  *
  * `loadRuntimeFacts` imports the System's module and Core's inspection entry from the same module graph: Core
  * identifies its plugins by module-private brands, so both must come from one Core instance.
  */
 
-import type { Capability, RuntimeFacts } from './ir'
+import type { Capability, PluginDocsData, RuntimeFacts } from './ir'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -20,11 +20,11 @@ interface InspectionLike {
 }
 
 interface SystemLike {
-	readonly plugins: readonly { readonly type: string }[]
+	readonly plugins: readonly { readonly type: string, readonly docs?: unknown }[]
 	readonly catalog: { readonly widgets: readonly { readonly type: string, readonly capabilities: Readonly<Record<Capability, boolean>>, readonly slots: readonly PropertyKey[] | null }[] }
 }
 
-/** The semantic facts Core 0.3 still carries: the catalog (type, capabilities, slot names) and `inspectPlugin` (members). */
+/** The runtime facts: the catalog (type, capabilities, slot names), `inspectPlugin` (members) and `plugin.docs` (the prose). */
 export function collectRuntimeFacts(system: unknown, inspectPlugin: (plugin: never) => unknown): RuntimeFacts {
 	const { plugins, catalog } = system as SystemLike
 	const catalogTypes = catalog.widgets.map(widget => widget.type)
@@ -41,6 +41,8 @@ export function collectRuntimeFacts(system: unknown, inspectPlugin: (plugin: nev
 				state: inspection.state === null ? null : [...inspection.state].map(([name, member]) => ({ name: String(name), authorWritable: member.authorWritable })),
 				properties: inspection.properties === null ? null : [...inspection.properties.keys()].map(String),
 				events: inspection.events === null ? null : [...inspection.events.keys()].map(String),
+				// Plain data (Core 0.4): copied through JSON, so the facts hold no frozen or null-prototype objects.
+				docs: plugins[index]!.docs === undefined ? null : JSON.parse(JSON.stringify(plugins[index]!.docs)) as PluginDocsData,
 			}
 		}),
 	}

@@ -71,7 +71,7 @@ export interface DocsCacheOptions {
 	root: string
 	/**
 	 * Import the System's module (which runs its top-level code) to cross-check the types against `system.catalog`
-	 * and `inspectPlugin`, and to read `authorWritable`. Default `true`.
+	 * and `inspectPlugin`, to read `authorWritable`, and to read each plugin's `plugin.docs` (all the prose). Default `true`.
 	 */
 	runtime?: boolean
 	/** Seam: creates the TypeScript program. Defaults to `ts.createProgram`. */

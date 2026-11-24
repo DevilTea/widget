@@ -2,11 +2,12 @@
  * The documentation object `virtual:widget-docs/<name>` exports (see `vite.ts`). Plain JSON: no functions, no
  * `undefined`. This module has no imports, so a consumer can type the virtual module without loading the generator.
  *
- * Every text comes from the JSDoc of the plugin's `Interfaces` type; Core 0.3 carries no prose at run time.
- * A capability section is `null` when the plugin does not declare the capability and `{}` when it declares it empty.
+ * Every text comes from `plugin.docs`, the descriptions written in the plugin builder (Core 0.4); the shapes and the
+ * printed types come from the TypeScript types. A capability section is `null` when the plugin does not declare the
+ * capability and `{}` when it declares it empty.
  */
 
-/** Bumped when the shape of `WidgetDocs` changes. */
+/** Bumped when the shape of `WidgetDocs` changes incompatibly; an added key does not bump it. */
 export const WIDGET_DOCS_VERSION = 2
 
 /** Any JSON value. */
@@ -16,19 +17,22 @@ export type WidgetDocsJson = null | boolean | number | string | WidgetDocsJson[]
 export interface WidgetDocsJsonSchema { [key: string]: WidgetDocsJson }
 
 export interface WidgetDocsText {
-	/** The first paragraph of the JSDoc; empty when the member has none. */
+	/** The first paragraph of the description; empty when the member has none (or is `undocumented`). */
 	summary: string
-	/** The `@remarks` block; empty when absent. */
+	/** The rest of the description, after its first blank line; empty when there is none. */
 	remarks: string
-	/** The constraint tags (`minimum`, `format`, `widgetRef`, ...) by name without `@`, with their raw text. */
+	/**
+	 * `widgetRef`, the plugin types a `WidgetRef<Types>` value names (`A | B`), when the member's value is a widget
+	 * reference; otherwise empty. (The 0.3 JSDoc constraint tags that also lived here are retired: constraints are prose.)
+	 */
 	tags: Record<string, string>
-	/** The `@example` blocks, in order (their raw text, code fences included). */
+	/** Always empty: the `@example` tag is retired. */
 	example: string[]
-	/** The `@deprecated` text (empty when the tag has none); `null` when not deprecated. */
+	/** Always `null`: the `@deprecated` tag is retired. */
 	deprecated: string | null
-	/** The `@see` references, in order. */
+	/** Always empty: the `@see` tag is retired. */
 	see: string[]
-	/** The `@defaultValue` text; `null` when absent. When it is valid JSON it is also the schema's `default`. */
+	/** Always `null`: the `@defaultValue` tag is retired. */
 	defaultValue: string | null
 }
 
@@ -70,7 +74,8 @@ export interface WidgetDocsMethod extends WidgetDocsText {
 }
 
 export interface WidgetDocsEvent extends WidgetDocsText {
-	payload: { label: string | null, type: string }[]
+	/** One entry per payload position: its tuple label, its printed type and its description. */
+	payload: { label: string | null, type: string, summary: string }[]
 }
 
 export interface WidgetDocsReason extends WidgetDocsText {
@@ -101,17 +106,17 @@ export interface WidgetDocsField extends WidgetDocsText {
 
 /** A named type (interface or type alias) a plugin's members mention. */
 export interface WidgetDocsNamedType extends WidgetDocsText {
-	/** The declaration as written, with its leading JSDoc. */
+	/** The declaration as written, with its leading doc comment, if any. */
 	declaration: string
 	/** The fields of an object type, by name; `null` for any other type. */
 	fields: Record<string, WidgetDocsField> | null
 }
 
-/** The prose of one member in the slim docs: the summary and `@remarks` only. */
+/** The prose of one member in the slim docs: the summary and the remarks only. */
 export interface WidgetDocsSlimText {
-	/** The first paragraph of the JSDoc; empty when the member has none. */
+	/** The first paragraph of the description; empty when the member has none. */
 	summary: string
-	/** The `@remarks` block; empty when absent. */
+	/** The rest of the description; empty when there is none. */
 	remarks: string
 }
 
@@ -128,7 +133,7 @@ export interface WidgetPluginDocsSlim extends WidgetDocsSlimText {
 }
 
 /**
- * The slim docs object (`widgetDocs({ slim: true })`): per plugin the summary and `@remarks` of the plugin, its config,
+ * The slim docs object (`widgetDocs({ slim: true })`): per plugin the summary and remarks of the plugin, its config,
  * its slots and its Events, and the config schema. No `types` section, no printed types, no tags, State, Properties,
  * Methods or reasons.
  */

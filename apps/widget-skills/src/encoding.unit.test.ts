@@ -2,7 +2,7 @@ import type { Doc, JsonSchema, PluginIr, Shape, SystemIr } from './index'
 import { describe, expect, it } from 'vitest'
 import { createFlatConverter, createValueEncoding, emitFullSchema, emitLlmSchema, FlatConversionError, validateSchema } from './index'
 
-const doc = (summary = '', tags: Doc['tags'] = {}): Doc => ({ summary, remarks: '', tags, unknownTags: [] })
+const doc = (summary = ''): Doc => ({ summary, remarks: '' })
 const property = (name: string, shape: Shape, optional = false, documentation = doc()) => ({ name, optional, shape, doc: documentation })
 const text: Shape = { kind: 'string' }
 const dictionary: Shape = { kind: 'record', value: text }
@@ -13,7 +13,7 @@ function plugin(type: string, rawShape: Shape | null, slots: string[] = []): Plu
 		interfacesName: null,
 		doc: doc(`The ${type} widget.`),
 		capabilities: { config: rawShape !== null, slots: slots.length > 0, state: false, properties: false, methods: false, events: false },
-		config: rawShape === null ? null : { doc: doc('The config.'), rawText: 'Config', resolvedText: 'Config', rawShape, omittable: false },
+		config: rawShape === null ? null : { doc: doc('The config.'), rawText: 'Config', resolvedText: 'Config', rawShape, resolvedShape: rawShape, omittable: false },
 		slots: slots.map(name => ({ name, doc: doc(), expected: null, contract: null, expectationText: 'WidgetChild' })),
 		state: [],
 		properties: [],
@@ -25,7 +25,7 @@ function plugin(type: string, rawShape: Shape | null, slots: string[] = []): Plu
 }
 
 function system(plugins: PluginIr[], types: SystemIr['types'] = {}): SystemIr {
-	return { irVersion: 2, system: 'testSystem', module: 'test.ts', plugins, types, mismatches: [] }
+	return { irVersion: 3, system: 'testSystem', module: 'test.ts', plugins, types, mismatches: [], prose: true, docsIssues: [], docsCount: { descriptions: 0, documented: 0 } }
 }
 
 /** `{ kind: 'text', labels: Record } | { kind: 'image', labels: string[], alt?: Record }`: both members are objects. */
@@ -136,35 +136,36 @@ describe('$defs keys', () => {
 	})
 })
 
-describe('tags in the two schemas', () => {
-	const tagged = system([plugin('Tagged', {
+describe('widget references in the two schemas', () => {
+	const referring = system([plugin('Referring', {
 		kind: 'object',
 		properties: [
-			property('labels', dictionary, true, doc('The labels.', { default: '{"en":"Hi"}', examples: '[{"en":"A"},{"en":"B"}]' })),
-			property('count', { kind: 'number' }, true, doc('How many.', { minimum: '1', multipleOf: '0.5' })),
+			property('target', { kind: 'string', widgetRef: ['A', 'B'] }, true, doc('The widget to follow.')),
+			property('others', { kind: 'array', items: { kind: 'string', widgetRef: ['A'] } }, false, doc('More widgets.')),
+			property('count', { kind: 'number' }, true, doc('How many: at least 1.')),
 		],
 	})])
+	const configOf = (schema: JsonSchema, node: string): Record<string, JsonSchema> =>
+		((schema.$defs as Record<string, JsonSchema>)[node]!.properties as Record<string, JsonSchema>).config!.properties as Record<string, JsonSchema>
 
-	it('are keywords in the full schema', () => {
-		const properties = (emitFullSchema(tagged).$defs as Record<string, JsonSchema>).widget_Tagged!.properties as Record<string, JsonSchema>
-		expect((properties.config!.properties as Record<string, JsonSchema>).count)
-			.toMatchObject({ type: 'number', minimum: 1, multipleOf: 0.5 })
-		expect((properties.config!.properties as Record<string, JsonSchema>).labels)
-			.toMatchObject({ default: { en: 'Hi' }, examples: [{ en: 'A' }, { en: 'B' }] })
+	it('are annotated strings in the full schema, with the sentence the Lab reads; a constraint stays prose', () => {
+		const config = configOf(emitFullSchema(referring), 'widget_Referring')
+		expect(config.target)
+			.toEqual({ 'type': 'string', 'x-widgetRef': ['A', 'B'], 'description': 'The widget to follow. Must be the id of a widget of type A | B in the same document.' })
+		expect(config.others)
+			.toEqual({ type: 'array', items: { 'type': 'string', 'x-widgetRef': ['A'], 'description': 'Must be the id of a widget of type A in the same document.' }, description: 'More widgets.' })
+		expect(config.count)
+			.toEqual({ type: 'number', description: 'How many: at least 1.' })
+		expect(validateSchema(emitFullSchema(referring), { id: 'r', type: 'Referring', config: { target: 'a', others: [] } }))
+			.toEqual([])
 	})
 
-	it('are prose in the LLM schema, with defaults and examples in the entry-list form', () => {
-		const node = (emitLlmSchema(tagged).$defs as Record<string, JsonSchema>).node_Tagged!
-		const config = (node.properties as Record<string, JsonSchema>).config!.properties as Record<string, JsonSchema>
-		expect(config.count)
-			.toEqual({ type: 'number', description: 'How many. Constraints: minimum: 1. multipleOf: 0.5. Optional: leave the key out when unused.' })
-		expect(config.labels!.description)
-			.toContain('default: [{"key":"en","value":"Hi"}].')
-		expect(config.labels!.description)
-			.toContain('examples: [[{"key":"en","value":"A"}],[{"key":"en","value":"B"}]].')
-		expect(config.labels!.description).not.toContain('{"en":')
-		expect(config.labels!.description)
-			.toContain('written as a list of { "key", "value" } entries')
+	it('are prose in the LLM schema, the sentence before the optional note', () => {
+		const config = configOf(emitLlmSchema(referring), 'node_Referring')
+		expect(config.target)
+			.toEqual({ type: 'string', description: 'The widget to follow. Must be the id of a widget of type A | B in the same document. Optional: leave the key out when unused.' })
+		expect(config.others)
+			.toEqual({ type: 'array', items: { type: 'string', description: 'Must be the id of a widget of type A in the same document.' }, description: 'More widgets.' })
 	})
 })
 

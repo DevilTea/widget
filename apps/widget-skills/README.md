@@ -1,7 +1,7 @@
 # @deviltea/widget-skills
 
-Private prototype. It reads a Widget System's TypeScript types and JSDoc (Core 0.3: the JSDoc on a plugin's
-`Interfaces` is its only documentation) and produces:
+Private prototype. It reads a Widget System's TypeScript types (the shape) and each plugin's `plugin.docs` (Core 0.4: the
+descriptions written in the builder; JSDoc is not read) and produces:
 
 - a docs object per System, served by a Vite plugin as `virtual:widget-docs/<name>`;
 - `ir.json`: every plugin's config, slots, State, Properties, Methods, Events and reasons with their documentation;
@@ -32,12 +32,12 @@ which cannot load the plugin's TypeScript sources (`ERR_MODULE_NOT_FOUND ... src
 
 For the module's type, add `@deviltea/widget-skills/virtual-widget-docs` to `compilerOptions.types`.
 
-`widgetDocs({ slim: true, ... })` serves `WidgetDocsSlim` instead: the summary and `@remarks` of each plugin, its config, slots
+`widgetDocs({ slim: true, ... })` serves `WidgetDocsSlim` instead: the summary and remarks of each plugin, its config, slots
 and Events, and the config schema, without the `types` section, printed types or tags (for an app that bundles the docs).
 Its module type is `@deviltea/widget-skills/virtual-widget-docs-slim`.
 
-Generating **imports the System's module and runs its top-level code** to cross-check the types against
-`system.catalog` and `inspectPlugin` (`runtime: false` turns that off). The result is cached in
+Generating **imports the System's module and runs its top-level code** to read each `plugin.docs` and to cross-check the types against
+`system.catalog` and `inspectPlugin` (`runtime: false` turns that off, and the docs then carry no prose). The result is cached in
 `node_modules/.cache/widget-docs/`; a hit builds no TypeScript program. The key covers every source file the
 program read outside `node_modules` (with the JavaScript next to declaration files and the nearest `package.json`), the
 tsconfig files, the lockfile, the installed state of `node_modules` and the generator itself; a program with an
@@ -61,9 +61,9 @@ tsx src/cli.ts --check --module <path/to/system.ts> --export <name> --tsconfig <
 As a library:
 
 ```text
-import { createFlatConverter, emitLlmSchema, extractIr } from '@deviltea/widget-skills'
+import { createFlatConverter, emitLlmSchema, extractIr, loadRuntimeFacts } from '@deviltea/widget-skills'
 
-const ir = extractIr({ modulePath, exportName: 'mySystem' })
+const ir = extractIr({ modulePath, exportName: 'mySystem', runtime: await loadRuntimeFacts(modulePath, 'mySystem') })
 const schema = emitLlmSchema(ir)
 const { flatToTree } = createFlatConverter(ir)
 const blueprint = mySystem.createBlueprint(flatToTree(modelOutput))
@@ -71,4 +71,4 @@ const blueprint = mySystem.createBlueprint(flatToTree(modelOutput))
 ```
 
 `examples/survey/` holds the output for the fixture System in `fixtures/survey-system.ts`. See `AGENTS.md` for the
-plugin and its cache, the schema profile, the JSDoc tag set, `--check` and the known limits.
+plugin and its cache, the schema profile, where the prose comes from, `--check` and the known limits.

@@ -112,7 +112,7 @@
 						},
 						"scale": {
 							"type": "number",
-							"description": "The highest value of the scale; the lowest is 1. Constraints: minimum: 3. maximum: 10. default: 5. Optional: leave the key out when unused."
+							"description": "The highest value of the scale, from 3 to 10; the lowest is 1. 5 when left out. Optional: leave the key out when unused."
 						}
 					},
 					"required": [
@@ -166,7 +166,7 @@
 							"items": {
 								"$ref": "#/$defs/type_ChoiceOption"
 							},
-							"description": "The options, in the order shown. Constraints: minItems: 2."
+							"description": "The options, in the order shown: at least two."
 						},
 						"multiple": {
 							"type": "boolean",
@@ -174,7 +174,7 @@
 						},
 						"followUp": {
 							"type": "string",
-							"description": "A question shown once this one is answered. Constraints: Must be the id of a widget of type Rating | Choice in the same document. Optional: leave the key out when unused."
+							"description": "A question shown once this one is answered. Must be the id of a widget of type Rating | Choice in the same document. Optional: leave the key out when unused."
 						}
 					},
 					"required": [
@@ -244,7 +244,7 @@
 			"properties": {
 				"id": {
 					"type": "string",
-					"description": "The option's identifier, unique within the question. Constraints: pattern: ^[a-z][a-z0-9-]*$."
+					"description": "The option's identifier, unique within the question: a lowercase letter, then lowercase letters, digits or hyphens (`^[a-z][a-z0-9-]*$`)."
 				},
 				"label": {
 					"$ref": "#/$defs/type_I18nText",
@@ -287,11 +287,11 @@
 				},
 				"maxQuestions": {
 					"type": "number",
-					"description": "The most questions the survey may hold. Constraints: minimum: 1. maximum: 20. default: 10. Optional: leave the key out when unused."
+					"description": "The most questions the survey may hold: from 1 to 20; 10 when left out. Optional: leave the key out when unused."
 				},
 				"submitUrl": {
 					"type": "string",
-					"description": "Where the answers are sent. Constraints: format: uri. Optional: leave the key out when unused."
+					"description": "Where the answers are sent: a URI. Optional: leave the key out when unused."
 				}
 			},
 			"required": [

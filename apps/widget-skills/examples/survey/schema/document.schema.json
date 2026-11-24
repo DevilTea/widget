@@ -102,10 +102,7 @@
 						},
 						"scale": {
 							"type": "number",
-							"minimum": 3,
-							"maximum": 10,
-							"default": 5,
-							"description": "The highest value of the scale; the lowest is 1."
+							"description": "The highest value of the scale, from 3 to 10; the lowest is 1. 5 when left out."
 						}
 					},
 					"required": [
@@ -148,8 +145,7 @@
 							"items": {
 								"$ref": "#/$defs/type_ChoiceOption"
 							},
-							"minItems": 2,
-							"description": "The options, in the order shown."
+							"description": "The options, in the order shown: at least two."
 						},
 						"multiple": {
 							"type": "boolean",
@@ -157,6 +153,10 @@
 						},
 						"followUp": {
 							"type": "string",
+							"x-widgetRef": [
+								"Rating",
+								"Choice"
+							],
 							"description": "A question shown once this one is answered. Must be the id of a widget of type Rating | Choice in the same document."
 						}
 					},
@@ -223,8 +223,7 @@
 			"properties": {
 				"id": {
 					"type": "string",
-					"pattern": "^[a-z][a-z0-9-]*$",
-					"description": "The option's identifier, unique within the question."
+					"description": "The option's identifier, unique within the question: a lowercase letter, then lowercase letters, digits or hyphens (`^[a-z][a-z0-9-]*$`)."
 				},
 				"label": {
 					"$ref": "#/$defs/type_I18nText",
@@ -273,15 +272,11 @@
 				},
 				"maxQuestions": {
 					"type": "number",
-					"minimum": 1,
-					"maximum": 20,
-					"default": 10,
-					"description": "The most questions the survey may hold."
+					"description": "The most questions the survey may hold: from 1 to 20; 10 when left out."
 				},
 				"submitUrl": {
 					"type": "string",
-					"format": "uri",
-					"description": "Where the answers are sent."
+					"description": "Where the answers are sent: a URI."
 				}
 			},
 			"required": [

@@ -4,28 +4,34 @@
  */
 
 import type { WidgetDocs, WidgetDocsJsonSchema, WidgetDocsNamedType, WidgetDocsSlim, WidgetDocsSlimText, WidgetDocsText, WidgetPluginDocs, WidgetPluginDocsSlim } from './docs-types'
-import type { Doc, NamedType, PluginIr, SystemIr } from './ir'
+import type { Doc, NamedType, PluginIr, Shape, SystemIr } from './ir'
 import { WIDGET_DOCS_VERSION } from './docs-types'
-import { emitConfigSchema } from './schema'
+import { emitConfigSchema, widgetRefOf } from './schema'
 
-function text(doc: Doc): WidgetDocsText {
+/**
+ * The text of one member. The prose is its description from `plugin.docs`, split into the first paragraph and the rest;
+ * `tags` holds `widgetRef` (`A | B`) when the member's value is a `WidgetRef<'A' | 'B'>`. The other keys keep the shape
+ * of the docs object and stay empty: the JSDoc tags they were read from are retired.
+ */
+function text(doc: Doc, shape?: Shape): WidgetDocsText {
+	const widgetRef = shape === undefined ? null : widgetRefOf(shape)
 	return {
 		summary: doc.summary,
 		remarks: doc.remarks,
-		tags: { ...doc.tags },
-		example: [...(doc.example ?? [])],
-		deprecated: doc.deprecated ?? null,
-		see: [...(doc.see ?? [])],
-		defaultValue: doc.defaultValue ?? null,
+		tags: widgetRef === null ? {} : { widgetRef: widgetRef.join(' | ') },
+		example: [],
+		deprecated: null,
+		see: [],
+		defaultValue: null,
 	}
 }
 
 function namedType(type: NamedType): WidgetDocsNamedType {
 	return {
-		...text(type.doc),
+		...text(type.doc, type.shape),
 		declaration: type.text,
 		fields: type.shape.kind === 'object'
-			? Object.fromEntries(type.shape.properties.map(property => [property.name, { ...text(property.doc), optional: property.optional }]))
+			? Object.fromEntries(type.shape.properties.map(property => [property.name, { ...text(property.doc, property.shape), optional: property.optional }]))
 			: null,
 	}
 }
@@ -51,15 +57,15 @@ function pluginDocs(ir: SystemIr, plugin: PluginIr): WidgetPluginDocs {
 					schema: schema as WidgetDocsJsonSchema,
 				},
 		slots: section(plugin.capabilities.slots, plugin.slots, slot => ({ ...text(slot.doc), expectedTypes: slot.expected, contract: slot.contract, expectation: slot.expectationText })),
-		state: section(plugin.capabilities.state, plugin.state, member => ({ ...text(member.doc), type: member.typeText, authorWritable: member.authorWritable })),
-		properties: section(plugin.capabilities.properties, plugin.properties, member => ({ ...text(member.doc), type: member.typeText })),
+		state: section(plugin.capabilities.state, plugin.state, member => ({ ...text(member.doc, member.shape), type: member.typeText, authorWritable: member.authorWritable })),
+		properties: section(plugin.capabilities.properties, plugin.properties, member => ({ ...text(member.doc, member.shape), type: member.typeText })),
 		methods: section(plugin.capabilities.methods, plugin.methods, method => ({
 			...text(method.doc),
 			signature: method.signature,
 			params: method.params.map(param => ({ name: param.name, type: param.typeText, optional: param.optional, summary: param.doc })),
 			returns: { type: method.returnText, summary: method.returnsDoc },
 		})),
-		events: section(plugin.capabilities.events, plugin.events, event => ({ ...text(event.doc), payload: event.payload.map(item => ({ label: item.label, type: item.typeText })) })),
+		events: section(plugin.capabilities.events, plugin.events, event => ({ ...text(event.doc), payload: event.payload.map(item => ({ label: item.label, type: item.typeText, summary: item.doc })) })),
 		reasons: plugin.reasons === null ? null : section(true, plugin.reasons, reason => ({ ...text(reason.doc), details: reason.payload?.typeText ?? null })),
 	}
 }
