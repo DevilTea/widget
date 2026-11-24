@@ -11,19 +11,20 @@ import { loadCore, loadCoreInspection } from '../lib/load.mjs'
 import { counter, freshBatch, SIZES, treeOf } from './common.mjs'
 
 const core = await loadCore()
-const { createWidgetDocument, createWidgetPlugin, createWidgetSystem, normalizeSeparatedWidgetSource, separateWidgetSource } = core
+const { createWidgetDocument, createWidgetPlugin, createWidgetSystem, normalizeSeparatedWidgetSource, separateWidgetSource, undocumented } = core
 
 /** `P` distinct trivial plugins, so createWidgetSystem has something to register. */
 function makePlugins(count) {
 	const plugins = []
 	for (let i = 0; i < count; i++) {
 		plugins.push(createWidgetPlugin(`p${i}`)
+			.description(undocumented)
 			.interfaces()
-			.state(s => s.a({ validate: v => typeof v === 'number', default: () => 0 })
-				.b({ validate: v => typeof v === 'number' }))
-			.properties(p => p.c({ registerDeps: ({ dep }) => dep.self.state.get('a'), compute: ({ deps }) => deps().ok ? 1 : 0 }))
-			.methods(m => m.d({ validateArgs: a => a.length === 0, execute: () => 0 }))
-			.events(['changed'])
+			.state(s => s.a({ description: undocumented, validate: v => typeof v === 'number', default: () => 0 })
+				.b({ description: undocumented, validate: v => typeof v === 'number' }))
+			.properties(p => p.c({ description: undocumented, registerDeps: ({ dep }) => dep.self.state.get('a'), compute: ({ deps }) => deps().ok ? 1 : 0 }))
+			.methods(m => m.d({ description: undocumented, validateArgs: a => a.length === 0, execute: () => 0 }))
+			.events({ changed: undocumented })
 			.done())
 	}
 	return plugins
@@ -97,11 +98,12 @@ export const scenarios = [
 			sizeLabel: 'members per section',
 			sizes: [3, 30, 300],
 			setup(m) {
-				const stateDef = { validate: v => typeof v === 'number', default: () => 0 }
-				const propDef = { compute: () => 1 }
-				const methodDef = { validateArgs: a => a.length === 0, execute: () => 0 }
+				const stateDef = { description: undocumented, validate: v => typeof v === 'number', default: () => 0 }
+				const propDef = { description: undocumented, compute: () => 1 }
+				const methodDef = { description: undocumented, validateArgs: a => a.length === 0, execute: () => 0 }
 				return {
 					run: () => createWidgetPlugin('x')
+						.description(undocumented)
 						.interfaces()
 						.state((s) => {
 							let t = s

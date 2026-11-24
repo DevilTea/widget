@@ -18,7 +18,7 @@
 import { loadCore } from './load.mjs'
 
 const core = await loadCore()
-const { createWidgetPlugin, createWidgetSystem } = core
+const { createWidgetPlugin, createWidgetSystem, undocumented } = core
 
 /** What a "standard" unit looks like: roughly the shape of the Lab's survey plugins, a little larger. */
 export const STANDARD = Object.freeze({
@@ -109,6 +109,7 @@ export function createPlugins(spec, units) {
 	const stateCount = Math.max(1, spec.state)
 	const stateKey = k => `s${k % stateCount}`
 	const numberState = initial => ({
+		description: undocumented,
 		validate: input => typeof input === 'number',
 		default: () => initial,
 	})
@@ -118,9 +119,11 @@ export function createPlugins(spec, units) {
 
 	// ----- unit ---------------------------------------------------------------------------------
 	let unit = createWidgetPlugin('unit')
+		.description(undocumented)
 		.interfaces()
 	if (spec.config) {
 		unit = unit.config({
+			description: undocumented,
 			validate: input => input === null || (typeof input === 'object' && input !== null && typeof input.step === 'number'),
 			resolve: raw => ({ step: raw?.step ?? 1 }),
 		})
@@ -142,12 +145,14 @@ export function createPlugins(spec, units) {
 			let s = section
 			for (let k = 0; k < spec.props.none; k++) {
 				s = s[`pn${k}`]({
+					description: undocumented,
 					compute: ({ config }) => (config === undefined ? 1 : config.step) * (k + 1),
 				})
 			}
 			for (let k = 0; k < spec.props.self; k++) {
 				const compute = ({ deps }) => sumResults(deps.a(), deps.b())
 				s = s[`ps${k}`]({
+					description: undocumented,
 					registerDeps: ({ dep }) => ({ a: dep.self.state.get(stateKey(k)), b: dep.self.state.get(stateKey(k + 1)) }),
 					// `onEvaluate` (a spec field, unset in every measured fixture) lets a scenario verify, on a separate
 					// small fixture, how many times a Property is evaluated.
@@ -161,12 +166,14 @@ export function createPlugins(spec, units) {
 			}
 			for (let k = 0; k < spec.props.parent; k++) {
 				s = s[`pp${k}`]({
+					description: undocumented,
 					registerDeps: ({ dep }) => ({ level: dep.parent.state.get('level') }),
 					compute: ({ deps }) => sumResults(deps.level()) + k,
 				})
 			}
 			for (let k = 0; k < spec.props.widget; k++) {
 				s = s[`pw${k}`]({
+					description: undocumented,
 					registerDeps: ({ widget, dep }) => {
 						const index = Number(widget.id.slice(1))
 						return { peer: dep.widget(`u${(index + 1 + k) % units}`).state.get('s0') }
@@ -183,12 +190,14 @@ export function createPlugins(spec, units) {
 			const m = spec.methods
 			if (m.noop) {
 				s = s.noop({
+					description: undocumented,
 					validateArgs: args => args.length === 0,
 					execute: () => 0,
 				})
 			}
 			if (m.rw) {
 				s = s.rw({
+					description: undocumented,
 					validateArgs: args => args.length === 0 || (args.length === 1 && typeof args[0] === 'number'),
 					registerDeps: ({ dep }) => ({
 						a: dep.self.state.get('s0'),
@@ -204,6 +213,7 @@ export function createPlugins(spec, units) {
 			}
 			if (m.invokeSelf && spec.props.self > 0 && m.noop) {
 				s = s.invokeSelf({
+					description: undocumented,
 					validateArgs: args => args.length === 0,
 					registerDeps: ({ dep }) => ({
 						noop: dep.self.methods.invoke('noop'),
@@ -214,6 +224,7 @@ export function createPlugins(spec, units) {
 			}
 			if (m.emit && spec.events) {
 				s = s.emit({
+					description: undocumented,
 					validateArgs: args => args.length === 1 && typeof args[0] === 'number',
 					registerDeps: ({ dep }) => ({ set: dep.self.state.set('s0') }),
 					emits: ['changed'],
@@ -228,21 +239,23 @@ export function createPlugins(spec, units) {
 		})
 	}
 	if (spec.events)
-		unit = unit.events(['changed'])
+		unit = unit.events({ changed: undocumented })
 	const unitPlugin = unit.done()
 
 	// ----- group --------------------------------------------------------------------------------
 	let group = createWidgetPlugin('group')
+		.description(undocumented)
 		.interfaces()
 	group = group.slots({
 		children: spec.structure
 			? {
+					description: undocumented,
 					validateStructure: ({ children, addDiagnostic }) => {
 						if (children.length < 0)
 							addDiagnostic({ message: 'negative length', index: 0 })
 					},
 				}
-			: {},
+			: { description: undocumented },
 	})
 	if (spec.structure) {
 		group = group.structure(({ widget, addDiagnostic }) => {
@@ -251,11 +264,13 @@ export function createPlugins(spec, units) {
 		})
 	}
 	group = group.state(section => section.level({
+		description: undocumented,
 		validate: input => typeof input === 'number',
 		default: () => 0,
 	}))
 	if (spec.aggregate) {
 		group = group.properties(section => section.total({
+			description: undocumented,
 			registerDeps: ({ widget, blueprint, dep }) => ({
 				children: blueprint.getChildrenAt(widget, 'children')
 					.flatMap(child => child.resolved
