@@ -148,7 +148,7 @@ describe('widget references in the two schemas', () => {
 	const configOf = (schema: JsonSchema, node: string): Record<string, JsonSchema> =>
 		((schema.$defs as Record<string, JsonSchema>)[node]!.properties as Record<string, JsonSchema>).config!.properties as Record<string, JsonSchema>
 
-	it('are annotated strings in the full schema, with the sentence the Lab reads; a constraint stays prose', () => {
+	it('are annotated strings in the full schema (`x-widgetRef`, which the Lab reads), with the sentence for readers; a constraint stays prose', () => {
 		const config = configOf(emitFullSchema(referring), 'widget_Referring')
 		expect(config.target)
 			.toEqual({ 'type': 'string', 'x-widgetRef': ['A', 'B'], 'description': 'The widget to follow. Must be the id of a widget of type A | B in the same document.' })
