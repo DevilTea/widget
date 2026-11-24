@@ -30,6 +30,8 @@ const expectations: Record<string, DocumentExpectation> = {
 	'docs/site/migration/0.1.md': { before: 17, after: 0, run: 0, unmarked: 0 },
 	// The 0.3 guide's samples are historical since 0.4 (written against 0.3, no longer compiled) and are marked `skip`.
 	'docs/site/migration/0.3.md': { before: 6, after: 0, run: 0, unmarked: 0 },
+	// Every change has a `before` sample (0.3 API, not compiled) and an `after` or `run` one.
+	'docs/site/migration/0.4.md': { before: 9, after: 2, run: 14, unmarked: 0 },
 	'docs/site/packages/widget-core.md': { before: 0, after: 1, run: 28, unmarked: 28 },
 	'packages/core/README.md': { before: 0, after: 0, run: 3, unmarked: 3 },
 	// No marked sample yet: these pages hold unmarked fragments only.
@@ -335,11 +337,11 @@ describe.skipIf(missingBuild !== null)('documentation samples', () => {
 			.join('\n'))
 			.toBe('')
 		// The samples state their output in comments; they were compared, not skipped. Raise this when comments are
-		// added; a drop means output stopped being compared. The floor is the measured count (74). It was 90 until the
-		// 0.1 migration guide's samples became historical (written against 0.1, no longer compiled, marked `skip`),
-		// which removed their compared output.
+		// added; a drop means output stopped being compared. The floor is the measured count (102: 69 in the Core guide,
+		// 10 in its README and 23 in the 0.4 migration guide). It was 90 until the 0.1 migration guide's samples became
+		// historical (written against 0.1, no longer compiled, marked `skip`), which removed their compared output.
 		expect(result.compared.length)
-			.toBeGreaterThanOrEqual(74)
+			.toBeGreaterThanOrEqual(102)
 		// An exemption that is no longer needed has to be removed.
 		const used = new Set(result.exempted.map(claim => `${claim.document}\n${claim.sample}\n${claim.text}`))
 		expect(exemptComments.filter(entry => !used.has(`${entry.document}\n${entry.sample}\n${entry.comment}`)))

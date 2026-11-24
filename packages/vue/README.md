@@ -133,8 +133,9 @@ const { value: valueDiagnostics } = useStateDiagnostics()
   projects to `null`; implementation-contract/disposed-runtime exceptions
   propagate unchanged.
 - The keyed surfaces are mapped over `keyof` the plugin's Interfaces sections, so hovering
-  a member (`useState().count`, `useMethods().increment`, `emit.pressed`) shows the JSDoc
-  written on it in the Interfaces.
+  a member (`useState().count`, `useMethods().increment`, `emit.pressed`) shows a JSDoc
+  comment written on it in the Interfaces. That comment is for the editor only: the plugin's
+  documentation is written in its builder and kept on `plugin.docs`.
 - `useStateDiagnostics()` / `usePropertyDiagnostics()` / `useMethodDiagnostics()` mirror the
   corresponding Runtime primitive's `getDiagnostics()`/`subscribeDiagnostics()` as a
   separate reactive channel, keyed the same way as their value counterpart. When the
