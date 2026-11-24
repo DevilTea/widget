@@ -388,6 +388,87 @@ describe('docs values are checked when declared', () => {
 				.reasons(value)), ['reasons-arg', 'reasons'])
 		}
 	})
+
+	it('accepts only a plain object for `.events()` and `.reasons()`', () => {
+		class Definitions {
+			readonly r = undocumented
+		}
+		const notPlain: readonly unknown[] = [new Map([['r', undocumented]]), new Definitions(), Object.create({ r: undocumented }) as unknown]
+		for (const value of notPlain) {
+			for (const section of ['events', 'reasons'] as const) {
+				const builder = createWidgetPlugin('not-plain')
+					.description(undocumented)
+					.interfaces<{ events: { r: [] }, reasons: { r: void } }>() as unknown as Record<typeof section, (value: unknown) => unknown>
+				expectContractViolation(capture(() => builder[section](value)), ['not-plain', section, 'plain'])
+			}
+		}
+		const nullPrototype = Object.assign(Object.create(null) as Record<string, unknown>, { r: undocumented })
+		const plugin = createWidgetPlugin('null-prototype')
+			.description(undocumented)
+			.interfaces<{ events: { r: [] } }>()
+			.events(nullPrototype as { r: typeof undocumented })
+			.done()
+
+		expect(Object.keys(plugin.docs.events!))
+			.toEqual(['r'])
+	})
+
+	it('rejects the 0.2 config docs shape: `fields`, `items`, `values` or `ref` at the top of `.config()`', () => {
+		for (const key of ['fields', 'items', 'values', 'ref']) {
+			expectContractViolation(capture(() => (createWidgetPlugin('config-shape')
+				.description(undocumented)
+				.interfaces<{ config: { raw: { a?: string }, resolved: { a: string } } }>() as unknown as { config: (definition: unknown) => unknown })
+				.config({ description: 'Config.', [key]: {}, validate: () => true, resolve: () => ({ a: '' }) })), ['config-shape', 'config', `"${key}"`, '"raw"', '"resolved"'])
+		}
+	})
+
+	it('wraps an exception thrown while the docs are read, naming the plugin and the path, with the original as `cause`', () => {
+		interface Pair { readonly left: number, readonly right: number }
+		const boom = new Error('boom')
+		const fromThunk = capture(() => createWidgetPlugin('throwing-thunk')
+			.description(undocumented)
+			.interfaces<{ state: { pair: Pair } }>()
+			.state(state => state.pair({
+				description: 'A pair.',
+				ref: () => {
+					throw boom
+				},
+				validate: (input): input is Pair => input !== null,
+			}))
+			.done())
+		const trap = new Error('trap')
+		const fromProxy = capture(() => createWidgetPlugin('throwing-proxy')
+			.description(undocumented)
+			.interfaces<{ state: { pair: Pair } }>()
+			.state(state => state.pair({
+				description: 'A pair.',
+				fields: new Proxy({} as Record<'left' | 'right', { description: string }>, {
+					ownKeys: () => {
+						throw trap
+					},
+				}),
+				validate: (input): input is Pair => input !== null,
+			}))
+			.done())
+		const fromRecord = capture(() => createWidgetPlugin('throwing-record')
+			.description(undocumented)
+			.interfaces<{ events: { e: [] } }>()
+			.events(new Proxy({ e: undocumented }, {
+				ownKeys: () => {
+					throw trap
+				},
+			})))
+
+		expectContractViolation(fromThunk, ['throwing-thunk', 'state.pair.ref'])
+		expect((fromThunk as Error).cause)
+			.toBe(boom)
+		expectContractViolation(fromProxy, ['throwing-proxy', 'fields'])
+		expect((fromProxy as Error).cause)
+			.toBe(trap)
+		expectContractViolation(fromRecord, ['throwing-record', 'events'])
+		expect((fromRecord as Error).cause)
+			.toBe(trap)
+	})
 })
 
 // -------------------------------------------------------------------------------------------------

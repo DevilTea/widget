@@ -58,7 +58,7 @@ import type {
 	WidgetStateKeyOf,
 	WidgetStateValueOf,
 } from './types'
-import { captureDescription, captureDocsNode, captureDocsPositions, createDocsRecord, undocumented, WidgetDocsSerializer } from './docs'
+import { captureDescription, captureDocsNode, captureDocsPositions, createDocsRecord, readingDocs, undocumented, WidgetDocsSerializer } from './docs'
 
 /**
  * Framework-private brand carrying the plugin's phantom interfaces and its erased definition record.
@@ -1028,20 +1028,33 @@ function captureDocsEntry(where: string, entry: unknown, allowed: ReadonlySet<st
 		return null
 	if (typeof entry !== 'object' || entry === null || Array.isArray(entry))
 		throw new TypeError(`${where} must be a docs object or undocumented, got ${describeValue(entry)}. This is a plugin implementation bug.`)
-	for (const key of Object.keys(entry)) {
+	for (const key of readingDocs(where, '', () => Object.keys(entry))) {
 		if (!allowed.has(key))
 			throw new TypeError(`${where} has an unknown docs key "${key}". This is a plugin implementation bug.`)
 	}
 	return entry as Readonly<Record<string, unknown>>
 }
 
+/** A plain object: its prototype is `Object.prototype` or `null` (not an array, a `Map` or a class instance). */
+function isPlainObject(value: unknown): value is Readonly<Record<string, unknown>> {
+	if (typeof value !== 'object' || value === null)
+		return false
+	const prototype: unknown = Object.getPrototypeOf(value)
+	return prototype === Object.prototype || prototype === null
+}
+
 /** The entries of an `.events()` or `.reasons()` record, in declaration order. */
 function readDocsRecord(pluginType: string, section: 'events' | 'reasons', definitions: unknown): readonly (readonly [WidgetMemberKey, unknown])[] {
-	if (typeof definitions !== 'object' || definitions === null || Array.isArray(definitions))
-		throw pluginContractViolation(pluginType, `section "${section}"`, `must be declared with an object of docs keyed by name, got ${describeValue(definitions)}`)
-	return Object.keys(definitions)
-		.map(name => [name, (definitions as Readonly<Record<string, unknown>>)[name]] as const)
+	const where = docsSubject(pluginType, `section "${section}"`)
+	if (!readingDocs(where, '', () => isPlainObject(definitions)))
+		throw pluginContractViolation(pluginType, `section "${section}"`, `must be declared with a plain object of docs keyed by name, got ${typeof definitions === 'object' && definitions !== null && !Array.isArray(definitions) ? 'an object that is not plain' : describeValue(definitions)}`)
+	const record = definitions as Readonly<Record<string, unknown>>
+	return readingDocs(where, '', () => Object.keys(record)
+		.map(name => [name, record[name]] as const))
 }
+
+/** The 0.2 shape of config docs, at the top of the definition: the docs now go under `raw` and `resolved`. */
+const CONFIG_MISPLACED_DOCS_KEYS = ['fields', 'items', 'values', 'ref'] as const
 
 /**
  * Runs one section build callback against the section keyed-chain object, registering its members into
@@ -1136,6 +1149,9 @@ export function createWidgetPlugin<const Type extends string>(type: Type): Widge
 			const subject = 'section "config"'
 			const captured = captureDefinition(type, 'config', subject, definition) as Readonly<Record<string, unknown>>
 			const where = docsSubject(type, subject)
+			const misplaced = CONFIG_MISPLACED_DOCS_KEYS.find(key => captured[key] !== undefined)
+			if (misplaced !== undefined)
+				throw pluginContractViolation(type, subject, `has a top-level "${misplaced}" field; the config docs go under "raw" (the authored config) and "resolved"`)
 			const docs: { description: string | null, raw?: CapturedDocsNode | null, resolved?: CapturedDocsNode | null } = {
 				description: captureDescription(captured.description, where, ''),
 			}

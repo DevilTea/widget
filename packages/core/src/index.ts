@@ -84,7 +84,6 @@ export type {
 } from './diagnostic'
 
 export type {
-	DocsKeyViolation,
 	FieldDoc,
 	FieldDocs,
 	ObjectFieldDocs,
@@ -98,6 +97,7 @@ export type {
 	WidgetConfigDocsData,
 	WidgetDescribedDocsNode,
 	WidgetDescription,
+	WidgetDocsKeyViolation,
 	WidgetDocsNode,
 	WidgetEventDocs,
 	WidgetEventDocsData,

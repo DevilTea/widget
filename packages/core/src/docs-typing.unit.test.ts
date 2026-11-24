@@ -477,4 +477,130 @@ describe('edge cases', () => {
 		expect(typeOnly)
 			.toBeTypeOf('function')
 	})
+
+	it('documents built-in objects by their description only, and a class of your own field by field', () => {
+		interface Values {
+			readonly date: Date
+			readonly pattern: RegExp
+			readonly map: Map<string, number>
+			readonly readonlyMap: ReadonlyMap<string, { readonly id: string }>
+			readonly set: Set<string>
+			readonly readonlySet: ReadonlySet<number>
+			readonly weakMap: WeakMap<object, number>
+			readonly weakSet: WeakSet<object>
+			readonly promise: Promise<number>
+			readonly error: Error
+			readonly buffer: ArrayBuffer
+			readonly view: DataView
+			readonly bytes: Uint8Array
+			readonly floats: Float64Array
+			readonly bigints: BigInt64Array
+		}
+		const builtIns = defineFieldDocs<Values>()({
+			fields: {
+				date: { description: 'A date.' },
+				pattern: { description: 'A pattern.' },
+				map: { description: 'A map.' },
+				readonlyMap: { description: 'A read-only map.' },
+				set: { description: 'A set.' },
+				readonlySet: { description: 'A read-only set.' },
+				weakMap: { description: 'A weak map.' },
+				weakSet: { description: 'A weak set.' },
+				promise: { description: 'A promise.' },
+				error: { description: 'An error.' },
+				buffer: { description: 'A buffer.' },
+				view: { description: 'A view.' },
+				bytes: { description: 'Bytes.' },
+				floats: { description: 'Floats.' },
+				bigints: { description: 'Big integers.' },
+			},
+		})
+		class Point {
+			constructor(readonly x: number, readonly y: number) {}
+			length(): number {
+				return Math.hypot(this.x, this.y)
+			}
+		}
+		const point: FieldDoc<Point> = { description: 'A point.', fields: { x: { description: 'x' }, y: { description: 'y' }, length: { description: 'Its length.' } } }
+		const typeOnly = () => {
+			// @ts-expect-error a class of your own is an ordinary object type: its members need docs
+			const bare: FieldDoc<Point> = { description: 'A point.' }
+			// @ts-expect-error a plain `{ name, message }` object type is not taken for an `Error`
+			const message: FieldDoc<{ readonly name: string, readonly message: string }> = { description: 'A message.' }
+			return [bare, message]
+		}
+
+		expect([builtIns, point, typeOnly])
+			.toHaveLength(3)
+	})
+
+	it('needs at least one entry for a rest parameter, after the fixed positions', () => {
+		interface Interfaces {
+			methods: {
+				all: (...items: { readonly id: string }[]) => void
+				some: (first: number, ...rest: string[]) => void
+			}
+		}
+		const validate = (input: unknown): input is never => input === undefined
+		const plugin = createWidgetPlugin('rest')
+			.description('Rest parameters.')
+			.interfaces<Interfaces>()
+			.methods(methods => methods
+				.all({ description: 'All.', params: [{ description: 'An item.', fields: { id: { description: 'Its id.' } } }], validateArgs: validate, execute: () => {} })
+				.some({ description: 'Some.', params: [{ description: 'The first.' }, { description: 'One more.' }, { description: 'The rest.' }], validateArgs: validate, execute: () => {} }))
+			.done()
+		const typeOnly = () => {
+			const builder = createWidgetPlugin('rest')
+				.description('d')
+				.interfaces<Interfaces>()
+			builder.methods(methods => methods
+				// @ts-expect-error the rest element needs an entry
+				.all({ description: 'All.', params: [], validateArgs: validate, execute: () => {} })
+				.some({ description: 'Some.', params: [{ description: 'a' }, { description: 'b' }], validateArgs: validate, execute: () => {} }))
+			builder.methods(methods => methods
+				.all({ description: 'All.', params: [{ description: 'An item.', fields: { id: { description: 'Its id.' } } }], validateArgs: validate, execute: () => {} })
+				// @ts-expect-error a fixed parameter and the rest element: two entries at least
+				.some({ description: 'Some.', params: [{ description: 'a' }], validateArgs: validate, execute: () => {} }))
+		}
+
+		expect(plugin.docs.methods?.some?.params)
+			.toHaveLength(3)
+		expect(typeOnly)
+			.toBeTypeOf('function')
+	})
+
+	it('forbids `returns` for a Method that returns no value: `undefined`, `void | undefined`, `never`', () => {
+		interface Interfaces {
+			methods: { u: () => undefined, vu: () => void | undefined, n: () => never, a: () => unknown }
+		}
+		const validate = (input: unknown): input is never => input === undefined
+		const plugin = createWidgetPlugin('no-value')
+			.description('No value.')
+			.interfaces<Interfaces>()
+			.methods(methods => methods
+				.u({ description: 'U.', validateArgs: validate, execute: () => undefined })
+				.vu({ description: 'VU.', validateArgs: validate, execute: () => {} })
+				.n({ description: 'N.', validateArgs: validate, execute: () => {
+					throw new Error('never returns')
+				} })
+				.a({ description: 'A.', returns: { description: 'Anything.' }, validateArgs: validate, execute: () => 1 }))
+			.done()
+		const typeOnly = () => createWidgetPlugin('no-value')
+			.description('d')
+			.interfaces<Interfaces>()
+			.methods(methods => methods
+				// @ts-expect-error `undefined` carries no value
+				.u({ description: 'U.', returns: { description: 'r' }, validateArgs: validate, execute: () => undefined })
+				.vu({ description: 'VU.', validateArgs: validate, execute: () => {} })
+				.n({ description: 'N.', validateArgs: validate, execute: () => {
+					throw new Error('never returns')
+				} })
+				// @ts-expect-error `unknown` is a value: `returns` is required
+				.a({ description: 'A.', validateArgs: validate, execute: () => 1 }))
+
+		expect(plugin.docs.methods?.u)
+			.toEqual({ description: 'U.' })
+		expect(typeOnly)
+			.toBeTypeOf('function')
+	})
 })

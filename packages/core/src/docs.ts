@@ -40,6 +40,9 @@ declare const widgetRefTypes: unique symbol
  * The id of a widget of one of `Types`. Any string is accepted without a cast, and a value reads back as a
  * `string`; tooling reads `Types` from the type ({@link WidgetRefTypesOf}). Type-level only, like slot
  * expectations: nothing is checked at run time.
+ *
+ * A plain `string` assigns to any `WidgetRef` without a cast, but a reference to more types does not assign to
+ * one to fewer: `WidgetRef<'A' | 'B'>` is not assignable to `WidgetRef<'A'>`.
  */
 export type WidgetRef<Types extends string> = string & { readonly [widgetRefTypes]?: Types }
 
@@ -69,8 +72,47 @@ type HasNonLiteralKey<O> = true extends (keyof O extends infer Key
 	? true
 	: false
 
-/** The object part of a value type: what can carry nested docs (functions, primitives and branded primitives such as `WidgetRef` cannot). */
-type ObjectPart<T> = IsAny<T> extends true ? never : Exclude<Extract<T, object>, AnyFunction | string | number | boolean | bigint | symbol>
+/**
+ * Built-in objects that hold data but whose members are methods: documented by their description only. A class of
+ * your own stays an ordinary object type (its fields are documented), since it cannot be told apart structurally.
+ */
+type BuiltInLeaf
+	= | Date
+		| RegExp
+		| ReadonlyMap<any, any>
+		| ReadonlySet<any>
+		| WeakMap<any, any>
+		| WeakSet<any>
+		| PromiseLike<any>
+		| ArrayBuffer
+		| DataView
+		| Int8Array
+		| Uint8Array
+		| Uint8ClampedArray
+		| Int16Array
+		| Uint16Array
+		| Int32Array
+		| Uint32Array
+		| Float32Array
+		| Float64Array
+		| BigInt64Array
+		| BigUint64Array
+
+/**
+ * Whether one member of an object part is a built-in leaf. `Error` counts only with its `stack` key, so a plain
+ * `{ name, message }` object type stays an object.
+ */
+type IsBuiltInLeaf<O> = O extends BuiltInLeaf ? true : O extends Error ? ('stack' extends keyof O ? true : false) : false
+
+/**
+ * The object part of a value type: what can carry nested docs. Functions, primitives, branded primitives such as
+ * `WidgetRef` and built-in objects (`Date`, `Map`, `Set`, `Error`, typed arrays, ...) cannot.
+ */
+type ObjectPart<T> = IsAny<T> extends true
+	? never
+	: Exclude<Extract<T, object>, AnyFunction | string | number | boolean | bigint | symbol> extends infer O
+		? O extends unknown ? (IsBuiltInLeaf<O> extends true ? never : O) : never
+		: never
 
 type ArrayPart<O> = Extract<O, readonly unknown[]>
 
@@ -144,9 +186,20 @@ interface NoInlineShapeDocs {
  * - a dictionary (`Record<string, …>`, an index signature): `values`, the docs of its values (likewise);
  * - a primitive, a literal union, a function, `unknown` or `any`: nothing.
  *
+ * - a built-in object (`Date`, `RegExp`, `Map`, `Set`, their read-only and weak forms, `Promise`, `Error`,
+ *   `ArrayBuffer`, `DataView`, the typed arrays): nothing. A class of your own is an ordinary object type.
+ *
  * `null` and `undefined` are ignored (`X | null` is documented as `X`), and the parts of a union combine
  * (`boolean | Condition` needs the `fields` of `Condition`). Instead of inline docs, an object part can name
  * shared docs with `ref` (see {@link defineTypeDocs}); `ref` and inline docs exclude each other.
+ *
+ * Known limits: an object type with an index signature and fixed keys is a dictionary (`values` only, no
+ * `fields` for the fixed keys), and whether `items` / `values` are required is decided at most four levels of
+ * nested arrays and dictionaries deep (a closed object inside five nested arrays is not required to be documented).
+ *
+ * Exactness: a docs object literal written in place gets TypeScript's excess-property check, which rejects an
+ * unknown key. A key that arrives through a spread or a variable is not checked there; `defineFieldDocs` is the
+ * exact check.
  */
 export type ShapeDocs<T> = ShapeDocsOf<ObjectPart<NonNullable<T>>>
 
@@ -168,8 +221,8 @@ type OptionalShapeDocsOf<O> = [O] extends [never]
  */
 export type FieldDocs<T>
 	= | Undocumented
-		| ({ readonly description?: string } & ShapeDocs<T>)
 		| ({ readonly description: Undocumented } & OptionalShapeDocs<T>)
+		| ({ readonly description?: string } & ShapeDocs<T>)
 
 /**
  * The docs of one field, parameter, payload position or return value of type `T`: a description plus the nested
@@ -177,8 +230,8 @@ export type FieldDocs<T>
  */
 export type FieldDoc<T>
 	= | Undocumented
-		| ({ readonly description: string } & ShapeDocs<T>)
 		| ({ readonly description: Undocumented } & OptionalShapeDocs<T>)
+		| ({ readonly description: string } & ShapeDocs<T>)
 
 /**
  * The docs part of a member definition (State, Property): a required description plus the nested docs of the
@@ -186,8 +239,8 @@ export type FieldDoc<T>
  * callbacks too.
  */
 export type WidgetValueDocs<T>
-	= | ({ readonly description: string } & ShapeDocs<T>)
-		| ({ readonly description: Undocumented } & OptionalShapeDocs<T>)
+	= | ({ readonly description: Undocumented } & OptionalShapeDocs<T>)
+		| ({ readonly description: string } & ShapeDocs<T>)
 
 /** The `fields` a shared type docs value writes for an object type: inline only. */
 type TypeDocsShape<T> = ObjectPart<T> extends infer O
@@ -208,7 +261,7 @@ export type TypeDocs<T> = TypeDocsInput<T> & {
 }
 
 /**
- * `Docs` with every key that `Expected` does not have replaced by a {@link DocsKeyViolation}, at every depth: rejects
+ * `Docs` with every key that `Expected` does not have replaced by a {@link WidgetDocsKeyViolation}, at every depth: rejects
  * an unknown key, also one that arrives through a spread or a variable. A `ref` is checked by its own type.
  */
 type ExactDocs<Expected, Docs> = Docs extends string | AnyFunction
@@ -219,19 +272,20 @@ type ExactDocs<Expected, Docs> = Docs extends string | AnyFunction
 					? Docs[Key]
 					: Key extends KeysOfUnion<Exclude<Expected, string>>
 						? ExactDocs<ValueAt<Exclude<Expected, string>, Key>, Docs[Key]>
-						: DocsKeyViolation<Key & string>
+						: WidgetDocsKeyViolation<Key & string>
 			}
 		: Docs
 
 /** What a docs value with a key its type does not have is checked against; `Key` names the key. */
-export interface DocsKeyViolation<Key extends string> {
+export interface WidgetDocsKeyViolation<Key extends string> {
 	readonly 'widget-core: unknown docs key': Key
 }
 
 /**
  * Checks a {@link FieldDocs} value against `T` once, where it is written: `defineFieldDocs<T>()(docs)`. Unlike a
- * plain annotation, the check is exact at every depth, so a key `T` does not have is an error even when it
- * reaches the value through a spread or a variable. It returns the value unchanged.
+ * plain annotation, the builder sections and `defineTypeDocs` (which get TypeScript's excess-property check for a
+ * literal written in place only), the check is exact at every depth, so a key `T` does not have is an error even
+ * when it reaches the value through a spread or a variable. It returns the value unchanged.
  */
 export function defineFieldDocs<T>(): <const Docs extends FieldDocs<T>>(docs: Docs & ExactDocs<FieldDocs<T>, Docs>) => Docs {
 	return docs => docs
@@ -241,24 +295,37 @@ export function defineFieldDocs<T>(): <const Docs extends FieldDocs<T>>(docs: Do
 // Member docs (types)
 // -------------------------------------------------------------------------------------------------
 
-/** One docs entry per position of a tuple (a Method's parameters, an Event's payload). */
-export type PositionDocs<Args extends readonly unknown[]> = { readonly [Index in keyof Args]-?: FieldDoc<Args[Index]> }
+/**
+ * One docs entry per position of a tuple (a Method's parameters, an Event's payload). A rest element needs at least
+ * one entry and may take more: `(...xs: T[])` takes one entry or more, `(a: A, ...rest: T[])` two or more.
+ */
+export type PositionDocs<Args extends readonly unknown[]> = number extends Args['length']
+	? RestPositionDocs<Args>
+	: { readonly [Index in keyof Args]-?: FieldDoc<Args[Index]> }
+
+/** The leading fixed positions one by one, then the rest element: one entry or more. */
+type RestPositionDocs<Args extends readonly unknown[]> = Args extends readonly [infer Head, ...infer Tail]
+	? readonly [FieldDoc<Head>, ...RestPositionDocs<Tail>]
+	: readonly [FieldDoc<Args[number]>, ...FieldDoc<Args[number]>[]]
 
 type IsExactlyVoid<T> = (<X>() => X extends T ? 1 : 2) extends (<X>() => X extends void ? 1 : 2) ? true : false
+
+/** A return that carries no value: `void`, `undefined`, `void | undefined` or `never` (not `any`). */
+type IsNoValue<T> = IsAny<T> extends true ? false : [T] extends [void] ? true : false
 
 /** `params` is required when the Method has a parameter; `returns` when it does not return `void`. */
 type MethodShapeDocs<Args extends readonly unknown[], Return>
 	= & (Args extends readonly [] ? { readonly params?: readonly [] } : { readonly params: PositionDocs<Args> })
-		& (IsExactlyVoid<Return> extends true ? { readonly returns?: never } : { readonly returns: FieldDoc<Return> })
+		& (IsNoValue<Return> extends true ? { readonly returns?: never } : { readonly returns: FieldDoc<Return> })
 
 type OptionalMethodShapeDocs<Args extends readonly unknown[], Return>
 	= & { readonly params?: PositionDocs<Args> }
-		& (IsExactlyVoid<Return> extends true ? { readonly returns?: never } : { readonly returns?: FieldDoc<Return> })
+		& (IsNoValue<Return> extends true ? { readonly returns?: never } : { readonly returns?: FieldDoc<Return> })
 
 /**
  * The docs part of a Method definition: a description, `params` (one entry per parameter, by position) and
  * `returns`. `params` may be left out when the Method takes no parameter, and `returns` is not written for a
- * `void` Method.
+ * Method that returns no value (`void`, `undefined`, `never`).
  */
 export type WidgetMethodDocs<Args extends readonly unknown[], Return>
 	= | ({ readonly description: string } & MethodShapeDocs<Args, Return>)
@@ -346,7 +413,9 @@ interface DocsRecord<Entry> { readonly [name: string]: Entry }
 /**
  * A plugin's documentation as plain, serializable data: strings, `null`, plain objects and arrays only, so
  * `structuredClone` and JSON round-trip it. A section is `null` when the plugin does not declare it (`reasons`:
- * when `.reasons()` was not called). Records keep declaration order. `types` holds the shared type docs the
+ * when `.reasons()` was not called). Records keep the key order of the objects they were declared with, which is
+ * declaration order except that integer-like names (`'2'`, `'10'`) come first, in ascending order, as in any
+ * JavaScript object; the same order as the Events at run time. `types` holds the shared type docs the
  * plugin references with `ref`, keyed by their name. It is not part of `system.catalog`, `inspectPlugin`,
  * Blueprints or the Inspector protocol.
  */
@@ -386,9 +455,29 @@ interface CapturedTypeDocs {
 	readonly node: CapturedDocsNode
 }
 
+/** The errors this module raised, so that `readingDocs` passes them through instead of wrapping them again. */
+const docsErrors = new WeakSet<object>()
+
 /** A docs value is malformed: an uncoded `TypeError` naming where it was written. */
-function docsViolation(subject: string, path: string, problem: string): TypeError {
-	return new TypeError(`${subject}${path === '' ? '' : ` at "${path}"`} ${problem}. This is a plugin implementation bug.`)
+function docsViolation(subject: string, path: string, problem: string, cause?: unknown): TypeError {
+	const error = new TypeError(`${subject}${path === '' ? '' : ` at "${path}"`} ${problem}. This is a plugin implementation bug.`, cause === undefined ? undefined : { cause })
+	docsErrors.add(error)
+	return error
+}
+
+/**
+ * Runs `read` (reading author docs: a getter, a Proxy trap, a `ref` thunk) and turns any exception it throws into
+ * a `TypeError` naming where the docs were read, with the original exception as its `cause`.
+ */
+export function readingDocs<Result>(subject: string, path: string, read: () => Result): Result {
+	try {
+		return read()
+	}
+	catch (error) {
+		if (typeof error === 'object' && error !== null && docsErrors.has(error))
+			throw error
+		throw docsViolation(subject, path, 'could not be read: reading the docs threw', error)
+	}
 }
 
 function describeDocsValue(value: unknown): string {
@@ -427,6 +516,15 @@ export function captureDocsNode(
 	path: string,
 	descriptionRequired: boolean,
 ): CapturedDocsNode | null {
+	return readingDocs(subject, path, () => readDocsNode(value, subject, path, descriptionRequired))
+}
+
+function readDocsNode(
+	value: unknown,
+	subject: string,
+	path: string,
+	descriptionRequired: boolean,
+): CapturedDocsNode | null {
 	if (value === undocumented)
 		return null
 	if (typeof value !== 'object' || value === null || Array.isArray(value))
@@ -453,7 +551,7 @@ export function captureDocsNode(
 		const fieldsPath = joinPath(path, 'fields')
 		if (typeof fields !== 'object' || fields === null || Array.isArray(fields))
 			throw docsViolation(subject, fieldsPath, `must be an object of field docs, got ${describeDocsValue(fields)}`)
-		node.fields = new Map(Object.keys(fields)
+		node.fields = new Map(readingDocs(subject, fieldsPath, () => Object.keys(fields))
 			.map(key => [
 				key,
 				captureDocsNode((fields as Readonly<Record<string, unknown>>)[key], subject, joinPath(fieldsPath, key), true),
@@ -481,6 +579,10 @@ export function captureDocsNode(
 
 /** Captures a positional list (`params`, `payload`): an array of entries, each `undocumented` or a described docs object. */
 export function captureDocsPositions(value: unknown, subject: string, path: string): readonly (CapturedDocsNode | null)[] {
+	return readingDocs(subject, path, () => readDocsPositions(value, subject, path))
+}
+
+function readDocsPositions(value: unknown, subject: string, path: string): readonly (CapturedDocsNode | null)[] {
 	if (!Array.isArray(value))
 		throw docsViolation(subject, path, `must be an array with one docs entry per position, got ${describeDocsValue(value)}`)
 	const positions: (CapturedDocsNode | null)[] = []
@@ -498,6 +600,11 @@ export function captureDocsPositions(value: unknown, subject: string, path: stri
  * a thunk (`items: { ref: () => conditionDocs }`), since a constant cannot name itself in its own initializer.
  * `name` is the name tooling gives the type (one JSON Schema `$defs` entry); within one plugin, two different
  * type docs may not share a name.
+ *
+ * A recursive declaration needs an explicit annotation, `const conditionDocs: TypeDocs<Condition> = …`;
+ * without it TypeScript cannot infer the constant's type from an initializer that refers to it (TS7022). Like the
+ * builder sections, a literal written in place gets TypeScript's excess-property check only: a stale key that
+ * arrives through a spread is not caught here (use `defineFieldDocs` for an exact check).
  */
 export function defineTypeDocs<T>(name: string, docs: TypeDocsInput<T>): TypeDocs<T> {
 	const subject = `Type docs "${String(name)}"`
@@ -574,7 +681,7 @@ export class WidgetDocsSerializer {
 	#reference(ref: CapturedTypeDocs | (() => unknown), path: string): string {
 		let target: CapturedTypeDocs | undefined
 		if (typeof ref === 'function') {
-			const resolved = ref()
+			const resolved = readingDocs(this.#subject, path, () => ref())
 			target = readTypeDocs(resolved)
 			if (target === undefined)
 				throw docsViolation(this.#subject, path, `is a function that must return type docs created by defineTypeDocs(), got ${describeDocsValue(resolved)}`)
