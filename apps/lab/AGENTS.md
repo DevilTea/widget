@@ -883,7 +883,11 @@ names and capabilities only. JSDoc on the Interfaces is an ordinary comment that
   the full-profile schema `widgetDocs()` generates from the `config.raw` type (a `$ref` root with `$defs`, object unions as
   `anyOf`, an `anyOf` with `null` when the config may be left out). It states the shape only: no `minimum`, `pattern`,
   `minItems`, `integer` or `default`, so the Structure editor offers what the shape allows and Core's diagnostics report a
-  value outside a constraint. A constraint the validator enforces may narrow the type itself (survey
+  value outside a constraint. Concretely, in the generated showcases (not quote-rules, whose Valibot schemas keep their
+  keywords): an added optional number starts at 0 (`maxLength`, `maxSelected`, `limit`, which are then invalid at once);
+  an added list (`all`, `any`, `languages`) starts empty; and removing items is not bounded by a minimum count, so a user
+  can delete the last option, language, day, time or rule. Each of these is reported by Core's diagnostics at the field.
+  The editor's behaviour is unchanged; only the schema it reads lost those keywords. A constraint the validator enforces may narrow the type itself (survey
   `languages: SupportedLanguage[]`, trip-budget `roundTransfersTo: RoundStep`, the `I18nText` with a required `en`). A widget
   reference carries `x-widgetRef` (the types it names) beside the sentence the Lab reads today. quote-rules
   overrides the map with the JSON Schemas of its Valibot validators (`quoteConfigSchemas`; its files, which the Web Worker

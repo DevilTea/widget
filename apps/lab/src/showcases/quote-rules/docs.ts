@@ -19,12 +19,12 @@ import { defineFieldDocs, defineTypeDocs } from '@deviltea/widget-core'
 
 export const rawI18nTextDocs: TypeDocs<RawI18nText> = defineTypeDocs<RawI18nText>('RawI18nText', {
 	description: 'Text per language, such as `{ "en": "Flyers", "zh-TW": "傳單" }`. `"en"` is required and at least one character; a missing language falls back to it. The quote offers `en` and `zh-TW`.',
-	values: { description: 'The text in the language this key names, such as `zh-TW`. `en` is the English text, which every other language falls back to.' },
+	values: { description: 'The text in the language its key names. The `en` text is the one every other language falls back to.' },
 })
 
 export const i18nTextDocs: TypeDocs<I18nText> = defineTypeDocs<I18nText>('I18nText', {
 	description: 'Text per language, `{ "en": "Flyers", "zh-TW": "傳單" }`. `en` is required; a missing language falls back to it.',
-	values: { description: 'The text in the language this key names, such as `zh-TW`. `en` is the English text, which every other language falls back to.' },
+	values: { description: 'The text in the language its key names. The `en` text is the one every other language falls back to.' },
 })
 
 // -------------------------------------------------------------------------------------------------
