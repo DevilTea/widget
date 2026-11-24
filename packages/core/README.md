@@ -3,7 +3,8 @@
 Cross-cutting Diagnostic/Result/Failure/Error conventions are maintained in
 [Widget API conventions](https://github.com/DevilTea/widget/blob/main/docs/architecture/widget-api-conventions.md).
 
-> **Upgrading from 0.0.x?** Follow the [migration guide to 0.1](https://deviltea.github.io/widget/migration/0.1).
+> **Upgrading?** From 0.3, follow the [migration guide to 0.4](https://deviltea.github.io/widget/migration/0.4). From
+> 0.0.x, start with the [migration guide to 0.1](https://deviltea.github.io/widget/migration/0.1).
 
 > ESM-only package.
 
@@ -83,8 +84,11 @@ The phase order of `createWidgetPlugin` is
 available to every plugin (it is not a capability); `.slots(definitions)` takes
 only the slot definitions, `.events(definitions)` one docs entry per declared
 Event, and `.reasons(definitions)` one per declared diagnostic reason. Every
-definition carries its `description` (or `undocumented`); the docs end up as
-plain data on `plugin.docs`. Declarations are validated when the plugin is built,
+definition carries its `description` (or `undocumented`), and the types
+require the docs to be complete: the field docs of every config and value type
+down to its inner fields, a Method's `params` and `returns`, an Event's
+`payload` and a reason's `details`. The docs end up as plain data on
+`plugin.docs`. Declarations are validated when the plugin is built,
 so a malformed member throws a `TypeError` naming the plugin, section, member
 and field.
 
@@ -115,15 +119,20 @@ config may be omitted, or `raw: Config` to require it. A rejected config yields
 full guide.
 
 The plugin's `Interfaces` type is the single source of its shape; its prose is
-written in the builder and kept as plain data on `plugin.docs`. Core stores no
-JSON Schema: tooling infers it from the types.
+written in the builder and kept as plain data on `plugin.docs` (JSDoc on the
+type is an ordinary comment that no tool reads). Core stores no JSON Schema:
+tooling infers it from the types, and it states the shape only, so a constraint
+is written in the description and enforced by `validate`. `defineTypeDocs` and
+`ref` share the docs of a named type, `defineFieldDocs` checks docs written
+apart from the builder, and `WidgetRef<Types>` types a config field that holds
+the id of another widget.
 `Interfaces['slots']` is a record of slot name to what the slot expects
 (a union of plugin types, a `WidgetContract`, or `WidgetChild`), which is
 type-level only; `Interfaces['reasons']` types the `reason` and JSON `details`
 of the diagnostics the plugin reports. The immutable `system.catalog` is a
 passive projection of the registered widget types (`type`, `capabilities`,
 slot names); it does not contain Blueprint or Runtime state. See
-[Migrating from 0.2 to 0.3](https://deviltea.github.io/widget/migration/0.3).
+[Migrating from 0.3 to 0.4](https://deviltea.github.io/widget/migration/0.4).
 
 ## Usage
 
@@ -135,7 +144,7 @@ that aggregates its children.
 
 <!-- sample: usage run -->
 ```typescript
-import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
 
 // 1. Declare the plugin's capabilities.
 interface CounterInterfaces {
@@ -151,20 +160,21 @@ interface CounterInterfaces {
 	}
 }
 
-// 2. Build the plugin through the capability-phase builder.
+// 2. Build the plugin through the capability-phase builder, with the prose of
+//    each definition beside it.
 const counterPlugin = createWidgetPlugin('counter')
-	.description(undocumented)
+	.description('A counter.')
 	.interfaces<CounterInterfaces>()
 	.state(state =>
 		state.count({
-			description: undocumented,
+			description: 'The current count; starts at 0.',
 			validate: (input): input is number => typeof input === 'number',
 			default: () => 0,
 		}),
 	)
 	.properties(properties =>
 		properties.doubled({
-			description: undocumented,
+			description: 'Twice the count.',
 			registerDeps: ({ dep }) => ({
 				count: dep.self.state.get('count'),
 			}),
@@ -177,7 +187,10 @@ const counterPlugin = createWidgetPlugin('counter')
 	.methods(methods =>
 		methods
 			.increment({
-				description: undocumented,
+				description: 'Adds a step to the count.',
+				// One entry per parameter, by position.
+				params: [{ description: 'How much to add.' }],
+				returns: { description: 'The new count.' },
 				validateArgs: (args): args is [number] => args.length === 1 && typeof args[0] === 'number',
 				registerDeps: ({ dep }) => ({
 					count: dep.self.state.get('count'),
@@ -191,7 +204,7 @@ const counterPlugin = createWidgetPlugin('counter')
 				},
 			})
 			.reset({
-				description: undocumented,
+				description: 'Sets the count back to 0.',
 				validateArgs: (args): args is [] => args.length === 0,
 				registerDeps: ({ dep }) => ({
 					setCount: dep.self.state.set('count'),
@@ -305,7 +318,7 @@ Blueprint for inspection.
 
 <!-- sample: document-patch run -->
 ```typescript
-import { createWidgetDocument, createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
+import { createWidgetDocument, createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
 
 interface CounterInterfaces {
 	config: {
@@ -315,10 +328,12 @@ interface CounterInterfaces {
 }
 
 const counterPlugin = createWidgetPlugin('counter')
-	.description(undocumented)
+	.description('A counter.')
 	.interfaces<CounterInterfaces>()
 	.config({
-		description: undocumented,
+		description: 'How the counter counts.',
+		raw: { fields: { step: { description: 'How much one increment adds.' } } },
+		resolved: { fields: { step: { description: 'How much one increment adds.' } } },
 		validate: (input): input is { step: number } =>
 			typeof input === 'object' && input !== null && typeof (input as { step?: unknown }).step === 'number',
 		resolve: rawConfig => ({ step: rawConfig?.step ?? 1 }),
