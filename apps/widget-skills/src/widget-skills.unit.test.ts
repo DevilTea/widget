@@ -174,7 +174,7 @@ describe('emitFullSchema', () => {
 			expect(validateSchema(schema, source), label).not.toEqual([])
 	})
 
-	it('describes each slot with its JSDoc and expectation', () => {
+	it('describes each slot with its description and expectation', () => {
 		const defs = emitFullSchema(ir).$defs as Record<string, JsonSchema>
 		const slots = (defs.widget_Survey!.properties as Record<string, JsonSchema>).slots!.properties as Record<string, JsonSchema>
 		expect(slots.questions)
@@ -423,6 +423,32 @@ describe('shapes: named types behind optional properties, recursion, widget refe
 			.toEqual({ type: 'array', items: { 'type': 'string', 'x-widgetRef': ['Form'], 'description': 'Must be the id of a widget of type Form in the same document.' }, description: 'The Forms that review this one.' })
 		expect(profileViolations(emitLlmSchema(shapesIr)))
 			.toEqual([])
+		// The docs object names the types on the member that holds the list.
+		expect(emitDocs(shapesIr).types.FormRawConfig!.fields!.reviewers!.tags)
+			.toEqual({ widgetRef: 'Form' })
+	})
+
+	it('enforces in validate what the descriptions state', () => {
+		const compile = (config: unknown) => shapesSystem.createBlueprint({ id: 'form', type: 'Form', config } as never)
+		expect(compile(validForm).status)
+			.toBe('valid')
+		const invalid: [string, Record<string, unknown>][] = [
+			['no field', { fields: [] }],
+			['a repeated field', { fields: ['a', 'a'] }],
+			['a field outside the pattern', { fields: ['A'] }],
+			['no weight', { weights: {} }],
+			['nine weights', { weights: Object.fromEntries('abcdefghi'.split('')
+				.map(key => [key, 1])) }],
+			['a weight of 0', { weights: { a: 0 } }],
+			['a pageSize that is not whole', { pageSize: 1.5 }],
+			['a negative retries', { retries: -1 }],
+			['a repeated extra field', { extraFields: ['a', 'a'] }],
+			['no hidden field', { hidden: [] }],
+		]
+		for (const [label, change] of invalid) {
+			expect(compile({ ...validForm, ...change }).status, label)
+				.toBe('invalid')
+		}
 	})
 
 	it('shares the entry of a type documented the same way in two places: the check passes', () => {
@@ -709,6 +735,35 @@ describe('--check', () => {
 			}])
 	})
 
+	it('takes a description written beside a ref as the type\'s, and reports one that differs or that nothing can show', () => {
+		const choiceDescription = 'One option of a choice question.'
+		// The same text as the type docs: it agrees, nothing to report.
+		expect(problemsWith((facts) => {
+			fieldsOf(facts.plugins[2]!.docs!.config!.raw).options!.items = { description: choiceDescription, ref: 'ChoiceOption' }
+		}))
+			.toEqual([])
+		// A different text would have been dropped: it conflicts with the type docs' description.
+		expect(problemsWith((facts) => {
+			fieldsOf(facts.plugins[2]!.docs!.config!.raw).options!.items = { description: 'ONE OPTION', ref: 'ChoiceOption' }
+		}))
+			.toEqual([{
+				kind: 'docs-conflict',
+				severity: 'error',
+				where: 'Choice: config.raw.fields.options.items',
+				message: 'Choice: config.raw.fields.options.items describes ChoiceOption differently from Choice: types.ChoiceOption, and ChoiceOption has one $defs entry.',
+			}])
+		// Rating's raw config is an inline object: a description of it can appear nowhere.
+		expect(problemsWith((facts) => {
+			(facts.plugins[1]!.docs!.config!.raw as { description?: string }).description = 'The raw config of a rating.'
+		}))
+			.toEqual([{
+				kind: 'unused-doc',
+				severity: 'error',
+				where: 'Rating: config.raw',
+				message: 'Rating: config.raw describes a value that is not one named type, so no output shows this description: write it on the field that holds the value, or in the type docs of a named type.',
+			}])
+	})
+
 	it('cannot check without the runtime: no plugin.docs was read', () => {
 		const typesOnly = structuredClone(ir)
 		typesOnly.prose = false
@@ -785,6 +840,37 @@ describe('the committed example output', () => {
 		expect(onDisk.sort())
 			.toEqual(Object.keys(files)
 				.sort())
+	})
+
+	it('enforces in validate every constraint its descriptions state, which the schema no longer carries', () => {
+		const slots = example.slots as Record<string, Record<string, unknown>[]>
+		const [overall, topics] = slots.questions as [Record<string, any>, Record<string, any>]
+		const withQuestion = (index: 0 | 1, config: Record<string, unknown>): unknown => {
+			const questions = [overall, topics].map(question => structuredClone(question))
+			questions[index]!.config = { ...questions[index]!.config, ...config }
+			return { ...example, slots: { ...slots, questions } }
+		}
+		const option = (id: string) => ({ id, label: { en: id } })
+		const cases: [string, unknown, string][] = [
+			['maxQuestions above 20', { ...example, config: { ...(example.config as object), maxQuestions: 99 } }, 'survey'],
+			['maxQuestions below 1', { ...example, config: { ...(example.config as object), maxQuestions: 0 } }, 'survey'],
+			['a submitUrl that is not a URI', { ...example, config: { ...(example.config as object), submitUrl: 'not a uri' } }, 'survey'],
+			['a scale above 10', withQuestion(0, { scale: 99 }), 'overall'],
+			['a scale below 3', withQuestion(0, { scale: 2 }), 'overall'],
+			['a single option', withQuestion(1, { options: [option('plugins')] }), 'topics'],
+			['an option id outside the pattern', withQuestion(1, { options: [option('BAD ID'), option('renderers')] }), 'topics'],
+			['an option id used twice', withQuestion(1, { options: [option('plugins'), option('plugins')] }), 'topics'],
+		]
+		for (const [label, source, widget] of cases) {
+			// The schema states the shape only, so it accepts each of these; the plugin's validate refuses them.
+			expect(validateSchema(emitFullSchema(ir), source), label)
+				.toEqual([])
+			const blueprint = surveySystem.createBlueprint(structuredClone(source) as never)
+			expect(blueprint.status, label)
+				.toBe('invalid')
+			expect(blueprint.diagnostics.map(diagnostic => [diagnostic.code, (diagnostic.location as { node?: { id?: string } }).node?.id]), label)
+				.toContainEqual(['invalid-widget-config', widget])
+		}
 	})
 
 	it('shows an example document that compiles without diagnostics', () => {

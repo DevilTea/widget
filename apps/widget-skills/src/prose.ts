@@ -277,11 +277,23 @@ export function applyPluginDocs(ir: SystemIr, runtime: RuntimeFacts): void {
 	 * Applies the nested docs `node` to the value `shape` at `site`. `waived`: the description there is `undocumented`, so
 	 * nested docs may be left out. `describesType`: the node's description describes the value's type itself.
 	 * `checkKeys`: report field names the shape does not have (inline docs are checked where they are written).
+	 * `elementKept`: the description was kept as an array's items or a dictionary's values description (`elementDoc`).
 	 */
-	const apply = (node: DocsNode | null | undefined, shape: Shape, site: Site, options: { waived: boolean, describesType: boolean, checkKeys: boolean, plugin: PluginDocsData }): void => {
+	const apply = (node: DocsNode | null | undefined, shape: Shape, site: Site, options: { waived: boolean, describesType: boolean, checkKeys: boolean, plugin: PluginDocsData, elementKept?: boolean }): void => {
 		if (node === null || node === undefined)
 			return
 		const waived = options.waived || node.description === null
+		// A description at a position that holds a value's type (`raw`, `resolved`, `items`, `values`, `details`) describes
+		// that type: it goes to the one named type there (beside its type docs, if a `ref` names them, where a different
+		// text is a `docs-conflict`), or to the items or values description. Anything else no output can show: reported.
+		const typeNames = membersOf(shape)
+			.filter((member): member is Extract<Shape, { kind: 'ref' }> => member.kind === 'ref')
+		if (options.describesType && typeof node.description === 'string') {
+			if (typeNames.length === 1)
+				addCandidate(typeNames[0]!.name, { description: node.description, node: {}, site, waived: false, checkKeys: false, typeDocs: null })
+			else if (options.elementKept !== true)
+				issue('unused-doc', site, `${where(site)} describes a value that is not one named type, so no output shows this description: write it on the field that holds the value, or in the type docs of a named type.`)
+		}
 		if (node.ref !== undefined) {
 			const typeDocs = options.plugin.types[node.ref]
 			if (typeDocs === undefined) {
@@ -306,7 +318,8 @@ export function applyPluginDocs(ir: SystemIr, runtime: RuntimeFacts): void {
 		const named = members.filter((member): member is Extract<Shape, { kind: 'ref' }> => member.kind === 'ref')
 		for (const member of named) {
 			addCandidate(member.name, {
-				description: options.describesType && named.length === 1 ? node.description : undefined,
+				// A `null` (undocumented) description is the type's too; a string one was added above.
+				description: options.describesType && named.length === 1 && node.description === null ? null : undefined,
 				node,
 				site,
 				waived,
@@ -353,7 +366,7 @@ export function applyPluginDocs(ir: SystemIr, runtime: RuntimeFacts): void {
 					const additionalDoc = elementDoc(node.values, member.additional)
 					if (additionalDoc !== undefined)
 						member.additionalDoc = additionalDoc
-					apply(node.values, member.additional, child(site, 'values'), { waived: options.waived, describesType: true, checkKeys: true, plugin: options.plugin })
+					apply(node.values, member.additional, child(site, 'values'), { waived: options.waived, describesType: true, checkKeys: true, plugin: options.plugin, elementKept: additionalDoc !== undefined })
 					continue
 				}
 				for (const property of member.properties) {
@@ -376,13 +389,13 @@ export function applyPluginDocs(ir: SystemIr, runtime: RuntimeFacts): void {
 				const itemsDoc = elementDoc(node.items, member.items)
 				if (itemsDoc !== undefined)
 					member.itemsDoc = itemsDoc
-				apply(node.items, member.items, child(site, 'items'), { waived: options.waived, describesType: true, checkKeys: true, plugin: options.plugin })
+				apply(node.items, member.items, child(site, 'items'), { waived: options.waived, describesType: true, checkKeys: true, plugin: options.plugin, elementKept: itemsDoc !== undefined })
 			}
 			else if (member.kind === 'record') {
 				const valuesDoc = elementDoc(node.values, member.value)
 				if (valuesDoc !== undefined)
 					member.valuesDoc = valuesDoc
-				apply(node.values, member.value, child(site, 'values'), { waived: options.waived, describesType: true, checkKeys: true, plugin: options.plugin })
+				apply(node.values, member.value, child(site, 'values'), { waived: options.waived, describesType: true, checkKeys: true, plugin: options.plugin, elementKept: valuesDoc !== undefined })
 			}
 		}
 	}

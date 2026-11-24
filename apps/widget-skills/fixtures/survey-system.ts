@@ -51,6 +51,19 @@ function isI18nText(input: unknown): input is I18nText {
 	return isObject(input) && Object.values(input)
 		.every(value => typeof value === 'string')
 }
+const isNumberFrom = (input: unknown, min: number, max: number): boolean => typeof input === 'number' && input >= min && input <= max
+function isUri(input: unknown): boolean {
+	if (typeof input !== 'string')
+		return false
+	try {
+		void new URL(input)
+		return true
+	}
+	catch {
+		return false
+	}
+}
+const OPTION_ID = /^[a-z][a-z0-9-]*$/
 
 // -------------------------------------------------------------------------------------------------
 // Survey (root)
@@ -119,7 +132,12 @@ export const SurveyPlugin = createWidgetPlugin('Survey')
 				ctx.addDiagnostic({ message: 'The title has no language.', path: ['title'], reason: 'empty-title' })
 				return false
 			}
-			return true
+			// What the field docs state, enforced here: the schema has the shape only.
+			if (input.maxQuestions !== undefined && !isNumberFrom(input.maxQuestions, 1, 20))
+				ctx.addDiagnostic({ message: 'maxQuestions must be a number from 1 to 20.', path: ['maxQuestions'] })
+			if (input.submitUrl !== undefined && !isUri(input.submitUrl))
+				ctx.addDiagnostic({ message: 'submitUrl must be a URI.', path: ['submitUrl'] })
+			return !ctx.hasAnyDiagnostic()
 		},
 		resolve: raw => ({ title: raw?.title ?? {}, maxQuestions: raw?.maxQuestions ?? 10, submitUrl: raw?.submitUrl ?? null }),
 	})
@@ -237,6 +255,10 @@ export const RatingPlugin = createWidgetPlugin('Rating')
 				ctx.addDiagnostic({ message: 'A rating needs a question per language.', path: ['question'] })
 				return false
 			}
+			if (input.scale !== undefined && !isNumberFrom(input.scale, 3, 10)) {
+				ctx.addDiagnostic({ message: 'scale must be a number from 3 to 10.', path: ['scale'] })
+				return false
+			}
 			return true
 		},
 		resolve: raw => ({ question: raw?.question ?? {}, scale: raw?.scale ?? 5 }),
@@ -350,7 +372,20 @@ export const ChoicePlugin = createWidgetPlugin('Choice')
 				ctx.addDiagnostic({ message: 'A choice needs a question and a list of options.' })
 				return false
 			}
-			return true
+			if (input.options.length < 2)
+				ctx.addDiagnostic({ message: 'A choice needs at least two options.', path: ['options'] })
+			const ids = new Set<unknown>()
+			input.options.forEach((option: unknown, index: number) => {
+				const id = isObject(option) ? option.id : undefined
+				if (typeof id !== 'string' || !OPTION_ID.test(id))
+					ctx.addDiagnostic({ message: 'An option id is a lowercase letter, then lowercase letters, digits or hyphens.', path: ['options', index, 'id'] })
+				else if (ids.has(id))
+					ctx.addDiagnostic({ message: `The option id "${id}" is used twice.`, path: ['options', index, 'id'] })
+				ids.add(id)
+				if (!isObject(option) || !isI18nText(option.label))
+					ctx.addDiagnostic({ message: 'An option needs a label per language.', path: ['options', index, 'label'] })
+			})
+			return !ctx.hasAnyDiagnostic()
 		},
 		resolve: raw => ({ question: raw?.question ?? {}, options: raw?.options ?? [], multiple: raw?.multiple ?? false, followUp: raw?.followUp ?? null }),
 	})

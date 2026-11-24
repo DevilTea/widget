@@ -43,7 +43,7 @@ export const CounterPlugin = createWidgetPlugin('Counter')
 	})
 	.slots({ items: { description: undocumented }, labelled: { description: 'Children that expose a label; any plugin type.' } })
 	.state(state => state
-		.count({ description: 'The current count, at least 0.', validate: isNumber, default: () => 0 })
+		.count({ description: 'The current count, at least 0.', validate: (input): input is number => isNumber(input) && input >= 0, default: () => 0 })
 		.step({ description: undocumented, validate: isNumber, default: () => 1 })
 		.limit({ description: 'The largest count.', validate: isNumber, default: () => 10 }))
 	.methods(methods => methods

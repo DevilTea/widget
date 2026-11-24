@@ -10,11 +10,11 @@ import { emitConfigSchema, widgetRefOf } from './schema'
 
 /**
  * The text of one member. The prose is its description from `plugin.docs`, split into the first paragraph and the rest;
- * `tags` holds `widgetRef` (`A | B`) when the member's value is a `WidgetRef<'A' | 'B'>`. The other keys keep the shape
+ * `tags` holds `widgetRef` (`A | B`) when the member's value is a `WidgetRef<'A' | 'B'>`, or a list or dictionary of them. The other keys keep the shape
  * of the docs object and stay empty: the JSDoc tags they were read from are retired.
  */
 function text(doc: Doc, shape?: Shape): WidgetDocsText {
-	const widgetRef = shape === undefined ? null : widgetRefOf(shape)
+	const widgetRef = shape === undefined ? null : widgetRefsIn(shape)
 	return {
 		summary: doc.summary,
 		remarks: doc.remarks,
@@ -24,6 +24,24 @@ function text(doc: Doc, shape?: Shape): WidgetDocsText {
 		see: [],
 		defaultValue: null,
 	}
+}
+
+/**
+ * The plugin types a member's value names as widget references: the value itself (through `| null`), or each item of a
+ * list or each value of a dictionary of references. `null` for anything else.
+ */
+function widgetRefsIn(shape: Shape): string[] | null {
+	const direct = widgetRefOf(shape)
+	if (direct !== null)
+		return direct
+	const container = shape.kind === 'union' && shape.members.filter(member => member.kind !== 'null').length === 1
+		? shape.members.find(member => member.kind !== 'null')!
+		: shape
+	if (container.kind === 'array')
+		return widgetRefOf(container.items)
+	if (container.kind === 'record')
+		return widgetRefOf(container.value)
+	return null
 }
 
 function namedType(type: NamedType): WidgetDocsNamedType {

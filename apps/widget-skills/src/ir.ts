@@ -158,10 +158,13 @@ export interface DocsIssue {
 	 * - `missing-doc`: the types declare a member, field or position the docs do not document;
 	 * - `name-mismatch`: the docs name a member, field or position the types do not have, or a `ref` names type docs
 	 *   whose name differs from the type's;
-	 * - `docs-conflict`: one named type is documented differently in two places (two type docs with one name, or two
-	 *   inline docs of the same type), so its single `$defs` entry cannot hold both.
+	 * - `docs-conflict`: one named type is documented differently in two places (two type docs with one name, two
+	 *   inline docs of the same type, or a description beside a `ref` that differs from its type docs), so its single
+	 *   `$defs` entry cannot hold both;
+	 * - `unused-doc`: a description at a position that holds a type (`raw`, `resolved`, `items`, `values`, `details`) whose
+	 *   value is not one named type and is not kept as an items or values description, so no output could show it.
 	 */
-	kind: 'undocumented' | 'missing-doc' | 'name-mismatch' | 'docs-conflict'
+	kind: 'undocumented' | 'missing-doc' | 'name-mismatch' | 'docs-conflict' | 'unused-doc'
 	/** The plugin type and the path in its `plugin.docs`, for example `Survey: config.raw.fields.title`. */
 	where: string
 	message: string

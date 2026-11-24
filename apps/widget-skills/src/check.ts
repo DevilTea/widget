@@ -8,7 +8,8 @@
  *   the types and `plugin.docs` disagree on (every section, Methods included, field names, the number of parameters or
  *   payload positions, and the name of the type docs a `ref` names);
  * - `docs-conflict`: a named type documented differently in two places (two type docs with one name, or two inline
- *   docs of the same type), so its one `$defs` entry cannot hold both;
+ *   docs of the same type, or a description beside a `ref` that differs from its type docs), so its one `$defs` entry cannot hold both;
+ * - `unused-doc`: a description no output can show (at `raw`, `resolved` or `details` of a value that is not one named type);
  * - `no-docs`: the System was not imported (`--no-runtime`, `runtime: false`), so no prose was read at all.
  *
  * The prose is read from `plugin.docs` (`prose.ts`); JSDoc is not read.
@@ -17,7 +18,7 @@
 import type { SystemIr } from './ir'
 
 export interface CheckProblem {
-	kind: 'undocumented' | 'missing-doc' | 'name-mismatch' | 'docs-conflict' | 'no-docs'
+	kind: 'undocumented' | 'missing-doc' | 'name-mismatch' | 'docs-conflict' | 'unused-doc' | 'no-docs'
 	severity: 'error' | 'warning'
 	/** For example `Survey: config.raw.fields.title`, or `Survey.slots` for a runtime name mismatch. */
 	where: string
