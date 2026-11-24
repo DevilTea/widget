@@ -720,8 +720,10 @@ test.describe('a config that is not an object, or is missing', () => {
 			.click()
 		await expect(page.getByTestId('author-command-outcome'))
 			.toContainText('Change applied')
+		// The generated schema states the shape only (0.4): "at least one language" is prose, so the new list starts empty and
+		// Core reports it.
 		expect(JSON.parse(await page.evaluate(() => (window as unknown as LabTestWindow).__WIDGET_LAB_TEST__!.getDocumentSourceText())).config)
-			.toEqual({ languages: ['en'] })
+			.toEqual({ languages: [] })
 	})
 
 	test('a widget without a config gets one from its first field, and a refused edit says what is wrong', async ({ page }) => {
