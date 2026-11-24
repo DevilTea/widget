@@ -262,17 +262,19 @@ export type TypeDocs<T> = TypeDocsInput<T> & {
 
 /**
  * `Docs` with every key that `Expected` does not have replaced by a {@link WidgetDocsKeyViolation}, at every depth: rejects
- * an unknown key, also one that arrives through a spread or a variable. A `ref` is checked by its own type.
+ * an unknown key, also one that arrives through a spread or a variable. Where `Expected` takes a `ref` (a value with an
+ * object part), the `ref` is checked by its own type and not walked into; where it does not (a primitive, a literal
+ * union, a `WidgetRef`, a built-in object), `ref` is an unknown key like any other.
  */
 type ExactDocs<Expected, Docs> = Docs extends string | AnyFunction
 	? Docs
 	: Docs extends object
 		? {
-				readonly [Key in keyof Docs]: Key extends 'ref'
-					? Docs[Key]
-					: Key extends KeysOfUnion<Exclude<Expected, string>>
-						? ExactDocs<ValueAt<Exclude<Expected, string>, Key>, Docs[Key]>
-						: WidgetDocsKeyViolation<Key & string>
+				readonly [Key in keyof Docs]: Key extends KeysOfUnion<Exclude<Expected, string>>
+					? Key extends 'ref'
+						? Docs[Key]
+						: ExactDocs<ValueAt<Exclude<Expected, string>, Key>, Docs[Key]>
+					: WidgetDocsKeyViolation<Key & string>
 			}
 		: Docs
 

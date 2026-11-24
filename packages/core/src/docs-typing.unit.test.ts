@@ -209,6 +209,119 @@ describe('field docs are required-complete', () => {
 			.toBeTypeOf('function')
 	})
 
+	it('takes a `ref` only where the value has an object part, also through `defineFieldDocs`', () => {
+		interface Point { readonly x: number }
+		const pointDocs = defineTypeDocs<Point>('Point', { description: 'A point.', fields: { x: { description: 'X.' } } })
+		type RoundStep = 0.01 | 0.05 | 1
+		const roundStepDocs = defineTypeDocs<RoundStep>('RoundStep', { description: 'A rounding step.' })
+		interface Leaves {
+			readonly title: string
+			readonly step: RoundStep
+			readonly target: WidgetRef<'Rating'>
+			readonly at: Date
+			readonly tags: readonly string[]
+			readonly labels: Readonly<Record<string, string>>
+		}
+		const leafDocs = {
+			title: { description: 'The title.' },
+			step: { description: 'The step.' },
+			target: { description: 'The rated question.' },
+			at: { description: 'When.' },
+			tags: { description: 'The tags.' },
+			labels: { description: 'The labels, by language.' },
+		} as const
+
+		// A valid `ref` still passes, in every position that holds an object part: a field (a closed object, a
+		// union with a primitive, a thunk), `items`, `values` and the value itself.
+		interface Refs {
+			readonly point: Point
+			readonly required?: boolean | Condition
+			readonly maybe: Point | null
+			readonly points: readonly Point[]
+			readonly byId: Readonly<Record<string, Point>>
+		}
+		const refs = defineFieldDocs<Refs>()({
+			fields: {
+				point: { description: 'A point.', ref: pointDocs },
+				required: { description: 'Required, fixed or on a condition.', ref: () => conditionDocs },
+				maybe: { description: 'A point or none.', ref: pointDocs },
+				points: { description: 'The points.', items: { ref: pointDocs } },
+				byId: { description: 'The points, by id.', values: { description: 'One point.', ref: pointDocs } },
+			},
+		})
+		const whole = defineFieldDocs<Point>()({ description: 'A point.', ref: pointDocs })
+		const leaves = defineFieldDocs<Leaves>()({ fields: leafDocs })
+
+		const typeOnly = () => {
+			// A field whose type has no object part takes no `ref`: a primitive, a literal alias, a `WidgetRef`, a
+			// built-in object.
+			// @ts-expect-error `title` is a string
+			const onString = defineFieldDocs<Leaves>()({ fields: { ...leafDocs, title: { description: 'The title.', ref: pointDocs } } })
+			// @ts-expect-error `step` is a literal union
+			const onLiteral = defineFieldDocs<Leaves>()({ fields: { ...leafDocs, step: { description: 'The step.', ref: roundStepDocs } } })
+			// @ts-expect-error `target` is a widget reference
+			const onWidgetRef = defineFieldDocs<Leaves>()({ fields: { ...leafDocs, target: { description: 'The question.', ref: pointDocs } } })
+			// @ts-expect-error `at` is a built-in object
+			const onDate = defineFieldDocs<Leaves>()({ fields: { ...leafDocs, at: { description: 'When.', ref: pointDocs } } })
+			// The element of an array and the value of a dictionary, when they have no object part.
+			// @ts-expect-error the items of `tags` are strings
+			const onItems = defineFieldDocs<Leaves>()({ fields: { ...leafDocs, tags: { description: 'The tags.', items: { description: 'One tag.', ref: pointDocs } } } })
+			// @ts-expect-error the values of `labels` are strings
+			const onValues = defineFieldDocs<Leaves>()({ fields: { ...leafDocs, labels: { description: 'The labels.', values: { description: 'One label.', ref: pointDocs } } } })
+			// The value itself: what `config.raw`, `config.resolved`, a reason's `details`, a parameter, a return value
+			// or a payload position receives.
+			// @ts-expect-error a number has no object part
+			const onValue = defineFieldDocs<number>()({ description: 'A count.', ref: pointDocs })
+			// The same `ref` arriving through a variable.
+			const stale = { title: { description: 'The title.', ref: pointDocs } }
+			// @ts-expect-error `title` is a string
+			const throughVariable = defineFieldDocs<Leaves>()({ fields: { ...leafDocs, ...stale } })
+
+			// A literal written in place in the builder is rejected too, in each position a `ref` can reach.
+			interface LeavesInterfaces {
+				config: { raw: { title: string }, resolved: { title: string } }
+				methods: { add: (amount: number) => number }
+				events: { added: [amount: number] }
+				reasons: { 'too-large': number }
+			}
+			const plugin = createWidgetPlugin('leaves')
+				.description('Leaves.')
+				.interfaces<LeavesInterfaces>()
+				.config({
+					description: 'The leaves.',
+					// @ts-expect-error `title` is a string
+					raw: { fields: { title: { description: 'The title.', ref: pointDocs } } },
+					resolved: { fields: { title: { description: 'The title.' } } },
+					validate: (input): input is { title: string } => typeof input === 'object',
+					resolve: raw => raw ?? { title: '' },
+				})
+				.methods(methods => methods.add({
+					description: 'Adds.',
+					// @ts-expect-error a number parameter
+					params: [{ description: 'How much.', ref: pointDocs }],
+					// @ts-expect-error a number result
+					returns: { description: 'The sum.', ref: pointDocs },
+					validateArgs: (args): args is [number] => args.length === 1,
+					execute: ({ args: [amount] }) => amount,
+				}))
+				.events({
+					// @ts-expect-error a number payload position
+					added: { description: 'Added.', payload: [{ description: 'How much.', ref: pointDocs }] },
+				})
+				.reasons({
+					// @ts-expect-error a number payload
+					'too-large': { description: 'Too large.', details: { description: 'The maximum.', ref: pointDocs } },
+				})
+				.done()
+			return [onString, onLiteral, onWidgetRef, onDate, onItems, onValues, onValue, throughVariable, plugin]
+		}
+
+		expect([refs.fields.point.ref, whole.ref, Object.keys(leaves.fields)])
+			.toEqual([pointDocs, pointDocs, ['title', 'step', 'target', 'at', 'tags', 'labels']])
+		expect(typeOnly)
+			.toBeTypeOf('function')
+	})
+
 	it('accepts `undocumented` for a whole docs value, and as a description that waives the nested docs', () => {
 		const whole: FieldDocs<StyleRawConfig> = undocumented
 		const fields: FieldDocs<StyleRawConfig> = { fields: { theme: undocumented, papers: { description: undocumented } } }
