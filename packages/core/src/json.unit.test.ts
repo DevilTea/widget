@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as publicApi from './index'
-import { createWidgetPlugin, createWidgetSystem } from './index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from './index'
 import { inspectJsonValue, isJsonValue, jsonEqual } from './json'
 
 describe('authored JSON runtime domain', () => {
@@ -66,6 +66,7 @@ describe('authored JSON runtime domain', () => {
 
 	it('keeps the Blueprint source proof false for forged symbol and named-array material', () => {
 		const plugin = createWidgetPlugin('leaf')
+			.description(undocumented)
 			.interfaces<Record<never, never>>()
 			.done()
 		const system = createWidgetSystem({ plugins: [plugin] })
@@ -183,6 +184,7 @@ describe('authored JSON runtime domain', () => {
 
 	it('retains source-level JSON facts only on the Blueprint aggregate', () => {
 		const plugin = createWidgetPlugin('leaf')
+			.description(undocumented)
 			.interfaces<Record<never, never>>()
 			.done()
 		const system = createWidgetSystem({ plugins: [plugin] })
@@ -216,6 +218,7 @@ describe('authored JSON runtime domain', () => {
 
 	it('publishes source-access-failed on a Blueprint when exact-source inspection is unproven', () => {
 		const plugin = createWidgetPlugin('leaf')
+			.description(undocumented)
 			.interfaces<Record<never, never>>()
 			.done()
 		const system = createWidgetSystem({ plugins: [plugin] })

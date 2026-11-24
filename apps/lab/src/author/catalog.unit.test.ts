@@ -1,6 +1,6 @@
 import type { WidgetChild, WidgetInterfaces } from '@deviltea/widget-core'
 import type { WidgetDocs } from './widget-docs'
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 import sandboxDocs from 'virtual:widget-docs/sandbox'
 import { describe, expect, it } from 'vitest'
 import { sandboxSystem } from '../sandbox/system'
@@ -21,20 +21,23 @@ const schema = {
 } as const
 
 const PanelPlugin = createWidgetPlugin('Panel')
+	.description(undocumented)
 	.interfaces<PanelInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input): input is { label?: string } => typeof input === 'object' && input !== null,
 		resolve: raw => ({ label: raw?.label ?? '' }),
 	})
-	.slots({ body: {} })
+	.slots({ body: { description: undocumented } })
 	.methods(methods => methods.close({
+		description: undocumented,
 		validateArgs: (args): args is [] => args.length === 0,
 		emits: ['closed'],
 		execute: ({ emit }) => {
 			emit.closed('done')
 		},
 	}))
-	.events(['closed', 'opened'])
+	.events({ closed: undocumented, opened: undocumented })
 	.done()
 
 const fixtureSystem = createWidgetSystem({ plugins: [PanelPlugin] as const })

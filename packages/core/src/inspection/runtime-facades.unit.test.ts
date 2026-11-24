@@ -7,7 +7,7 @@
 
 import { effect } from 'alien-signals'
 import { describe, expect, it, vi } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 import { inspectBlueprint, inspectRuntime } from './index'
 
 type ControlledMode = 'ok' | 'fail' | 'throw' | 'thenable'
@@ -41,12 +41,15 @@ function createHarness() {
 	let controlledValue = 1
 
 	const plugin = createWidgetPlugin('runtime-facade-harness')
+		.description(undocumented)
 		.interfaces<HarnessInterfaces>()
 		.state(state => state.count({
+			description: undocumented,
 			validate: (input): input is number => typeof input === 'number',
 			default: () => 0,
 		}))
 		.properties(properties => properties.controlled({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ count: dep.self.state.get('count') }),
 			compute: ({ deps, addDiagnostic }) => {
 				computeSpyCount++
@@ -164,12 +167,15 @@ describe('property inspection subscribe truth table', () => {
 			nested: { count: 0 },
 		}
 		const plugin = createWidgetPlugin('mutable-property-payload')
+			.description(undocumented)
 			.interfaces<MutablePropertyInterfaces>()
 			.state(state => state.count({
+				description: undocumented,
 				validate: (input): input is number => typeof input === 'number',
 				default: () => 0,
 			}))
 			.properties(properties => properties.payload({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ count: dep.self.state.get('count') }),
 				compute: ({ deps }) => {
 					deps.count()

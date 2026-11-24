@@ -17,7 +17,7 @@ import type { WidgetChild, WidgetInterfaces } from '@deviltea/widget-core'
 import type { InspectorClient } from '@deviltea/widget-inspector/client'
 import type { InspectorRequestMethod, InspectorRequestParams, InspectorRequestResult, WidgetRef } from '@deviltea/widget-inspector/protocol'
 import type { App } from 'vue'
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 import { createInspectorAgent } from '@deviltea/widget-inspector/agent'
 import { inspectAnchorAttributes } from '@deviltea/widget-inspector/anchor'
 import { createInspectorClient } from '@deviltea/widget-inspector/client'
@@ -36,23 +36,28 @@ interface LeafInterfaces extends WidgetInterfaces {
 }
 
 const ShellPlugin = createWidgetPlugin('Shell')
+	.description(undocumented)
 	.interfaces<SlotInterfaces>()
-	.slots({ body: {} })
+	.slots({ body: { description: undocumented } })
 	.done()
 
 const PanelPlugin = createWidgetPlugin('Panel')
+	.description(undocumented)
 	.interfaces<SlotInterfaces>()
-	.slots({ body: {} })
+	.slots({ body: { description: undocumented } })
 	.done()
 
 const FloaterPlugin = createWidgetPlugin('Floater')
+	.description(undocumented)
 	.interfaces<SlotInterfaces>()
-	.slots({ body: {} })
+	.slots({ body: { description: undocumented } })
 	.done()
 
 const LeafPlugin = createWidgetPlugin('Leaf')
+	.description(undocumented)
 	.interfaces<LeafInterfaces>()
 	.state(state => state.mode({
+		description: undocumented,
 		validate: (input): input is LeafMode => input === 'visible' || input === 'hidden' || input === 'replaced' || input === 'fragments' || input === 'wrapped',
 		default: () => 'visible',
 	}))

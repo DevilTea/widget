@@ -28,9 +28,9 @@ const expectations: Record<string, DocumentExpectation> = {
 	// 17 samples written against the published 0.0.6. The 20 that were compiled against the workspace packages are
 	// historical since 0.3 (written against 0.1) and are marked `skip`.
 	'docs/site/migration/0.1.md': { before: 17, after: 0, run: 0, unmarked: 0 },
-	// The Core section of the 0.3 guide; the Inspector and Vue sections are added by their own changes.
-	'docs/site/migration/0.3.md': { before: 6, after: 6, run: 0, unmarked: 0 },
-	'docs/site/packages/widget-core.md': { before: 0, after: 1, run: 27, unmarked: 28 },
+	// The 0.3 guide's samples are historical since 0.4 (written against 0.3, no longer compiled) and are marked `skip`.
+	'docs/site/migration/0.3.md': { before: 6, after: 0, run: 0, unmarked: 0 },
+	'docs/site/packages/widget-core.md': { before: 0, after: 1, run: 28, unmarked: 28 },
 	'packages/core/README.md': { before: 0, after: 0, run: 3, unmarked: 3 },
 	// No marked sample yet: these pages hold unmarked fragments only.
 	'docs/site/packages/widget-vue.md': { before: 0, after: 0, run: 0, unmarked: 11 },

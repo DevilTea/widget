@@ -22,7 +22,7 @@
 
 import type { JsonValue } from '../index'
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 
 interface ContractInterfaces {
 	state: {
@@ -39,13 +39,16 @@ interface ContractInterfaces {
 
 function createContractPlugin() {
 	return createWidgetPlugin('contract')
+		.description(undocumented)
 		.interfaces<ContractInterfaces>()
 		.state(section => section
 			.count({
+				description: undocumented,
 				validate: (input): input is number => typeof input === 'number',
 				default: () => 0,
 			})
 			.crashy({
+				description: undocumented,
 				validate: (input): input is number => {
 					if (input === 'THROW')
 						throw new Error('state.validate boom')
@@ -55,12 +58,14 @@ function createContractPlugin() {
 			}))
 		.properties(section => section
 			.crashingDouble({
+				description: undocumented,
 				compute: () => {
 					throw new Error('property.compute boom')
 				},
 			}))
 		.methods(section => section
 			.crash({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ setCount: dep.self.state.set('count') }),
 				validateArgs: (args): args is [string] => typeof args[0] === 'string',
 				execute: ({ args, deps, addDiagnostic }) => {
@@ -224,8 +229,10 @@ describe('blueprint creation-time callback throw', () => {
 		}
 
 		const plugin = createWidgetPlugin('config-throws')
+			.description(undocumented)
 			.interfaces<ConfigThrowInterfaces>()
 			.config({
+				description: undocumented,
 				validate: (input): input is Record<string, JsonValue> => {
 					if (typeof input === 'object' && input !== null && (input as Record<string, JsonValue>).mode === 'THROW')
 						throw new Error('config.validate boom')
@@ -256,8 +263,10 @@ describe('runtime creation-time callback throw', () => {
 		}
 
 		const plugin = createWidgetPlugin('default-throws')
+			.description(undocumented)
 			.interfaces<DefaultThrowInterfaces>()
 			.state(section => section.count({
+				description: undocumented,
 				validate: (input): input is number => typeof input === 'number',
 				default: () => {
 					throw new Error('state.default boom')
@@ -290,8 +299,10 @@ describe('semantic callback returning a thenable is an implementation contract v
 		}
 
 		const plugin = createWidgetPlugin('async-method-violation')
+			.description(undocumented)
 			.interfaces<AsyncMethodInterfaces>()
 			.methods(section => section.run({
+				description: undocumented,
 				validateArgs: (args): args is [] => args.length === 0,
 				// Deliberately lies about its declared synchronous return type to simulate a
 				// misbehaving plugin implementation, per diagnostic #10 consolidated handoff §16.
@@ -331,8 +342,10 @@ describe('semantic callback returning a thenable is an implementation contract v
 		}
 
 		const plugin = createWidgetPlugin('async-property-violation')
+			.description(undocumented)
 			.interfaces<AsyncPropertyInterfaces>()
 			.properties(section => section.value({
+				description: undocumented,
 				// Same deliberate lie as above, on a Property's `compute` this time.
 				compute: () => Promise.resolve(2) as unknown as number,
 			}))

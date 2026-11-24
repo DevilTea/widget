@@ -6,7 +6,7 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { SafetyConfig, SafetyRawConfig, SafetyRuleRaw } from '../config'
 import type { I18nText } from '../domain'
-import { createWidgetPlugin } from '@deviltea/widget-core'
+import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
 import { checkSafetyConfig, resolveSafetyConfig } from '../config'
 import { isStringArray } from '../domain'
 import { checkInsideOnboarding } from './structure'
@@ -38,8 +38,10 @@ export interface SafetyInterfaces extends WidgetInterfaces {
 }
 
 export const SafetyStepPlugin = createWidgetPlugin('SafetyStep')
+	.description(undocumented)
 	.interfaces<SafetyInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input, ctx): input is SafetyRawConfig => {
 			checkSafetyConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -48,6 +50,7 @@ export const SafetyStepPlugin = createWidgetPlugin('SafetyStep')
 	})
 	.structure(ctx => checkInsideOnboarding(ctx, 'SafetyStep'))
 	.state(state => state.acknowledged({
+		description: undocumented,
 		validate: (input, ctx): input is readonly string[] => {
 			if (!isStringArray(input))
 				return false
@@ -58,9 +61,10 @@ export const SafetyStepPlugin = createWidgetPlugin('SafetyStep')
 			.filter(id => config.acknowledged.includes(id)),
 	}))
 	.properties(properties => properties
-		.title({ compute: ({ config }) => config.title })
-		.rules({ compute: ({ config }) => config.rules })
+		.title({ description: undocumented, compute: ({ config }) => config.title })
+		.rules({ description: undocumented, compute: ({ config }) => config.rules })
 		.missing({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ acknowledged: dep.self.state.get('acknowledged') }),
 			compute: ({ deps, config }) => {
 				const acknowledged = deps.acknowledged()
@@ -70,6 +74,7 @@ export const SafetyStepPlugin = createWidgetPlugin('SafetyStep')
 			},
 		})
 		.complete({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ missing: dep.self.properties.get('missing') }),
 			compute: ({ deps }) => {
 				const missing = deps.missing()
@@ -77,6 +82,7 @@ export const SafetyStepPlugin = createWidgetPlugin('SafetyStep')
 			},
 		})
 		.answers({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ acknowledged: dep.self.state.get('acknowledged') }),
 			compute: ({ deps }) => {
 				const acknowledged = deps.acknowledged()

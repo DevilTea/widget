@@ -9,7 +9,7 @@ import { createStar, rootPlugin } from '../lib/star.mjs'
 import { counter, freshBatch, SIZES, treeOf } from './common.mjs'
 
 const core = await loadCore()
-const { createWidgetPlugin, createWidgetSystem } = core
+const { createWidgetPlugin, createWidgetSystem, undocumented } = core
 
 // ------------------------------------------------------------------------------------------------
 // Small purpose-built systems
@@ -18,12 +18,14 @@ const { createWidgetPlugin, createWidgetSystem } = core
 /** One State `x`, then L Properties c0..c{L-1}, each depending on the previous one. */
 function createChain(length) {
 	const chain = createWidgetPlugin('chain')
+		.description(undocumented)
 		.interfaces()
-		.state(s => s.x({ validate: v => typeof v === 'number', default: () => 0 }))
+		.state(s => s.x({ description: undocumented, validate: v => typeof v === 'number', default: () => 0 }))
 		.properties((s) => {
 			let t = s
 			for (let i = 0; i < length; i++) {
 				t = t[`c${i}`]({
+					description: undocumented,
 					registerDeps: ({ dep }) => ({ prev: i === 0 ? dep.self.state.get('x') : dep.self.properties.get(`c${i - 1}`) }),
 					compute: ({ deps }) => {
 						const r = deps.prev()
@@ -44,8 +46,10 @@ function createChain(length) {
 /** N `checked` widgets whose State reports a diagnostic for a negative value. */
 function createChecked(n) {
 	const checked = createWidgetPlugin('checked')
+		.description(undocumented)
 		.interfaces()
 		.state(s => s.v({
+			description: undocumented,
 			validate: (input, ctx) => {
 				if (typeof input !== 'number')
 					return false

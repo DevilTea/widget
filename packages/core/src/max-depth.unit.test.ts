@@ -6,7 +6,7 @@
 import type { JsonValue, WidgetInterfaces } from './index'
 import type { WidgetChild } from './types'
 import { describe, expect, it } from 'vitest'
-import { createWidgetDocument, createWidgetPlugin, createWidgetSystem, isJsonValue, MAX_JSON_DEPTH } from './index'
+import { createWidgetDocument, createWidgetPlugin, createWidgetSystem, isJsonValue, MAX_JSON_DEPTH, undocumented } from './index'
 import { inspectBlueprint } from './inspection'
 
 interface NoteInterfaces extends WidgetInterfaces {
@@ -18,12 +18,14 @@ interface NoteInterfaces extends WidgetInterfaces {
 }
 
 const notePlugin = createWidgetPlugin('note')
+	.description(undocumented)
 	.interfaces<NoteInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (_input): _input is Record<string, JsonValue> | null => true,
 		resolve: raw => raw ?? {},
 	})
-	.slots({ children: {} })
+	.slots({ children: { description: undocumented } })
 	.done()
 
 const system = createWidgetSystem({ plugins: [notePlugin] })

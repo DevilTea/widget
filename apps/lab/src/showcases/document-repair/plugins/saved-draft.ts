@@ -18,7 +18,7 @@
 import type { JsonValue, WidgetInterfaces } from '@deviltea/widget-core'
 import type { SavedDraftConfig, SavedDraftRawConfig } from '../config'
 import type { Findings, RepairStep, SavedWith } from '../domain'
-import { createWidgetPlugin } from '@deviltea/widget-core'
+import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
 import { checkSavedDraftConfig, resolveSavedDraftConfig } from '../config'
 import { planRepair } from '../domain'
 import { projectFindings } from './findings'
@@ -59,8 +59,10 @@ function isRevision(input: unknown): input is number {
 }
 
 export const SavedDraftPlugin = createWidgetPlugin('SavedDraft')
+	.description(undocumented)
 	.interfaces<SavedDraftInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input, ctx): input is SavedDraftRawConfig => {
 			checkSavedDraftConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -73,13 +75,13 @@ export const SavedDraftPlugin = createWidgetPlugin('SavedDraft')
 			addDiagnostic({ message: 'A SavedDraft must be placed in the drafts of a RepairDesk.', reason: 'outside-desk' })
 	})
 	.state(state => state
-		.revision({ validate: (input): input is number => isRevision(input), default: () => -1 })
-		.appRevision({ validate: (input): input is number => isRevision(input), default: () => -1 })
-		.repaired({ validate: (input): input is boolean => typeof input === 'boolean', default: () => false }))
+		.revision({ description: undocumented, validate: (input): input is number => isRevision(input), default: () => -1 })
+		.appRevision({ description: undocumented, validate: (input): input is number => isRevision(input), default: () => -1 })
+		.repaired({ description: undocumented, validate: (input): input is boolean => typeof input === 'boolean', default: () => false }))
 	.properties(properties => properties
-		.title({ compute: ({ config }) => config.title })
-		.savedWith({ compute: ({ config }) => config.savedWith })
-		.source({ compute: ({ config }) => config.source })
-		.findings({ compute: ({ config }) => projectFindings(config.source) })
-		.plan({ compute: ({ config }) => planRepair(config.source, config.savedWith) }))
+		.title({ description: undocumented, compute: ({ config }) => config.title })
+		.savedWith({ description: undocumented, compute: ({ config }) => config.savedWith })
+		.source({ description: undocumented, compute: ({ config }) => config.source })
+		.findings({ description: undocumented, compute: ({ config }) => projectFindings(config.source) })
+		.plan({ description: undocumented, compute: ({ config }) => planRepair(config.source, config.savedWith) }))
 	.done()

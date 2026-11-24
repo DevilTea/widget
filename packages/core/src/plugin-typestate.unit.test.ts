@@ -31,7 +31,7 @@ import type {
 } from './index'
 import type { WidgetChild } from './types'
 import { describe, expect, expectTypeOf, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from './index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from './index'
 
 // -------------------------------------------------------------------------------------------------
 // Fixture interfaces
@@ -254,18 +254,20 @@ interface SlotsOnlyInterfaces extends WidgetInterfaces {
 // -------------------------------------------------------------------------------------------------
 
 const fullConfigDef: WidgetConfigDefinition<FullInterfaces> = {
+	description: undocumented,
 	validate: (input): input is { label?: string } => typeof input === 'object' && input !== null,
 	resolve: raw => ({ label: raw?.label ?? 'default' }),
 }
 
-const aDef = { validate: (input: unknown): input is number => typeof input === 'number' }
-const bDef = { validate: (input: unknown): input is string => typeof input === 'string' }
-const cDef = { validate: (input: unknown): input is boolean => typeof input === 'boolean' }
-const nameDef = { validate: (input: unknown): input is string => typeof input === 'string' }
+const aDef = { description: undocumented, validate: (input: unknown): input is number => typeof input === 'number' }
+const bDef = { description: undocumented, validate: (input: unknown): input is string => typeof input === 'string' }
+const cDef = { description: undocumented, validate: (input: unknown): input is boolean => typeof input === 'boolean' }
+const nameDef = { description: undocumented, validate: (input: unknown): input is string => typeof input === 'string' }
 
 describe('builder capability-phase ordering', () => {
 	it('orders phases as interfaces -> config -> slots -> state -> properties -> methods -> done, and `.done` only appears once every phase has completed', () => {
 		const afterInterfaces = createWidgetPlugin('full')
+			.description(undocumented)
 			.interfaces<FullInterfaces>()
 		expectTypeOf(afterInterfaces)
 			.toHaveProperty('config')
@@ -276,7 +278,7 @@ describe('builder capability-phase ordering', () => {
 			.toHaveProperty('slots')
 		expectTypeOf(afterConfig).not.toHaveProperty('done')
 
-		const afterSlots = afterConfig.slots({ header: {}, body: {} })
+		const afterSlots = afterConfig.slots({ header: { description: undocumented }, body: { description: undocumented } })
 		expectTypeOf(afterSlots)
 			.toHaveProperty('state')
 		expectTypeOf(afterSlots).not.toHaveProperty('done')
@@ -284,10 +286,12 @@ describe('builder capability-phase ordering', () => {
 		const afterState = afterSlots.state(state =>
 			state
 				.count({
+					description: undocumented,
 					validate: (input): input is number => typeof input === 'number',
 					default: () => 0,
 				})
 				.enabled({
+					description: undocumented,
 					validate: (input): input is boolean => typeof input === 'boolean',
 					default: () => false,
 				}))
@@ -298,6 +302,7 @@ describe('builder capability-phase ordering', () => {
 		const afterProperties = afterState.properties(properties =>
 			properties
 				.doubled({
+					description: undocumented,
 					registerDeps: ({ dep }) => dep.self.state.get('count'),
 					compute: ({ deps }) => {
 						const result = deps()
@@ -306,6 +311,7 @@ describe('builder capability-phase ordering', () => {
 					},
 				})
 				.label({
+					description: undocumented,
 					compute: () => 'label',
 				}))
 		expectTypeOf(afterProperties)
@@ -315,6 +321,7 @@ describe('builder capability-phase ordering', () => {
 		const afterMethods = afterProperties.methods(methods =>
 			methods
 				.increment({
+					description: undocumented,
 					registerDeps: ({ dep }) => dep.self.state.set('count'),
 					validateArgs: (args): args is [number] => args.length === 1 && typeof args[0] === 'number',
 					execute: ({ args, deps }) => {
@@ -323,6 +330,7 @@ describe('builder capability-phase ordering', () => {
 					},
 				})
 				.reset({
+					description: undocumented,
 					validateArgs: (args): args is [] => args.length === 0,
 					execute: () => {},
 				}))
@@ -338,6 +346,7 @@ describe('builder capability-phase ordering', () => {
 
 	it('skips every absent capability phase at once and jumps straight to the next declared one', () => {
 		const afterInterfaces = createWidgetPlugin('config-methods')
+			.description(undocumented)
 			.interfaces<ConfigAndMethodsInterfaces>()
 		expectTypeOf(afterInterfaces)
 			.toHaveProperty('config')
@@ -350,6 +359,7 @@ describe('builder capability-phase ordering', () => {
 			.toEqualTypeOf<'config' | 'methods' | 'structure'>()
 
 		const afterConfig = afterInterfaces.config({
+			description: undocumented,
 			validate: (input): input is { x?: number } => typeof input === 'object' && input !== null,
 			resolve: raw => ({ x: raw?.x ?? 0 }),
 		})
@@ -362,6 +372,7 @@ describe('builder capability-phase ordering', () => {
 		const plugin = afterConfig
 			.methods(methods =>
 				methods.run({
+					description: undocumented,
 					validateArgs: (args): args is [] => args.length === 0,
 					execute: () => {},
 				}))
@@ -375,6 +386,7 @@ describe('builder capability-phase ordering', () => {
 
 	it('reaches `done` (next to the optional `structure`) immediately after `.interfaces()` when no capability is declared', () => {
 		const afterInterfaces = createWidgetPlugin('empty')
+			.description(undocumented)
 			.interfaces<EmptyInterfaces>()
 		expectTypeOf<keyof typeof afterInterfaces>()
 			.toEqualTypeOf<'structure' | 'done'>()
@@ -389,8 +401,9 @@ describe('builder capability-phase ordering', () => {
 	})
 
 	it('rejects a slots object literal (even via a variable) that declares an extra, undeclared slot', () => {
-		const slotsWithExtra = { header: {}, body: {}, extra: {} }
+		const slotsWithExtra = { header: { description: undocumented }, body: { description: undocumented }, extra: { description: undocumented } }
 		const beforeSlots = createWidgetPlugin('extra-slot')
+			.description(undocumented)
 			.interfaces<FullInterfaces>()
 			.config(fullConfigDef)
 		// @ts-expect-error 'extra' is not declared by FullInterfaces; the exact-slots constraint rejects it even though it arrives through a variable, not an object literal
@@ -404,6 +417,7 @@ describe('section keyed-chain typestate (state section, representative of proper
 		let capturedAfterC: unknown
 
 		const plugin = createWidgetPlugin('keyed-chain-order')
+			.description(undocumented)
 			.interfaces<KeyedChainInterfaces>()
 			.state((state) => {
 				capturedInitial = state
@@ -432,6 +446,7 @@ describe('section keyed-chain typestate (state section, representative of proper
 
 	it('makes a consumed member disappear from the type surface so it cannot be repeated', () => {
 		createWidgetPlugin('keyed-chain-repeat')
+			.description(undocumented)
 			.interfaces<KeyedChainInterfaces>()
 			.state((state) => {
 				const afterA = state.a(aDef)
@@ -449,6 +464,7 @@ describe('section keyed-chain typestate (state section, representative of proper
 
 	it('rejects a state builder callback that leaves a declared member unconsumed', () => {
 		const plugin = createWidgetPlugin('incomplete-state')
+			.description(undocumented)
 			.interfaces<KeyedChainInterfaces>()
 		// @ts-expect-error the callback omits 'display-name', so `Remaining` never reaches `never` and the state phase cannot complete
 		plugin.state(state => state.a(aDef)
@@ -458,6 +474,7 @@ describe('section keyed-chain typestate (state section, representative of proper
 
 	it('rejects an empty object literal masquerading as a completed section', () => {
 		const plugin = createWidgetPlugin('fake-empty-section')
+			.description(undocumented)
 			.interfaces<KeyedChainInterfaces>()
 		// @ts-expect-error `{}` has neither the private completion marker nor the section methods; it cannot satisfy a completed section
 		plugin.state(() => ({}))
@@ -465,6 +482,7 @@ describe('section keyed-chain typestate (state section, representative of proper
 
 	it('lets an explicitly empty declared capability complete immediately, distinct from an absent capability', () => {
 		const plugin = createWidgetPlugin('empty-state-capability')
+			.description(undocumented)
 			.interfaces<EmptyStateCapabilityInterfaces>()
 			.state(state => state)
 			.done()
@@ -476,15 +494,16 @@ describe('section keyed-chain typestate (state section, representative of proper
 	})
 })
 
-describe('events capability typestate and tuple contract', () => {
-	it('exposes an independent events phase declared by the list of Event names', () => {
+describe('events capability typestate and docs record', () => {
+	it('exposes an independent events phase declared by a docs record keyed by Event name', () => {
 		const afterInterfaces = createWidgetPlugin('events-only')
+			.description(undocumented)
 			.interfaces<EventInterfaces>()
 		expectTypeOf(afterInterfaces)
 			.toHaveProperty('events')
 		expectTypeOf(afterInterfaces).not.toHaveProperty('done')
 
-		const afterEvents = afterInterfaces.events(['press', 'change'])
+		const afterEvents = afterInterfaces.events({ press: undocumented, change: undocumented })
 		expectTypeOf(afterEvents)
 			.toHaveProperty('done')
 		expectTypeOf<WidgetEventArgsOf<EventInterfaces, 'press'>>()
@@ -498,45 +517,59 @@ describe('events capability typestate and tuple contract', () => {
 		expect(plugin).not.toHaveProperty('description')
 		expect(plugin).not.toHaveProperty('descriptions')
 	})
-
-	it('requires the list to name every declared Event and nothing else', () => {
+	it('requires the docs record to name every declared Event and nothing else', () => {
 		const beforeEvents = () => createWidgetPlugin('events-incomplete')
+			.description(undocumented)
 			.interfaces<EventInterfaces>()
-		// Never called: the lists below are type errors, and some of them also throw.
+		// Never called: the records below are type errors, and some of them also throw.
 		const typeOnly = () => {
 			const phase = beforeEvents()
 			// @ts-expect-error 'change' is missing
-			phase.events(['press'])
-			// @ts-expect-error an empty list misses both
-			phase.events([])
+			phase.events({ press: undocumented })
+			// @ts-expect-error an empty record misses both
+			phase.events({})
 			// @ts-expect-error 'tap' is not a declared Event
-			phase.events(['press', 'change', 'tap'])
-			// @ts-expect-error the phase takes the list of names, not a build callback
-			phase.events(() => ['press', 'change'])
-			const widened: ('press' | 'change')[] = ['press']
-			// @ts-expect-error a widened array may hold only some of the names: a tuple is required
-			phase.events(widened)
+			phase.events({ press: undocumented, change: undocumented, tap: undocumented })
+			const extra = { press: undocumented, change: undocumented, tap: undocumented }
+			// @ts-expect-error an undeclared Event is rejected through a variable too
+			phase.events(extra)
+			// @ts-expect-error the 0.3 list of names is gone
+			phase.events(['press', 'change'])
+			// @ts-expect-error a payload position needs its docs
+			phase.events({ press: undocumented, change: { description: 'Changed.' } })
+			// @ts-expect-error the payload has one position
+			phase.events({ press: undocumented, change: { description: 'Changed.', payload: [{ description: 'a' }, { description: 'b' }] } })
+			// @ts-expect-error a misspelt key in an entry
+			phase.events({ press: { description: 'Pressed.', paylod: [] }, change: undocumented })
 		}
 		expect(typeOnly)
 			.toBeTypeOf('function')
 
 		// Any order is accepted, and a typed constant works like a literal.
-		const names = ['change', 'press'] as const
-		expect(beforeEvents()
-			.events(names)
-			.done().capabilities.events)
+		const definitions = {
+			change: { description: 'The value changed.', payload: [{ description: 'The new value.' }] },
+			press: { description: 'The control was pressed.' },
+		} as const
+		const plugin = beforeEvents()
+			.events(definitions)
+			.done()
+		expect(plugin.capabilities.events)
 			.toBe(true)
+		expect(Object.keys(plugin.docs.events!))
+			.toEqual(['change', 'press'])
 	})
 
 	it('keeps an explicitly empty events capability distinct from an absent capability', () => {
 		const present = createWidgetPlugin('events-empty')
+			.description(undocumented)
 			.interfaces<EmptyEventsCapabilityInterfaces>()
-			.events([])
+			.events({})
 			.done()
 		expect(present.capabilities.events)
 			.toBe(true)
 
 		const absent = createWidgetPlugin('events-absent')
+			.description(undocumented)
 			.interfaces<EmptyInterfaces>()
 			.done()
 		expect(absent.capabilities.events)
@@ -547,6 +580,7 @@ describe('events capability typestate and tuple contract', () => {
 describe('explicit-empty slots capability (`slots: never`), distinct from an absent slots capability (review round 2, diagnostic #10 amendment "declaration-presence semantics")', () => {
 	it('exposes the .slots phase for `slots: never`, which completes via .slots({})', () => {
 		const afterInterfaces = createWidgetPlugin('empty-slots-capability')
+			.description(undocumented)
 			.interfaces<EmptySlotsCapabilityInterfaces>()
 		expectTypeOf(afterInterfaces)
 			.toHaveProperty('slots')
@@ -564,6 +598,7 @@ describe('explicit-empty slots capability (`slots: never`), distinct from an abs
 
 	it('skips the .slots phase entirely for a plugin that never declares slots', () => {
 		const afterInterfaces = createWidgetPlugin('no-slots-capability')
+			.description(undocumented)
 			.interfaces<EmptyInterfaces>()
 		expectTypeOf(afterInterfaces).not.toHaveProperty('slots')
 
@@ -576,6 +611,7 @@ describe('explicit-empty slots capability (`slots: never`), distinct from an abs
 describe('plugin.capabilities (review round 2, diagnostic #10 amendment "declaration-presence semantics and public WidgetPlugin.capabilities")', () => {
 	it('is all-false, frozen, for a plugin declaring no capabilities', () => {
 		const plugin = createWidgetPlugin('caps-none')
+			.description(undocumented)
 			.interfaces<EmptyInterfaces>()
 			.done()
 
@@ -587,19 +623,22 @@ describe('plugin.capabilities (review round 2, diagnostic #10 amendment "declara
 
 	it('is all-true for a plugin declaring every capability', () => {
 		const plugin = createWidgetPlugin('caps-all')
+			.description(undocumented)
 			.interfaces<AllCapabilitiesInterfaces>()
 			.config({
+				description: undocumented,
 				validate: (input): input is Record<string, never> => typeof input === 'object' && input !== null,
 				resolve: () => ({}),
 			})
-			.slots({ a: {} })
-			.state(state => state.s({ validate: (input): input is number => typeof input === 'number' }))
-			.properties(properties => properties.p({ compute: () => 0 }))
+			.slots({ a: { description: undocumented } })
+			.state(state => state.s({ description: undocumented, validate: (input): input is number => typeof input === 'number' }))
+			.properties(properties => properties.p({ description: undocumented, compute: () => 0 }))
 			.methods(methods => methods.m({
+				description: undocumented,
 				validateArgs: (args): args is [] => args.length === 0,
 				execute: () => 0,
 			}))
-			.events(['changed'])
+			.events({ changed: undocumented })
 			.done()
 
 		expect(plugin.capabilities)
@@ -608,6 +647,7 @@ describe('plugin.capabilities (review round 2, diagnostic #10 amendment "declara
 
 	it('is true, with an empty inventory, for each explicitly-declared-empty capability', () => {
 		const statePlugin = createWidgetPlugin('caps-empty-state')
+			.description(undocumented)
 			.interfaces<EmptyStateCapabilityInterfaces>()
 			.state(state => state)
 			.done()
@@ -615,6 +655,7 @@ describe('plugin.capabilities (review round 2, diagnostic #10 amendment "declara
 			.toBe(true)
 
 		const propertiesPlugin = createWidgetPlugin('caps-empty-properties')
+			.description(undocumented)
 			.interfaces<EmptyPropertiesCapabilityInterfaces>()
 			.properties(properties => properties)
 			.done()
@@ -622,6 +663,7 @@ describe('plugin.capabilities (review round 2, diagnostic #10 amendment "declara
 			.toBe(true)
 
 		const methodsPlugin = createWidgetPlugin('caps-empty-methods')
+			.description(undocumented)
 			.interfaces<EmptyMethodsCapabilityInterfaces>()
 			.methods(methods => methods)
 			.done()
@@ -629,6 +671,7 @@ describe('plugin.capabilities (review round 2, diagnostic #10 amendment "declara
 			.toBe(true)
 
 		const slotsPlugin = createWidgetPlugin('caps-empty-slots')
+			.description(undocumented)
 			.interfaces<EmptySlotsCapabilityInterfaces>()
 			.slots({})
 			.done()
@@ -636,8 +679,9 @@ describe('plugin.capabilities (review round 2, diagnostic #10 amendment "declara
 			.toBe(true)
 
 		const eventsPlugin = createWidgetPlugin('caps-empty-events')
+			.description(undocumented)
 			.interfaces<EmptyEventsCapabilityInterfaces>()
-			.events([])
+			.events({})
 			.done()
 		expect(eventsPlugin.capabilities.events)
 			.toBe(true)
@@ -669,6 +713,7 @@ describe('widgetInterfaces domain rejection (types.ts type layer)', () => {
 
 	it('leaves the interfaces phase unusable for a non-JSON RawConfig', () => {
 		const violation = createWidgetPlugin('non-json-config')
+			.description(undocumented)
 			.interfaces<NonJsonConfigInterfaces>()
 		expectTypeOf(violation)
 			.toEqualTypeOf<WidgetInterfacesViolation<'authored values must be JSON-compatible'>>()
@@ -712,6 +757,7 @@ describe('widgetInterfaces domain rejection (types.ts type layer)', () => {
 
 	it('leaves the interfaces phase unusable once a domain violation is present', () => {
 		const violation = createWidgetPlugin('broad-state')
+			.description(undocumented)
 			.interfaces<BroadStateIndexInterfaces>()
 		expectTypeOf(violation)
 			.toEqualTypeOf<WidgetInterfacesViolation<'\'state\' must not be declared with a broad string index signature'>>()
@@ -766,6 +812,7 @@ describe('promiseLike-containing value/return domain rejection (union-member lev
 describe('semantic callbacks stay synchronous and are not widened to MaybePromise', () => {
 	it('rejects a `compute` implementation that returns a Promise instead of the declared synchronous value', () => {
 		const definition: WidgetPropertyDefinition<SimplePropertyInterfaces, 'total', EmptyRegisteredDeps> = {
+			description: undocumented,
 			// @ts-expect-error `compute` must resolve synchronously to `number`; returning a Promise would silently widen the semantic boundary to MaybePromise<number>
 			compute: () => {
 				return Promise.resolve(1)
@@ -777,6 +824,7 @@ describe('semantic callbacks stay synchronous and are not widened to MaybePromis
 
 	it('rejects an `execute` implementation that returns a Promise instead of the declared synchronous value', () => {
 		const definition: WidgetMethodDefinition<SimpleMethodInterfaces, 'run', EmptyRegisteredDeps> = {
+			description: undocumented,
 			validateArgs: (args): args is [] => args.length === 0,
 			// @ts-expect-error `execute` must resolve synchronously to `string`; returning a Promise would silently widen the semantic boundary to MaybePromise<string>
 			execute: () => {
@@ -789,15 +837,19 @@ describe('semantic callbacks stay synchronous and are not widened to MaybePromis
 
 	it('rejects an async `execute` written into the builder even when the Method is declared to return `void`', () => {
 		const asyncPhase = createWidgetPlugin('void-async')
+			.description(undocumented)
 			.interfaces<VoidMethodInterfaces>()
 			.methods(methods => methods.submit({
+				description: undocumented,
 				validateArgs: (args): args is [] => args.length === 0,
 				// @ts-expect-error a `void` return does not widen `execute` to MaybePromise; an async `execute` would write State in its synchronous prefix and fail afterwards
 				execute: async () => {},
 			}))
 		const thenablePhase = createWidgetPlugin('void-thenable')
+			.description(undocumented)
 			.interfaces<VoidMethodInterfaces>()
 			.methods(methods => methods.submit({
+				description: undocumented,
 				validateArgs: (args): args is [] => args.length === 0,
 				// @ts-expect-error any thenable result is rejected, not only a native Promise
 				execute: () => ({ then: (resolve: (value: undefined) => void) => resolve(undefined) }),
@@ -809,6 +861,7 @@ describe('semantic callbacks stay synchronous and are not widened to MaybePromis
 	it('leaves a standalone `void` execute type unable to see a thenable (the runtime guard catches it)', () => {
 		// The standalone type has no callback to infer the own return type from, so it accepts any return.
 		const definition: WidgetMethodDefinition<VoidMethodInterfaces, 'submit', EmptyRegisteredDeps> = {
+			description: undocumented,
 			validateArgs: (args): args is [] => args.length === 0,
 			execute: async () => {},
 		}
@@ -833,19 +886,21 @@ describe('semantic callbacks stay synchronous and are not widened to MaybePromis
 
 	it('rejects an async structure validator at the slot, plugin and system level', () => {
 		const slot = createWidgetPlugin('async-slot')
+			.description(undocumented)
 			.interfaces<SlotsOnlyInterfaces>()
 			// @ts-expect-error a structure validator returns nothing; an async one would report diagnostics after compilation ended
-			.slots({ items: { validateStructure: async () => {} } })
+			.slots({ items: { description: undocumented, validateStructure: async () => {} } })
 		const plugin = createWidgetPlugin('async-plugin')
+			.description(undocumented)
 			.interfaces<SlotsOnlyInterfaces>()
-			.slots({ items: {} })
+			.slots({ items: { description: undocumented } })
 			// @ts-expect-error the plugin-level validator (`.structure()`) must stay synchronous
 			.structure(async () => {})
 		// @ts-expect-error the system-level validator must stay synchronous
 		const system = createWidgetSystem({ plugins: [], validateStructure: async () => {} })
 		// The standalone types have no callback to infer the own return type from (the runtime guard catches a thenable).
 		const standalone: [WidgetSlotDefinition<SlotsOnlyInterfaces, 'items'>, WidgetPluginValidateStructure<SlotsOnlyInterfaces>, WidgetSystemValidateStructure<AnyWidgetPluginTuple>] = [
-			{ validateStructure: async () => {} },
+			{ description: undocumented, validateStructure: async () => {} },
 			async () => {},
 			async () => {},
 		]
@@ -860,6 +915,7 @@ describe('semantic callbacks stay synchronous and are not widened to MaybePromis
 			.toBeNever()
 
 		const definition: WidgetMethodDefinition<PromiseMethodArgInterfaces, 'run', EmptyRegisteredDeps> = {
+			description: undocumented,
 			validateArgs: (args): args is [Promise<number>] => args.length === 1,
 			execute: (ctx) => {
 				expectTypeOf(ctx.args)

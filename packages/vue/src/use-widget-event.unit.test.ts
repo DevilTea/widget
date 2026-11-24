@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import type { UseWidgetResult } from './types'
-import { createWidgetPlugin, createWidgetSystem, WidgetSystemRuntimeDisposedError } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented, WidgetSystemRuntimeDisposedError } from '@deviltea/widget-core'
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { mountWidgetBridge } from './test-fixtures'
 
@@ -16,8 +16,9 @@ interface EventInterfaces {
 }
 
 const EventPlugin = createWidgetPlugin('EventProjection')
+	.description(undocumented)
 	.interfaces<EventInterfaces>()
-	.events(['press', 'change', PROTO_KEY])
+	.events({ press: undocumented, change: undocumented, [PROTO_KEY]: undocumented })
 	.done()
 
 interface EmptyEventsInterfaces {
@@ -25,11 +26,13 @@ interface EmptyEventsInterfaces {
 }
 
 const EmptyEventsPlugin = createWidgetPlugin('EmptyEventProjection')
+	.description(undocumented)
 	.interfaces<EmptyEventsInterfaces>()
-	.events([])
+	.events({})
 	.done()
 
 const NoEventsPlugin = createWidgetPlugin('NoEventProjection')
+	.description(undocumented)
 	.interfaces<Record<never, never>>()
 	.done()
 

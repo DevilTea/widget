@@ -1,7 +1,7 @@
 import type { WidgetIntegrationErrorCode } from './index'
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 import * as core from '../index'
-import { createWidgetPlugin, createWidgetSystem, WidgetSystemRuntimeDisposedError } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented, WidgetSystemRuntimeDisposedError } from '../index'
 import { assertCoreRuntime, getWidgetEventEmitter, WidgetIntegrationError } from './index'
 
 interface EventInterfaces {
@@ -14,16 +14,19 @@ interface EventInterfaces {
 }
 
 const eventPlugin = createWidgetPlugin('eventful')
+	.description(undocumented)
 	.interfaces<EventInterfaces>()
 	.methods(methods => methods.fire({
+		description: undocumented,
 		validateArgs: (args): args is [string] => args.length === 1 && typeof args[0] === 'string',
 		emits: ['change'],
 		execute: ({ args, emit }) => emit.change(args[0]),
 	}))
-	.events(['change'])
+	.events({ change: undocumented })
 	.done()
 
 const plainPlugin = createWidgetPlugin('plain')
+	.description(undocumented)
 	.interfaces<Record<never, never>>()
 	.done()
 
@@ -32,8 +35,9 @@ interface EmptyEventsInterfaces {
 }
 
 const emptyEventsPlugin = createWidgetPlugin('empty-events')
+	.description(undocumented)
 	.interfaces<EmptyEventsInterfaces>()
-	.events([])
+	.events({})
 	.done()
 
 function createSingleRuntime(plugin: typeof eventPlugin | typeof plainPlugin | typeof emptyEventsPlugin) {
@@ -123,6 +127,7 @@ describe('@deviltea/widget-core/integration event emitter bridge', () => {
 		vi.resetModules()
 		const foreignCore = await import('../index')
 		const foreignPlugin = foreignCore.createWidgetPlugin('plain')
+			.description(foreignCore.undocumented)
 			.interfaces<Record<never, never>>()
 			.done()
 		const foreignSystem = foreignCore.createWidgetSystem({ plugins: [foreignPlugin] as const })
@@ -243,6 +248,7 @@ describe('@deviltea/widget-core/integration event emitter bridge', () => {
 			const foreignCore = await import('../index')
 			const foreignSystem = foreignCore.createWidgetSystem({
 				plugins: [foreignCore.createWidgetPlugin('plain')
+					.description(foreignCore.undocumented)
 					.interfaces<Record<never, never>>()
 					.done()] as const,
 			})

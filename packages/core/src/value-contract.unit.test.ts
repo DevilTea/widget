@@ -1,6 +1,6 @@
 import type { WidgetValueContract } from './index'
 import { describe, expect, expectTypeOf, it } from 'vitest'
-import { createWidgetPlugin, createWidgetValueContract } from './index'
+import { createWidgetPlugin, createWidgetValueContract, undocumented } from './index'
 
 interface TranslationResult {
 	readonly value: string
@@ -34,27 +34,33 @@ describe('widget value contracts', () => {
 		}
 
 		createWidgetPlugin('value-contract-types')
+			.description(undocumented)
 			.interfaces<Interfaces>()
 			.properties(properties => properties
 				.text({
+					description: undocumented,
 					valueContract: stringContract,
 					compute: () => 'text',
 				})
 				.result({
+					description: undocumented,
 					valueContract: translationResultContract,
 					compute: () => ({ value: 'translated', warnings: [] }),
 				}))
 			.done()
 
 		createWidgetPlugin('value-contract-type-mismatch')
+			.description(undocumented)
 			.interfaces<Interfaces>()
 			.properties(properties => properties
 				.text({
+					description: undocumented,
 					// @ts-expect-error TranslationResult contract cannot describe a string Property.
 					valueContract: translationResultContract,
 					compute: () => 'text',
 				})
 				.result({
+					description: undocumented,
 					valueContract: translationResultContract,
 					compute: () => ({ value: 'translated', warnings: [] }),
 				}))
@@ -71,11 +77,12 @@ describe('widget value contracts', () => {
 		}
 
 		const plugin = createWidgetPlugin('value-contract-narrower')
+			.description(undocumented)
 			.interfaces<Interfaces>()
 			.properties(properties => properties
-				.size({ valueContract: stringContract, compute: () => 'small' as const })
-				.fixed({ valueContract: stringContract, compute: () => 'fixed' as const })
-				.text({ valueContract: stringContract, compute: () => 'text' }))
+				.size({ description: undocumented, valueContract: stringContract, compute: () => 'small' as const })
+				.fixed({ description: undocumented, valueContract: stringContract, compute: () => 'fixed' as const })
+				.text({ description: undocumented, valueContract: stringContract, compute: () => 'text' }))
 			.done()
 
 		expectTypeOf<WidgetValueContract<string>>()
@@ -95,19 +102,23 @@ describe('widget value contracts', () => {
 		const smallContract = createWidgetValueContract<'small'>('example/small')
 
 		createWidgetPlugin('value-contract-wider')
+			.description(undocumented)
 			.interfaces<Interfaces>()
 			.properties(properties => properties
 				.label({
+					description: undocumented,
 					// @ts-expect-error a `string | null` Property can produce `null`, which a string contract does not describe
 					valueContract: stringContract,
 					compute: () => null,
 				})
 				.text({
+					description: undocumented,
 					// @ts-expect-error a `string` Property is wider than a `'small'` contract
 					valueContract: smallContract,
 					compute: () => 'text',
 				})
 				.size({
+					description: undocumented,
 					// @ts-expect-error `'small' | 'large'` is wider than a `'small'` contract
 					valueContract: smallContract,
 					compute: () => 'small' as const,

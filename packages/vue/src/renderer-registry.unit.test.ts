@@ -6,7 +6,7 @@
 
 import type { AnyWidgetPlugin, WidgetInterfaces } from '@deviltea/widget-core'
 import type { WidgetVueRendererEntry, WidgetVueRendererSection } from './renderer'
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 import { mount } from '@vue/test-utils'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { defineComponent, h } from 'vue'
@@ -185,9 +185,11 @@ describe('renderer registry — runtime construction validation', () => {
 
 	it('mounts the distinct registered components for arbitrary string-literal keys, including "__proto__" and "constructor"', () => {
 		const weirdPlugin = createWidgetPlugin('__proto__')
+			.description(undocumented)
 			.interfaces<WidgetInterfaces>()
 			.done()
 		const ctorPlugin = createWidgetPlugin('constructor')
+			.description(undocumented)
 			.interfaces<WidgetInterfaces>()
 			.done()
 		const weirdSystem = createWidgetSystem({ plugins: [weirdPlugin, ctorPlugin] })

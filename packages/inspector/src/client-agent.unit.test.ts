@@ -1,6 +1,6 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { InspectorResponseMessage } from './protocol'
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 import { inspectBlueprint, inspectRuntime } from '@deviltea/widget-core/inspection'
 import { describe, expect, it } from 'vitest'
 import { createInspectorAgent } from './agent'
@@ -298,15 +298,18 @@ describe('core inspection projection', () => {
 			}
 		}
 		const plugin = createWidgetPlugin('DevtoolsDiagnostic')
+			.description(undocumented)
 			.interfaces<DiagnosticInterfaces>()
 			.properties(properties => properties
 				.flaky({
+					description: undocumented,
 					compute: ({ addDiagnostic }) => {
 						addDiagnostic({ message: 'flaky failed' })
 						return 7
 					},
 				})
 				.viaFlaky({
+					description: undocumented,
 					registerDeps: ({ dep }) => ({ flaky: dep.self.properties.get('flaky') }),
 					compute: ({ deps }) => {
 						const result = deps.flaky()

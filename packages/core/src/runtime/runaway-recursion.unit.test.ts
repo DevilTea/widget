@@ -8,7 +8,7 @@
 
 import { endBatch, getBatchDepth, startBatch } from 'alien-signals'
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 
 interface RecursiveInterfaces {
 	state: {
@@ -32,9 +32,11 @@ interface CounterInterfaces {
 const isNumber = (input: unknown): input is number => typeof input === 'number'
 
 const recursivePlugin = createWidgetPlugin('recursive')
+	.description(undocumented)
 	.interfaces<RecursiveInterfaces>()
-	.state(state => state.a({ validate: isNumber, default: () => 0 }))
+	.state(state => state.a({ description: undocumented, validate: isNumber, default: () => 0 }))
 	.properties(properties => properties.sum({
+		description: undocumented,
 		registerDeps: ({ dep }) => ({ a: dep.self.state.get('a') }),
 		compute: ({ deps }) => {
 			const a = deps.a()
@@ -43,6 +45,7 @@ const recursivePlugin = createWidgetPlugin('recursive')
 	}))
 	.methods(methods => methods
 		.ping({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ pong: dep.self.methods.invoke('pong'), setA: dep.self.state.set('a') }),
 			validateArgs: (args): args is [] => args.length === 0,
 			execute: ({ deps }) => {
@@ -52,6 +55,7 @@ const recursivePlugin = createWidgetPlugin('recursive')
 			},
 		})
 		.pong({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ ping: dep.self.methods.invoke('ping') }),
 			validateArgs: (args): args is [] => args.length === 0,
 			execute: ({ deps }) => {
@@ -62,8 +66,9 @@ const recursivePlugin = createWidgetPlugin('recursive')
 	.done()
 
 const counterPlugin = createWidgetPlugin('counter')
+	.description(undocumented)
 	.interfaces<CounterInterfaces>()
-	.state(state => state.n({ validate: isNumber, default: () => 0 }))
+	.state(state => state.n({ description: undocumented, validate: isNumber, default: () => 0 }))
 	.done()
 
 const recursiveSystem = createWidgetSystem({ plugins: [recursivePlugin] })

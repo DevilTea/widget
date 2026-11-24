@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 
 interface CounterInterfaces {
 	state: {
@@ -30,14 +30,17 @@ function createHarness() {
 	let flakyShouldFail = false
 
 	const plugin = createWidgetPlugin('counter')
+		.description(undocumented)
 		.interfaces<CounterInterfaces>()
 		.state(state => state
 			.count({
+				description: undocumented,
 				validate: (input): input is number => typeof input === 'number',
 				default: () => 0,
 			}))
 		.properties(properties => properties
 			.doubled({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ count: dep.self.state.get('count') }),
 				compute: ({ deps }) => {
 					doubledComputeCount++
@@ -46,6 +49,7 @@ function createHarness() {
 				},
 			})
 			.parity({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ count: dep.self.state.get('count') }),
 				compute: ({ deps }) => {
 					parityComputeCount++
@@ -54,6 +58,7 @@ function createHarness() {
 				},
 			})
 			.flaky({
+				description: undocumented,
 				compute: ({ addDiagnostic }) => {
 					flakyComputeCount++
 					if (flakyShouldFail)
@@ -62,6 +67,7 @@ function createHarness() {
 				},
 			})
 			.viaFlaky({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ flaky: dep.self.properties.get('flaky') }),
 				compute: ({ deps }) => {
 					viaFlakyComputeCount++
@@ -70,6 +76,7 @@ function createHarness() {
 				},
 			})
 			.viaDoubledRefined({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({
 					doubled: dep.self.properties.get('doubled')
 						.validate((_value): _value is never => false),

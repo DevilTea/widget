@@ -12,7 +12,7 @@
 import type { WidgetChild } from '../types'
 import type { BlueprintInspectionDependency, ResolvedBlueprintInspectionNode } from './types'
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 import { inspectBlueprint } from './index'
 
 const PROTO_KEY = '__proto__' as const
@@ -30,13 +30,16 @@ interface DepTargetInterfaces {
 }
 
 const depTargetPlugin = createWidgetPlugin('dep-target')
+	.description(undocumented)
 	.interfaces<DepTargetInterfaces>()
 	.state(state => state.value({
+		description: undocumented,
 		validate: (input): input is number => typeof input === 'number',
 		default: () => 1,
 	}))
-	.properties(properties => properties.val({ compute: () => 2 }))
+	.properties(properties => properties.val({ description: undocumented, compute: () => 2 }))
 	.methods(methods => methods.run({
+		description: undocumented,
 		validateArgs: (args): args is [] => args.length === 0,
 		execute: () => 3,
 	}))
@@ -49,8 +52,9 @@ interface DepTargetNoStateInterfaces {
 }
 
 const depTargetNoStatePlugin = createWidgetPlugin('dep-target-no-state')
+	.description(undocumented)
 	.interfaces<DepTargetNoStateInterfaces>()
-	.properties(properties => properties.val({ compute: () => 9 }))
+	.properties(properties => properties.val({ description: undocumented, compute: () => 9 }))
 	.done()
 
 interface DepConsumerInterfaces {
@@ -75,46 +79,57 @@ interface DepConsumerInterfaces {
 }
 
 const depConsumerPlugin = createWidgetPlugin('dep-consumer')
+	.description(undocumented)
 	.interfaces<DepConsumerInterfaces>()
-	.slots({ children: {} })
+	.slots({ children: { description: undocumented } })
 	.state(state => state.local({
+		description: undocumented,
 		validate: (input): input is number => typeof input === 'number',
 	}))
 	.properties(properties => properties
 		.selfStateProp({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ v: dep.self.state.get('local') }),
 			compute: () => 0,
 		})
 		.resolvedProp({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ v: dep.widget('target').state.get('value') }),
 			compute: () => 0,
 		})
 		.optionalMissingProp({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ v: dep.widget('does-not-exist')
 				.optional().state.get('value') }),
 			compute: () => 0,
 		})
 		.requiredMissingProp({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ v: dep.widget('does-not-exist').state.get('value') }),
 			compute: () => 0,
 		})
 		.ambiguousProp({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ v: dep.widget('dup').state.get('value') }),
 			compute: () => 0,
 		})
 		.unresolvedTargetProp({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ v: dep.widget('broken').state.get('value') }),
 			compute: () => 0,
 		})
 		.missingCapabilityProp({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ v: dep.widget('no-state-target').state.get('value') }),
 			compute: () => 0,
 		})
 		.missingMemberProp({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ v: dep.widget('target').state.get('nonexistent') }),
 			compute: () => 0,
 		})
 		.pathsProp({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({
 				pricing: { base: dep.widget('target').state.get('value') },
 				nested: [
@@ -133,6 +148,7 @@ const depConsumerPlugin = createWidgetPlugin('dep-consumer')
 			compute: () => 0,
 		}))
 	.methods(methods => methods.endpoints({
+		description: undocumented,
 		registerDeps: ({ dep }) => ({
 			stateGet: dep.widget('target').state.get('value'),
 			stateSet: dep.widget('target').state.set('value'),

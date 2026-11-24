@@ -10,7 +10,7 @@ import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { ItemConfig } from '../config'
 import type { ItemLine } from '../domain'
 import type { ItemRawConfig } from '../raw-config'
-import { createWidgetPlugin } from '@deviltea/widget-core'
+import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
 import { resolveItemConfig } from '../config'
 import { itemConfigSchema, paperSchema, quantitySchema } from '../schemas'
 import { guard } from '../standard-schema'
@@ -40,22 +40,27 @@ export interface ItemInterfaces extends WidgetInterfaces {
 }
 
 export const ItemPlugin = createWidgetPlugin('Item')
+	.description(undocumented)
 	.interfaces<ItemInterfaces>()
 	.config({
+		description: undocumented,
 		validate: guard(itemConfigSchema),
 		resolve: resolveItemConfig,
 	})
 	.structure(ctx => checkInsideQuote(ctx, 'Item'))
 	.state(state => state
 		.quantity({
+			description: undocumented,
 			validate: guard(quantitySchema),
 			default: ({ config }) => config.quantity,
 		})
 		.paper({
+			description: undocumented,
 			validate: guard(paperSchema),
 			default: ({ config }) => config.paper,
 		}))
 	.properties(properties => properties.line({
+		description: undocumented,
 		registerDeps: ({ dep }) => ({
 			quantity: dep.self.state.get('quantity'),
 			paper: dep.self.state.get('paper'),

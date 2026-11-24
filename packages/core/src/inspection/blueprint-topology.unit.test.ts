@@ -6,7 +6,7 @@
 
 import type { WidgetChild } from '../types'
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 import { inspectBlueprint } from './index'
 
 interface LeafInterfaces {
@@ -16,8 +16,10 @@ interface LeafInterfaces {
 }
 
 const leafPlugin = createWidgetPlugin('topology-leaf')
+	.description(undocumented)
 	.interfaces<LeafInterfaces>()
 	.state(state => state.value({
+		description: undocumented,
 		validate: (input): input is number => typeof input === 'number',
 		default: () => 0,
 	}))
@@ -29,8 +31,9 @@ interface ContainerInterfaces {
 
 /** Declared in reverse-alphabetic order to prove `semanticSlots` preserves declaration order verbatim. */
 const containerPlugin = createWidgetPlugin('topology-container')
+	.description(undocumented)
 	.interfaces<ContainerInterfaces>()
-	.slots({ right: {}, left: {} })
+	.slots({ right: { description: undocumented }, left: { description: undocumented } })
 	.done()
 
 interface ZebraApplePluginInterfaces {
@@ -38,8 +41,9 @@ interface ZebraApplePluginInterfaces {
 }
 
 const zebraApplePlugin = createWidgetPlugin('zebra-apple')
+	.description(undocumented)
 	.interfaces<ZebraApplePluginInterfaces>()
-	.slots({ zebra: {}, apple: {} })
+	.slots({ zebra: { description: undocumented }, apple: { description: undocumented } })
 	.done()
 
 interface ConfiguredInterfaces {
@@ -50,8 +54,10 @@ interface ConfiguredInterfaces {
 }
 
 const configuredPlugin = createWidgetPlugin('configured')
+	.description(undocumented)
 	.interfaces<ConfiguredInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input): input is { readonly label?: string } => input === undefined || (typeof input === 'object' && input !== null),
 		resolve: raw => ({ label: raw?.label ?? 'default' }),
 	})
@@ -73,6 +79,7 @@ interface ExplicitEmptyInterfaces {
  * (diagnostic #10 amendment "declaration-presence semantics and public `WidgetPlugin.capabilities`").
  */
 const explicitEmptyPlugin = createWidgetPlugin('explicit-empty')
+	.description(undocumented)
 	.interfaces<ExplicitEmptyInterfaces>()
 	.slots({})
 	.state(state => state)

@@ -8,7 +8,7 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { AppearanceConfig, AppearanceRawConfig } from '../config'
 import type { Density, Mode } from '../domain'
-import { createWidgetPlugin } from '@deviltea/widget-core'
+import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
 import { checkAppearanceConfig, resolveAppearanceConfig } from '../config'
 import { isDensity, isMode } from '../domain'
 import { checkAtMostOneAppearance } from './structure'
@@ -30,8 +30,10 @@ export interface AppearanceInterfaces extends WidgetInterfaces {
 }
 
 export const AppearancePlugin = createWidgetPlugin('Appearance')
+	.description(undocumented)
 	.interfaces<AppearanceInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input, ctx): input is AppearanceRawConfig => {
 			checkAppearanceConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -41,10 +43,12 @@ export const AppearancePlugin = createWidgetPlugin('Appearance')
 	.structure(ctx => checkAtMostOneAppearance(ctx))
 	.state(state => state
 		.density({
+			description: undocumented,
 			validate: (input): input is Density => isDensity(input),
 			default: ({ config }) => config.density,
 		})
 		.mode({
+			description: undocumented,
 			validate: (input): input is Mode => isMode(input),
 			default: ({ config }) => config.mode,
 		}))

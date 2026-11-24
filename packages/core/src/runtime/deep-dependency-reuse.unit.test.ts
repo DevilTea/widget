@@ -13,7 +13,7 @@
 import type { ExecutionResult } from '../index'
 import type { WidgetChild } from '../types'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 import { inspectRuntime } from '../inspection'
 
 const isNumber = (input: unknown): input is number => typeof input === 'number'
@@ -74,14 +74,17 @@ interface QuestionInterfaces {
 }
 
 const questionPlugin = createWidgetPlugin('question')
+	.description(undocumented)
 	.interfaces<QuestionInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input): input is QuestionConfig => typeof input === 'object' && input !== null,
 		resolve: raw => raw!,
 	})
-	.state(state => state.answer({ validate: isNumber, default: () => 0 }))
+	.state(state => state.answer({ description: undocumented, validate: isNumber, default: () => 0 }))
 	.properties(properties => properties
 		.visible({
+			description: undocumented,
 			registerDeps: ({ dep, config }) => ({
 				next: dep.widget(config.next ?? 'absent')
 					.optional()
@@ -94,6 +97,7 @@ const questionPlugin = createWidgetPlugin('question')
 			},
 		})
 		.value({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({
 				answer: dep.self.state.get('answer'),
 				visible: dep.self.properties.get('visible'),
@@ -111,8 +115,9 @@ const questionPlugin = createWidgetPlugin('question')
 	.done()
 
 const listPlugin = createWidgetPlugin('list')
+	.description(undocumented)
 	.interfaces<{ slots: { items: WidgetChild } }>()
-	.slots({ items: {} })
+	.slots({ items: { description: undocumented } })
 	.done()
 
 const system = createWidgetSystem({ plugins: [questionPlugin, listPlugin] })

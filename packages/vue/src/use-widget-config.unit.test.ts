@@ -8,7 +8,7 @@
 
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { UseWidgetResult } from './types'
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { isReactive } from 'vue'
 import { BarePlugin, CounterPlugin, createCapabilityFixtureRuntime, createFixtureRuntime, mountWidgetBridge } from './test-fixtures'
@@ -21,8 +21,10 @@ interface ConfiguredInterfaces extends WidgetInterfaces {
 }
 
 const ConfiguredPlugin = createWidgetPlugin('Configured')
+	.description(undocumented)
 	.interfaces<ConfiguredInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input): input is ConfiguredInterfaces['config']['raw'] => input === null || (typeof input === 'object' && 'title' in input),
 		resolve: raw => ({ title: raw?.title ?? 'untitled', tags: raw?.tags ?? [], nested: { depth: 1 } }),
 	})

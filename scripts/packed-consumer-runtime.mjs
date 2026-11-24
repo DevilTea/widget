@@ -2,6 +2,7 @@ import {
 	createWidgetDocument,
 	createWidgetPlugin,
 	createWidgetSystem,
+	undocumented,
 } from '@deviltea/widget-core'
 import {
 	inspectBlueprint,
@@ -56,6 +57,7 @@ if (anchor['data-widget-id'] !== 'root' || anchor['data-widget-type'] !== 'Packe
 // The installed Inspector must accept a Runtime built by the installed Core peer: a bundled second
 // Core copy would make `inspectRuntime` reject it as foreign.
 const system = createWidgetSystem({ plugins: [createWidgetPlugin('Packed')
+	.description(undocumented)
 	.interfaces()
 	.done()] })
 const blueprint = system.createBlueprint({ id: 'root', type: 'Packed' })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createWidgetDocument, createWidgetPlugin, createWidgetSystem } from './index'
+import { createWidgetDocument, createWidgetPlugin, createWidgetSystem, undocumented } from './index'
 import { applySourcePatch } from './source-patch'
 
 describe('sourcePatch', () => {
@@ -565,6 +565,7 @@ describe('sourcePatch SameValueZero numbers', () => {
 
 	it('keeps Document revision and source unchanged for a +0/-0-only replace', () => {
 		const plugin = createWidgetPlugin('panel')
+			.description(undocumented)
 			.interfaces<Record<never, never>>()
 			.done()
 		const system = createWidgetSystem({ plugins: [plugin] })
@@ -769,6 +770,7 @@ describe('sourcePatch non-JSON operands', () => {
 		it('does not advance a Document revision for a no-op patch on a null-prototype source', () => {
 			const system = createWidgetSystem({
 				plugins: [createWidgetPlugin('leaf')
+					.description(undocumented)
 					.interfaces<Record<never, never>>()
 					.done()],
 			})
@@ -877,6 +879,7 @@ describe('sourcePatch member order', () => {
 
 	it('keeps the Document source order after a nested replace', () => {
 		const plugin = createWidgetPlugin('panel')
+			.description(undocumented)
 			.interfaces<Record<never, never>>()
 			.done()
 		const system = createWidgetSystem({ plugins: [plugin] })

@@ -17,7 +17,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 
 interface StateInterfaces {
 	state: {
@@ -27,8 +27,10 @@ interface StateInterfaces {
 
 function createStateHarness(validate: (input: unknown, addDiagnostic: (message: string) => void) => boolean) {
 	const plugin = createWidgetPlugin('counter')
+		.description(undocumented)
 		.interfaces<StateInterfaces>()
 		.state(state => state.count({
+			description: undocumented,
 			validate: (input, ctx): input is number => validate(input, message => ctx.addDiagnostic({ message })),
 			default: () => 0,
 		}))
@@ -57,8 +59,10 @@ function createMethodHarness(validateArgs: (args: readonly unknown[], addDiagnos
 	let executeCount = 0
 
 	const plugin = createWidgetPlugin('counter')
+		.description(undocumented)
 		.interfaces<MethodInterfaces>()
 		.methods(methods => methods.guarded({
+			description: undocumented,
 			validateArgs: (args, ctx): args is [number] => validateArgs(args, message => ctx.addDiagnostic({ message })),
 			execute: ({ args }) => {
 				executeCount++

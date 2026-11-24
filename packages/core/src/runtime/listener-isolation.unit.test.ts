@@ -23,7 +23,7 @@
 
 import type { ExecutionResult } from '../index'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem, EMPTY_DIAGNOSTICS } from '../index'
+import { createWidgetPlugin, createWidgetSystem, EMPTY_DIAGNOSTICS, undocumented } from '../index'
 
 interface CounterInterfaces {
 	state: {
@@ -40,18 +40,22 @@ interface CounterInterfaces {
 
 function createCounterPlugin() {
 	return createWidgetPlugin('counter')
+		.description(undocumented)
 		.interfaces<CounterInterfaces>()
 		.state(section => section
 			.count({
+				description: undocumented,
 				validate: (input): input is number => typeof input === 'number',
 				default: () => 0,
 			})
 			.flag({
+				description: undocumented,
 				validate: (input): input is boolean => typeof input === 'boolean',
 				default: () => false,
 			}))
 		.properties(section => section
 			.doubled({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ count: dep.self.state.get('count') }),
 				compute: ({ deps }) => {
 					const result = deps.count()
@@ -60,6 +64,7 @@ function createCounterPlugin() {
 			}))
 		.methods(section => section
 			.increment({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({
 					count: dep.self.state.get('count'),
 					setCount: dep.self.state.set('count'),

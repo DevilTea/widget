@@ -6,7 +6,7 @@
 
 import type { WidgetInterfaces } from '../index'
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 
 interface DepsInterfaces extends WidgetInterfaces {
 	state: { count: number }
@@ -17,10 +17,12 @@ interface DepsInterfaces extends WidgetInterfaces {
 const seen: Record<string, unknown[]> = { doubled: [], bump: [], constant: [] }
 
 const plugin = createWidgetPlugin('deps')
+	.description(undocumented)
 	.interfaces<DepsInterfaces>()
-	.state(state => state.count({ validate: (input): input is number => typeof input === 'number', default: () => 0 }))
+	.state(state => state.count({ description: undocumented, validate: (input): input is number => typeof input === 'number', default: () => 0 }))
 	.properties(properties => properties
 		.doubled({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ count: dep.self.state.get('count') }),
 			compute: ({ deps }) => {
 				seen.doubled!.push(deps)
@@ -29,6 +31,7 @@ const plugin = createWidgetPlugin('deps')
 			},
 		})
 		.constant({
+			description: undocumented,
 			registerDeps: ({ dep }) => [dep.self.properties.get('doubled')],
 			compute: ({ deps }) => {
 				seen.constant!.push(deps)
@@ -37,6 +40,7 @@ const plugin = createWidgetPlugin('deps')
 		}))
 	.methods(methods => methods
 		.bump({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ count: dep.self.state.get('count'), setCount: dep.self.state.set('count') }),
 			validateArgs: (args): args is [] => args.length === 0,
 			execute: ({ deps }) => {
@@ -46,7 +50,7 @@ const plugin = createWidgetPlugin('deps')
 				return 1
 			},
 		})
-		.idle({ validateArgs: (args): args is [] => args.length === 0, execute: () => 7 }))
+		.idle({ description: undocumented, validateArgs: (args): args is [] => args.length === 0, execute: () => 7 }))
 	.done()
 
 const system = createWidgetSystem({ plugins: [plugin] })

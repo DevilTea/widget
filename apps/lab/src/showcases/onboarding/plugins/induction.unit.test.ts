@@ -4,7 +4,7 @@
  * waiting out of Core.
  */
 
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 import { describe, expect, it } from 'vitest'
 import { createOnboardingRuntime, failureOf, valueOf, widgetsOf } from '../test-support'
 
@@ -213,8 +213,10 @@ describe('why the waiting is not in Core', () => {
 	it('a Method\'s emit stops working when the Method returns, so an async tail could never emit', async () => {
 		let later: () => void = () => {}
 		const plugin = createWidgetPlugin('Waiter')
+			.description(undocumented)
 			.interfaces<{ methods: { start: () => null }, events: { done: [] } }>()
 			.methods(methods => methods.start({
+				description: undocumented,
 				validateArgs: (args): args is [] => args.length === 0,
 				emits: ['done'],
 				execute: ({ emit }) => {
@@ -222,7 +224,7 @@ describe('why the waiting is not in Core', () => {
 					return null
 				},
 			}))
-			.events(['done'])
+			.events({ done: undocumented })
 			.done()
 		const blueprint = createWidgetSystem({ plugins: [plugin] })
 			.createBlueprint({ id: 'waiter', type: 'Waiter' })

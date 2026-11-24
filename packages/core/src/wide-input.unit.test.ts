@@ -9,7 +9,7 @@
 
 import type { JsonValue, WidgetInterfaces } from './index'
 import { describe, expect, it } from 'vitest'
-import { createWidgetDocument, createWidgetPlugin, createWidgetSystem, isJsonValue, separateWidgetSource } from './index'
+import { createWidgetDocument, createWidgetPlugin, createWidgetSystem, isJsonValue, separateWidgetSource, undocumented } from './index'
 
 const WIDE = 2 ** 18
 
@@ -21,14 +21,17 @@ interface NoteInterfaces extends WidgetInterfaces {
 }
 
 const notePlugin = createWidgetPlugin('note')
+	.description(undocumented)
 	.interfaces<NoteInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (_input): _input is Record<string, JsonValue> | null => true,
 		resolve: raw => raw ?? {},
 	})
 	.done()
 
 const leafPlugin = createWidgetPlugin('leaf')
+	.description(undocumented)
 	.interfaces()
 	.done()
 

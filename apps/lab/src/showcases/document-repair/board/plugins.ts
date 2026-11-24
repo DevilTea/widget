@@ -11,7 +11,7 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { I18nText, Tone } from '../domain'
 import type { BoardConfig, BoardRawConfig, NoticeConfig, NoticeRawConfig } from './config'
-import { createWidgetPlugin } from '@deviltea/widget-core'
+import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
 import { checkBoardConfig, checkNoticeConfig, resolveBoardConfig, resolveNoticeConfig } from './config'
 
 /** The root of a notice board (format v3). Slot `notices` holds the Notice widgets; Property `title` is the board title per language. */
@@ -48,8 +48,10 @@ export interface NoticeInterfaces extends WidgetInterfaces {
 }
 
 export const BoardPlugin = createWidgetPlugin('Board')
+	.description(undocumented)
 	.interfaces<BoardInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input, ctx): input is BoardRawConfig => {
 			checkBoardConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -58,6 +60,7 @@ export const BoardPlugin = createWidgetPlugin('Board')
 	})
 	.slots({
 		notices: {
+			description: undocumented,
 			validateStructure: ({ children, addDiagnostic }) => {
 				children.forEach((child, index) => {
 					if (child.resolved && child.type !== 'Notice')
@@ -71,12 +74,14 @@ export const BoardPlugin = createWidgetPlugin('Board')
 			addDiagnostic({ message: 'A Board must be the root widget.', reason: 'board-not-root' })
 	})
 	.properties(properties => properties
-		.title({ compute: ({ config }) => config.title }))
+		.title({ description: undocumented, compute: ({ config }) => config.title }))
 	.done()
 
 export const NoticePlugin = createWidgetPlugin('Notice')
+	.description(undocumented)
 	.interfaces<NoticeInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input, ctx): input is NoticeRawConfig => {
 			checkNoticeConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -89,10 +94,10 @@ export const NoticePlugin = createWidgetPlugin('Notice')
 			addDiagnostic({ message: 'A Notice must be placed in the notices of a Board.', reason: 'outside-board' })
 	})
 	.properties(properties => properties
-		.title({ compute: ({ config }) => config.title })
-		.body({ compute: ({ config }) => config.body })
-		.until({ compute: ({ config }) => config.until })
-		.tone({ compute: ({ config }) => config.tone }))
+		.title({ description: undocumented, compute: ({ config }) => config.title })
+		.body({ description: undocumented, compute: ({ config }) => config.body })
+		.until({ description: undocumented, compute: ({ config }) => config.until })
+		.tone({ description: undocumented, compute: ({ config }) => config.tone }))
 	.done()
 
 export const boardPlugins = [BoardPlugin, NoticePlugin] as const

@@ -8,7 +8,7 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { TextFieldConfig, TextFieldRawConfig } from '../config'
 import type { Density, I18nText } from '../domain'
-import { createWidgetPlugin } from '@deviltea/widget-core'
+import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
 import { checkTextFieldConfig, resolveTextFieldConfig } from '../config'
 import { isDensity, isString, textProblem } from '../domain'
 import { checkInsideSection, checkProvider, densityReads } from './structure'
@@ -40,8 +40,10 @@ export interface TextFieldInterfaces extends WidgetInterfaces {
 }
 
 export const TextFieldPlugin = createWidgetPlugin('TextField')
+	.description(undocumented)
 	.interfaces<TextFieldInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input, ctx): input is TextFieldRawConfig => {
 			checkTextFieldConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -55,14 +57,16 @@ export const TextFieldPlugin = createWidgetPlugin('TextField')
 			checkProvider(ctx, ctx.config.appearance, 'Appearance', 'appearance')
 	})
 	.state(state => state.value({
+		description: undocumented,
 		validate: (input): input is string => isString(input),
 		default: ({ config }) => config.value,
 	}))
 	.properties(properties => properties
-		.label({ compute: ({ config }) => config.label })
-		.placeholder({ compute: ({ config }) => config.placeholder })
-		.maxLength({ compute: ({ config }) => config.maxLength })
+		.label({ description: undocumented, compute: ({ config }) => config.label })
+		.placeholder({ description: undocumented, compute: ({ config }) => config.placeholder })
+		.maxLength({ description: undocumented, compute: ({ config }) => config.maxLength })
 		.message({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ value: dep.self.state.get('value') }),
 			compute: ({ deps, config }) => {
 				const value = deps.value()
@@ -70,6 +74,7 @@ export const TextFieldPlugin = createWidgetPlugin('TextField')
 			},
 		})
 		.density({
+			description: undocumented,
 			registerDeps: ({ dep, blueprint, config }) => densityReads(dep, blueprint, config.appearance),
 			compute: ({ deps }) => {
 				const density = deps.density?.()

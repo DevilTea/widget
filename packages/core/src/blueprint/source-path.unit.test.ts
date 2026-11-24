@@ -6,10 +6,11 @@
 import type { BlueprintWidgetNode, SourcePath } from '../index'
 import type { WidgetChild } from '../types'
 import { describe, expect, it } from 'vitest'
-import { createWidgetDocument, createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetDocument, createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 import { inspectBlueprint } from '../inspection'
 
 const leafPlugin = createWidgetPlugin('leaf')
+	.description(undocumented)
 	.interfaces<Record<never, never>>()
 	.done()
 
@@ -18,10 +19,11 @@ interface ContainerInterfaces {
 }
 
 const containerPlugin = createWidgetPlugin('container')
+	.description(undocumented)
 	.interfaces<ContainerInterfaces>()
 	.slots({
-		children: {},
-		footer: {},
+		children: { description: undocumented },
+		footer: { description: undocumented },
 	})
 	.done()
 

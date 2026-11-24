@@ -5,7 +5,7 @@ import type {
 	RuntimeStateInspection,
 	RuntimeWidgetInspection,
 } from '@deviltea/widget-core/inspection'
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createInspectorAgent } from './agent'
 import { createInspectorClient } from './client'
@@ -99,19 +99,22 @@ interface SubscriptionFixtureInterfaces extends WidgetInterfaces {
 }
 
 const SubscriptionFixturePlugin = createWidgetPlugin('SubscriptionFixture')
+	.description(undocumented)
 	.interfaces<SubscriptionFixtureInterfaces>()
 	.state(state => state.count({
+		description: undocumented,
 		validate: (input): input is number => typeof input === 'number',
 		default: () => 0,
 	}))
 	.methods(methods => methods.fire({
+		description: undocumented,
 		validateArgs: (args): args is [number] => args.length === 1 && typeof args[0] === 'number',
 		emits: ['change'],
 		execute: ({ args: [value], emit }) => {
 			emit.change(value)
 		},
 	}))
-	.events(['change'])
+	.events({ change: undocumented })
 	.done()
 
 const SubscriptionFixtureSystem = createWidgetSystem({ plugins: [SubscriptionFixturePlugin] })

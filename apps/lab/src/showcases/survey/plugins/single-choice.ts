@@ -8,7 +8,7 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { SingleChoiceConfig, SingleChoiceRawConfig } from '../config'
 import type { AnswerError, OptionState, QuestionText } from '../domain'
-import { createWidgetPlugin } from '@deviltea/widget-core'
+import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
 import { checkSingleChoiceConfig, resolveSingleChoiceConfig } from '../config'
 import { builtinError, questionText } from '../domain'
 import { checkQuestion } from './check-question'
@@ -52,8 +52,10 @@ export interface SingleChoiceInterfaces extends WidgetInterfaces {
 }
 
 export const SingleChoicePlugin = createWidgetPlugin('SingleChoice')
+	.description(undocumented)
 	.interfaces<SingleChoiceInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input, ctx): input is SingleChoiceRawConfig => {
 			checkSingleChoiceConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -62,27 +64,33 @@ export const SingleChoicePlugin = createWidgetPlugin('SingleChoice')
 	})
 	.structure(ctx => checkQuestion(ctx, ctx.config))
 	.state(state => state.answer({
+		description: undocumented,
 		validate: (input): input is string | null => input === null || typeof input === 'string',
 		default: () => null,
 	}))
 	.properties(properties => properties
 		.text({
+			description: undocumented,
 			registerDeps: ({ dep, blueprint }) => languageReads(dep, blueprint),
 			compute: ({ deps, config }) => questionText(config, languageFrom(deps)),
 		})
 		.visible({
+			description: undocumented,
 			registerDeps: ({ dep, config }) => visibleReads(dep, config),
 			compute: ({ deps, config }) => computeVisible(config, deps),
 		})
 		.required({
+			description: undocumented,
 			registerDeps: ({ dep, config }) => requiredReads(dep, config),
 			compute: ({ deps, config }) => computeRequired(config, deps),
 		})
 		.options({
+			description: undocumented,
 			registerDeps: ({ dep, config }) => optionReads(dep, config.options),
 			compute: ({ deps, config }) => computeOptions(config.options, deps),
 		})
 		.value({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({
 				answer: dep.self.state.get('answer'),
 				visible: dep.self.properties.get('visible'),
@@ -101,6 +109,7 @@ export const SingleChoicePlugin = createWidgetPlugin('SingleChoice')
 			},
 		})
 		.errors({
+			description: undocumented,
 			registerDeps: ({ dep, config, widget, blueprint }) => ({
 				visible: dep.self.properties.get('visible'),
 				required: dep.self.properties.get('required'),
@@ -118,6 +127,7 @@ export const SingleChoicePlugin = createWidgetPlugin('SingleChoice')
 			},
 		}))
 	.methods(methods => methods.clear({
+		description: undocumented,
 		registerDeps: ({ dep }) => dep.self.state.set('answer'),
 		validateArgs: (args): args is [] => args.length === 0,
 		execute: ({ deps }) => {

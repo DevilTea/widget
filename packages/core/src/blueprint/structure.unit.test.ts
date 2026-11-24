@@ -12,7 +12,7 @@ import type {
 } from '../index'
 import type { WidgetChild } from '../types'
 import { beforeEach, describe, expect, expectTypeOf, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 
 type CallOrderEntry = 'plugin' | 'slot' | 'system'
 let callOrder: CallOrderEntry[] = []
@@ -20,6 +20,7 @@ let callOrder: CallOrderEntry[] = []
 interface ItemInterfaces extends WidgetInterfaces {}
 
 const itemPlugin = createWidgetPlugin('item')
+	.description(undocumented)
 	.interfaces<ItemInterfaces>()
 	.done()
 
@@ -28,9 +29,11 @@ interface ListInterfaces extends WidgetInterfaces {
 }
 
 const listPlugin = createWidgetPlugin('list')
+	.description(undocumented)
 	.interfaces<ListInterfaces>()
 	.slots({
 		items: {
+			description: undocumented,
 			validateStructure: (ctx) => {
 				callOrder.push('slot')
 				ctx.addDiagnostic({ message: 'slot:widget-slot' })
@@ -198,6 +201,7 @@ describe('structure validation scopes', () => {
 
 	it('a Blueprint with no structure violations remains valid', () => {
 		const plainPlugin = createWidgetPlugin('plain')
+			.description(undocumented)
 			.interfaces<WidgetInterfaces>()
 			.done()
 		const plainSystem = createWidgetSystem({ plugins: [plainPlugin] })
@@ -236,9 +240,11 @@ describe('structure diagnostic reason', () => {
 	}
 
 	const reasonListPlugin = createWidgetPlugin('reason-list')
+		.description(undocumented)
 		.interfaces<ReasonListInterfaces>()
 		.slots({
 			items: {
+				description: undocumented,
 				validateStructure: (ctx) => {
 					ctx.addDiagnostic({ message: 'slot', reason: 'slot-reason' })
 					ctx.addDiagnostic({ message: 'slot-child', index: 0, reason: 'slot-child-reason' })
@@ -292,8 +298,9 @@ describe('structure validator locations must exist in the Blueprint being compil
 		system?: (ctx: { blueprint: any, addDiagnostic: (input: any) => void }) => void
 	}) {
 		const plugin = createWidgetPlugin('guarded-list')
+			.description(undocumented)
 			.interfaces<ListInterfaces>()
-			.slots({ items: { validateStructure: ctx => options.slot?.(ctx) } })
+			.slots({ items: { description: undocumented, validateStructure: ctx => options.slot?.(ctx) } })
 			.structure(ctx => options.plugin?.(ctx))
 			.done()
 		return createWidgetSystem({ plugins: [plugin, itemPlugin], validateStructure: ctx => options.system?.(ctx as never) })
@@ -450,9 +457,11 @@ describe('compile-view facades of unresolved nodes', () => {
 		}
 		let seen: unknown
 		const probePlugin = createWidgetPlugin('list')
+			.description(undocumented)
 			.interfaces<ProbeInterfaces>()
-			.slots({ items: {} })
+			.slots({ items: { description: undocumented } })
 			.properties(properties => properties.probe({
+				description: undocumented,
 				registerDeps: ({ blueprint, widget }) => {
 					seen = hintsOf(blueprint.getChildrenAt(widget, 'items'))
 					return {}
@@ -479,9 +488,11 @@ describe('compile-view facades seen by structure validators', () => {
 		const seenBySystem: { root: unknown, deepest: unknown }[] = []
 		// Only the middle widget has validators; the root and the leaf have none.
 		const middlePlugin = createWidgetPlugin('middle')
+			.description(undocumented)
 			.interfaces<NestInterfaces>()
 			.slots({
 				items: {
+					description: undocumented,
 					validateStructure: ({ widget, children }) => {
 						seenBySlot.push({ widget, children })
 					},
@@ -492,8 +503,9 @@ describe('compile-view facades seen by structure validators', () => {
 			})
 			.done()
 		const outerPlugin = createWidgetPlugin('outer')
+			.description(undocumented)
 			.interfaces<NestInterfaces>()
-			.slots({ items: {} })
+			.slots({ items: { description: undocumented } })
 			.done()
 		const nestSystem = createWidgetSystem({
 			plugins: [outerPlugin, middlePlugin, itemPlugin],

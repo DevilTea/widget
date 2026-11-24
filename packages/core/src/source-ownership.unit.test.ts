@@ -7,16 +7,18 @@
  */
 import type { WidgetChild } from './types'
 import { describe, expect, it } from 'vitest'
-import { createWidgetDocument, createWidgetPlugin, createWidgetSystem } from './index'
+import { createWidgetDocument, createWidgetPlugin, createWidgetSystem, undocumented } from './index'
 import { inspectBlueprint } from './inspection'
 
 const leafPlugin = createWidgetPlugin('leaf')
+	.description(undocumented)
 	.interfaces<Record<never, never>>()
 	.done()
 
 const containerPlugin = createWidgetPlugin('container')
+	.description(undocumented)
 	.interfaces<{ slots: { children: WidgetChild } }>()
-	.slots({ children: {} })
+	.slots({ children: { description: undocumented } })
 	.done()
 
 const system = createWidgetSystem({ plugins: [leafPlugin, containerPlugin] })

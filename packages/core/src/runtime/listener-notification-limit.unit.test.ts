@@ -18,7 +18,7 @@
 import type { RuntimeState } from '../index'
 import type { WidgetChild } from '../types'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 import { inspectRuntime } from '../inspection'
 import { MAX_NOTIFICATIONS_PER_CALL as LIMIT } from './adapter'
 
@@ -32,12 +32,14 @@ const isNumber = (input: unknown): input is number => typeof input === 'number'
 const isAnything = (input: unknown): input is unknown => input !== undefined
 
 const nodePlugin = createWidgetPlugin('node')
+	.description(undocumented)
 	.interfaces<NodeInterfaces>()
 	.state(state => state
-		.n({ validate: isNumber, default: () => 1 })
-		.o({ validate: isAnything, default: () => ({ x: 1 }) }))
+		.n({ description: undocumented, validate: isNumber, default: () => 1 })
+		.o({ description: undocumented, validate: isAnything, default: () => ({ x: 1 }) }))
 	.properties(properties => properties
 		.out({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ n: dep.self.state.get('n') }),
 			compute: ({ deps }) => {
 				const n = deps.n()
@@ -45,6 +47,7 @@ const nodePlugin = createWidgetPlugin('node')
 			},
 		})
 		.obj({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ o: dep.self.state.get('o') }),
 			compute: ({ deps }) => {
 				const o = deps.o()
@@ -53,6 +56,7 @@ const nodePlugin = createWidgetPlugin('node')
 		}))
 	.methods(methods => methods
 		.setN({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ n: dep.self.state.set('n') }),
 			validateArgs: (args): args is [number] => isNumber(args[0]),
 			execute: ({ args, deps }) => {
@@ -61,6 +65,7 @@ const nodePlugin = createWidgetPlugin('node')
 			},
 		})
 		.setO({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ o: dep.self.state.set('o') }),
 			validateArgs: (args): args is [unknown] => args.length === 1,
 			execute: ({ args, deps }) => {
@@ -69,6 +74,7 @@ const nodePlugin = createWidgetPlugin('node')
 			},
 		})
 		.setNThenThrow({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ n: dep.self.state.set('n') }),
 			validateArgs: (args): args is [number] => isNumber(args[0]),
 			execute: ({ args, deps }) => {
@@ -79,8 +85,9 @@ const nodePlugin = createWidgetPlugin('node')
 	.done()
 
 const graphPlugin = createWidgetPlugin('graph')
+	.description(undocumented)
 	.interfaces<{ slots: { nodes: WidgetChild } }>()
-	.slots({ nodes: {} })
+	.slots({ nodes: { description: undocumented } })
 	.done()
 
 const system = createWidgetSystem({ plugins: [nodePlugin, graphPlugin] })
@@ -915,8 +922,10 @@ describe('no batch level is left behind', () => {
 
 	it('by a nested write whose validation throws', () => {
 		const throwing = createWidgetPlugin('throwing')
+			.description(undocumented)
 			.interfaces<{ state: { n: number } }>()
 			.state(state => state.n({
+				description: undocumented,
 				validate: (input): input is number => {
 					if (input === 13)
 						throw new Error('validate failed')

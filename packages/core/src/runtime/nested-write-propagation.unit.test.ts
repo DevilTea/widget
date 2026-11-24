@@ -13,7 +13,7 @@
 
 import type { WidgetChild } from '../types'
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 
 interface NodeInterfaces {
 	state: { s: number }
@@ -24,9 +24,11 @@ interface NodeInterfaces {
 const isNumber = (input: unknown): input is number => typeof input === 'number'
 
 const nodePlugin = createWidgetPlugin('node')
+	.description(undocumented)
 	.interfaces<NodeInterfaces>()
-	.state(state => state.s({ validate: isNumber, default: () => 1 }))
+	.state(state => state.s({ description: undocumented, validate: isNumber, default: () => 1 }))
 	.properties(properties => properties.out({
+		description: undocumented,
 		registerDeps: ({ dep }) => ({ s: dep.self.state.get('s') }),
 		compute: ({ deps }) => {
 			const s = deps.s()
@@ -34,6 +36,7 @@ const nodePlugin = createWidgetPlugin('node')
 		},
 	}))
 	.methods(methods => methods.setTo({
+		description: undocumented,
 		registerDeps: ({ dep }) => ({ own: dep.self.state.set('s') }),
 		validateArgs: (args): args is [number] => isNumber(args[0]),
 		execute: ({ args, deps }) => {
@@ -44,8 +47,9 @@ const nodePlugin = createWidgetPlugin('node')
 	.done()
 
 const graphPlugin = createWidgetPlugin('graph')
+	.description(undocumented)
 	.interfaces<{ slots: { nodes: WidgetChild } }>()
-	.slots({ nodes: {} })
+	.slots({ nodes: { description: undocumented } })
 	.done()
 
 const system = createWidgetSystem({ plugins: [nodePlugin, graphPlugin] })

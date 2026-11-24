@@ -25,7 +25,7 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { ExpenseConfig, ExpenseRawConfig } from '../config'
 import type { ExpenseBreakdown, ExpenseProblem, ExpenseProblemCode, RosterEntry, TripView } from '../domain'
-import { createWidgetPlugin } from '@deviltea/widget-core'
+import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
 import { checkExpenseConfig, resolveExpenseConfig } from '../config'
 import { CURRENCY_CODE_PATTERN, equalLeftover, expenseProblemCode, expenseProblemText, isPersonId, localize, percentLeftover, splitByPercent, splitEqually, tripText } from '../domain'
 import { childIds, codesRead, currencyIdOf, isNumber, isNumberRecord, isString, languageFrom, languageReads, viewFrom, viewReads } from './reads'
@@ -81,8 +81,10 @@ export interface ExpenseInterfaces extends WidgetInterfaces {
 }
 
 export const ExpensePlugin = createWidgetPlugin('Expense')
+	.description(undocumented)
 	.interfaces<ExpenseInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input, ctx): input is ExpenseRawConfig => {
 			checkExpenseConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -105,31 +107,38 @@ export const ExpensePlugin = createWidgetPlugin('Expense')
 	})
 	.state(state => state
 		.amount({
+			description: undocumented,
 			validate: (input): input is number | null => input === null || (typeof input === 'number' && Number.isFinite(input)),
 			default: ({ config }) => config.recovered ? null : config.amount,
 		})
 		.currency({
+			description: undocumented,
 			validate: (input): input is string => typeof input === 'string' && CURRENCY_CODE_PATTERN.test(input),
 			default: ({ config }) => config.currency,
 		})
 		.paidBy({
+			description: undocumented,
 			validate: (input): input is string | null => input === null || isPersonId(input),
 			default: ({ config }) => config.paidBy === '' ? null : config.paidBy,
 		})
 		.among({
+			description: undocumented,
 			validate: (input): input is readonly string[] => Array.isArray(input) && input.every(isPersonId) && new Set(input).size === input.length,
 			default: ({ config }) => config.split.mode === 'equal' ? config.split.among : [],
 		}))
 	.properties(properties => properties
 		.title({
+			description: undocumented,
 			registerDeps: ({ dep, blueprint }) => languageReads(dep, blueprint),
 			compute: ({ deps, config }) => localize(config.title, languageFrom(deps)),
 		})
 		.view({
+			description: undocumented,
 			registerDeps: ({ dep, blueprint }) => viewReads(dep, blueprint),
 			compute: ({ deps }) => viewFrom(deps),
 		})
 		.roster({
+			description: undocumented,
 			registerDeps: ({ dep, blueprint }) => ({
 				people: Object.fromEntries(childIds(blueprint, 'people', 'Person')
 					.map(id => [id, dep.widget(id)
@@ -144,6 +153,7 @@ export const ExpensePlugin = createWidgetPlugin('Expense')
 				}),
 		})
 		.currencies({
+			description: undocumented,
 			registerDeps: ({ dep, blueprint }) => codesRead(dep, blueprint),
 			compute: ({ deps }) => {
 				const codes = deps.codes?.()
@@ -151,6 +161,7 @@ export const ExpensePlugin = createWidgetPlugin('Expense')
 			},
 		})
 		.participants({
+			description: undocumented,
 			// Only an equal split reads State `among` and the roster; a percent split names its people in the config.
 			registerDeps: ({ dep, config }) => ({
 				...(config.split.mode === 'equal' ? { among: dep.self.state.get('among'), roster: dep.self.properties.get('roster') } : {}),
@@ -168,6 +179,7 @@ export const ExpensePlugin = createWidgetPlugin('Expense')
 			},
 		})
 		.problem({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({
 				amount: dep.self.state.get('amount'),
 				paidBy: dep.self.state.get('paidBy'),
@@ -185,6 +197,7 @@ export const ExpensePlugin = createWidgetPlugin('Expense')
 			},
 		})
 		.counted({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ problem: dep.self.properties.get('problem') }),
 			compute: ({ deps }) => {
 				const problem = deps.problem()
@@ -192,6 +205,7 @@ export const ExpensePlugin = createWidgetPlugin('Expense')
 			},
 		})
 		.errors({
+			description: undocumented,
 			registerDeps: ({ dep, blueprint }) => ({
 				problem: dep.self.properties.get('problem'),
 				...languageReads(dep, blueprint),
@@ -204,6 +218,7 @@ export const ExpensePlugin = createWidgetPlugin('Expense')
 			},
 		})
 		.amountBase({
+			description: undocumented,
 			registerDeps: ({ dep, blueprint }) => {
 				const currency = currencyIdOf(blueprint)
 				return {
@@ -231,6 +246,7 @@ export const ExpensePlugin = createWidgetPlugin('Expense')
 			},
 		})
 		.shares({
+			description: undocumented,
 			registerDeps: ({ dep, config }) => ({
 				counted: dep.self.properties.get('counted'),
 				total: dep.self.properties.get('amountBase'),
@@ -253,6 +269,7 @@ export const ExpensePlugin = createWidgetPlugin('Expense')
 			},
 		})
 		.breakdown({
+			description: undocumented,
 			registerDeps: ({ dep, blueprint }) => {
 				const currency = currencyIdOf(blueprint)
 				return {

@@ -7,7 +7,7 @@
 
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { RepairDeskConfig, RepairDeskRawConfig } from '../config'
-import { createWidgetPlugin } from '@deviltea/widget-core'
+import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
 import { checkRepairDeskConfig, resolveRepairDeskConfig } from '../config'
 
 /**
@@ -29,8 +29,10 @@ export interface RepairDeskInterfaces extends WidgetInterfaces {
 }
 
 export const RepairDeskPlugin = createWidgetPlugin('RepairDesk')
+	.description(undocumented)
 	.interfaces<RepairDeskInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input, ctx): input is RepairDeskRawConfig => {
 			checkRepairDeskConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -39,6 +41,7 @@ export const RepairDeskPlugin = createWidgetPlugin('RepairDesk')
 	})
 	.slots({
 		drafts: {
+			description: undocumented,
 			validateStructure: ({ children, addDiagnostic }) => {
 				children.forEach((child, index) => {
 					if (child.resolved && child.type !== 'SavedDraft')
@@ -52,5 +55,5 @@ export const RepairDeskPlugin = createWidgetPlugin('RepairDesk')
 			addDiagnostic({ message: 'A RepairDesk must be the root widget.', reason: 'desk-not-root' })
 	})
 	.properties(properties => properties
-		.appVersion({ compute: ({ config }) => config.appVersion }))
+		.appVersion({ description: undocumented, compute: ({ config }) => config.appVersion }))
 	.done()

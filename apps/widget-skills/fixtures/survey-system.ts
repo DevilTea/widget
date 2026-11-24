@@ -11,7 +11,7 @@
  */
 
 import type { WidgetChild, WidgetContract } from '@deviltea/widget-core'
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 
 /**
  * Text per language, keyed by language tag (`en`, `zh-TW`).
@@ -124,8 +124,10 @@ export interface SurveyInterfaces {
 }
 
 export const SurveyPlugin = createWidgetPlugin('Survey')
+	.description(undocumented)
 	.interfaces<SurveyInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input, ctx): input is SurveyRawConfig => {
 			if (!isObject(input) || !isI18nText(input.title)) {
 				ctx.addDiagnostic({ message: 'The survey needs a title per language.', path: ['title'] })
@@ -140,18 +142,20 @@ export const SurveyPlugin = createWidgetPlugin('Survey')
 		resolve: raw => ({ title: raw?.title ?? {}, maxQuestions: raw?.maxQuestions ?? 10, submitUrl: raw?.submitUrl ?? null }),
 	})
 	.slots({
-		header: {},
+		header: { description: undocumented },
 		questions: {
+			description: undocumented,
 			validateStructure: ({ children, config, addDiagnostic }) => {
 				const max = config?.maxQuestions ?? 10
 				if (children.length > max)
 					addDiagnostic({ message: `At most ${max} questions.`, index: max, reason: 'too-many-questions', details: { max, count: children.length } })
 			},
 		},
-		footer: {},
+		footer: { description: undocumented },
 	})
-	.state(state => state.submitted({ validate: (input): input is boolean => typeof input === 'boolean', default: () => false }))
+	.state(state => state.submitted({ description: undocumented, validate: (input): input is boolean => typeof input === 'boolean', default: () => false }))
 	.properties(properties => properties.progress({
+		description: undocumented,
 		registerDeps: ({ slot }) => slot('questions')
 			.map(question => question.properties.get('answered')),
 		compute: ({ deps }) => deps.length === 0
@@ -162,6 +166,7 @@ export const SurveyPlugin = createWidgetPlugin('Survey')
 			}).length / deps.length,
 	}))
 	.methods(methods => methods.submit({
+		description: undocumented,
 		validateArgs: (args): args is [] => args.length === 0,
 		registerDeps: ({ slot, dep }) => ({
 			answered: slot('questions')
@@ -183,7 +188,8 @@ export const SurveyPlugin = createWidgetPlugin('Survey')
 			return true
 		},
 	}))
-	.events(['submitted'])
+	.events({ submitted: undocumented })
+	.reasons({ 'empty-title': undocumented, 'too-many-questions': undocumented })
 	.done()
 
 // -------------------------------------------------------------------------------------------------
@@ -244,8 +250,10 @@ export interface RatingInterfaces {
 }
 
 export const RatingPlugin = createWidgetPlugin('Rating')
+	.description(undocumented)
 	.interfaces<RatingInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input, ctx): input is RatingInterfaces['config']['raw'] => {
 			if (!isObject(input) || !isI18nText(input.question)) {
 				ctx.addDiagnostic({ message: 'A rating needs a question per language.', path: ['question'] })
@@ -256,11 +264,13 @@ export const RatingPlugin = createWidgetPlugin('Rating')
 		resolve: raw => ({ question: raw?.question ?? {}, scale: raw?.scale ?? 5 }),
 	})
 	.state(state => state.value({
+		description: undocumented,
 		validate: (input): input is number | null => input === null || typeof input === 'number',
 		default: () => null,
 		authorWritable: true,
 	}))
 	.properties(properties => properties.answered({
+		description: undocumented,
 		registerDeps: ({ dep }) => ({ value: dep.self.state.get('value') }),
 		compute: ({ deps }) => {
 			const value = deps.value()
@@ -268,6 +278,7 @@ export const RatingPlugin = createWidgetPlugin('Rating')
 		},
 	}))
 	.methods(methods => methods.rate({
+		description: undocumented,
 		validateArgs: (args, ctx): args is [number] => {
 			if (args.length !== 1 || typeof args[0] !== 'number') {
 				ctx.addDiagnostic({ message: 'rate() takes one number.' })
@@ -287,7 +298,8 @@ export const RatingPlugin = createWidgetPlugin('Rating')
 			return value
 		},
 	}))
-	.events(['rated'])
+	.events({ rated: undocumented })
+	.reasons({ 'out-of-range': undocumented })
 	.done()
 
 // -------------------------------------------------------------------------------------------------
@@ -346,8 +358,10 @@ export interface ChoiceInterfaces {
 }
 
 export const ChoicePlugin = createWidgetPlugin('Choice')
+	.description(undocumented)
 	.interfaces<ChoiceInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input, ctx): input is ChoiceInterfaces['config']['raw'] => {
 			if (!isObject(input) || !isI18nText(input.question) || !Array.isArray(input.options)) {
 				ctx.addDiagnostic({ message: 'A choice needs a question and a list of options.' })
@@ -358,10 +372,12 @@ export const ChoicePlugin = createWidgetPlugin('Choice')
 		resolve: raw => ({ question: raw?.question ?? {}, options: raw?.options ?? [], multiple: raw?.multiple ?? false, followUp: raw?.followUp ?? null }),
 	})
 	.state(state => state.selected({
+		description: undocumented,
 		validate: (input): input is readonly string[] => Array.isArray(input) && input.every(item => typeof item === 'string'),
 		default: () => [],
 	}))
 	.properties(properties => properties.answered({
+		description: undocumented,
 		registerDeps: ({ dep }) => ({ selected: dep.self.state.get('selected') }),
 		compute: ({ deps }) => {
 			const selected = deps.selected()
@@ -369,6 +385,7 @@ export const ChoicePlugin = createWidgetPlugin('Choice')
 		},
 	}))
 	.methods(methods => methods.select({
+		description: undocumented,
 		validateArgs: (args): args is [string] => args.length === 1 && typeof args[0] === 'string',
 		registerDeps: ({ dep }) => ({ selected: dep.self.state.get('selected'), setSelected: dep.self.state.set('selected') }),
 		emits: ['changed'],
@@ -385,7 +402,8 @@ export const ChoicePlugin = createWidgetPlugin('Choice')
 			return next
 		},
 	}))
-	.events(['changed'])
+	.events({ changed: undocumented })
+	.reasons({ 'unknown-option': undocumented })
 	.done()
 
 // -------------------------------------------------------------------------------------------------
@@ -408,8 +426,10 @@ export interface NoteInterfaces {
 }
 
 export const NotePlugin = createWidgetPlugin('Note')
+	.description(undocumented)
 	.interfaces<NoteInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input): input is NoteInterfaces['config']['raw'] => input === null || (isObject(input) && isI18nText(input.text)),
 		resolve: raw => ({ text: raw?.text ?? {} }),
 	})

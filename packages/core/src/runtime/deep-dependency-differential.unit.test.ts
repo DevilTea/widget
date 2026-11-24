@@ -16,7 +16,7 @@
 import type { ExecutionResult, WidgetSystemRuntime } from '../index'
 import type { WidgetChild } from '../types'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 
 interface NodeConfig {
 	readonly index: number
@@ -38,13 +38,16 @@ interface NodeInterfaces {
 }
 
 const nodePlugin = createWidgetPlugin('node')
+	.description(undocumented)
 	.interfaces<NodeInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input): input is NodeConfig => typeof input === 'object' && input !== null,
 		resolve: raw => raw!,
 	})
-	.state(state => state.s({ validate: (input): input is number => typeof input === 'number', default: () => 1 }))
+	.state(state => state.s({ description: undocumented, validate: (input): input is number => typeof input === 'number', default: () => 1 }))
 	.properties(properties => properties.out({
+		description: undocumented,
 		registerDeps: ({ dep, config }) => ({
 			s: dep.self.state.get('s'),
 			inputs: config.inputs.map(id => dep.widget(id)
@@ -85,8 +88,9 @@ const nodePlugin = createWidgetPlugin('node')
 	.done()
 
 const graphPlugin = createWidgetPlugin('graph')
+	.description(undocumented)
 	.interfaces<{ slots: { nodes: WidgetChild } }>()
-	.slots({ nodes: {} })
+	.slots({ nodes: { description: undocumented } })
 	.done()
 
 const system = createWidgetSystem({ plugins: [nodePlugin, graphPlugin] })

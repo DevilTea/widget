@@ -11,7 +11,7 @@
 import type { WidgetChild } from '../types'
 import { endBatch, startBatch } from 'alien-signals'
 import { describe, expect, it, vi } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem, EMPTY_DIAGNOSTICS } from '../index'
+import { createWidgetPlugin, createWidgetSystem, EMPTY_DIAGNOSTICS, undocumented } from '../index'
 
 const counter = vi.hoisted(() => ({ signalReads: 0 }))
 
@@ -38,8 +38,10 @@ interface LeafInterfaces {
 }
 
 const leaf = createWidgetPlugin('leaf')
+	.description(undocumented)
 	.interfaces<LeafInterfaces>()
 	.state(state => state.n({
+		description: undocumented,
 		validate: (input, ctx): input is number => {
 			if (typeof input !== 'number')
 				return false
@@ -52,8 +54,9 @@ const leaf = createWidgetPlugin('leaf')
 	.done()
 
 const group = createWidgetPlugin('group')
+	.description(undocumented)
 	.interfaces<{ slots: { children: WidgetChild } }>()
-	.slots({ children: {} })
+	.slots({ children: { description: undocumented } })
 	.done()
 
 const system = createWidgetSystem({ plugins: [leaf, group] })

@@ -1,6 +1,6 @@
 import type { WidgetChild } from '@deviltea/widget-core'
 import type { InspectableValue } from './value'
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 import { describe, expect, it } from 'vitest'
 import { createInspectorAgent } from './agent'
@@ -33,8 +33,10 @@ interface GaugeInterfaces {
 const flags = { propertyFails: false, longDetails: false }
 
 const GaugePlugin = createWidgetPlugin('DetailsGauge')
+	.description(undocumented)
 	.interfaces<GaugeInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input, ctx): input is { readonly limit: number } | null => {
 			if (input === null)
 				return true
@@ -51,12 +53,14 @@ const GaugePlugin = createWidgetPlugin('DetailsGauge')
 		},
 		resolve: raw => ({ limit: raw?.limit ?? 10 }),
 	})
-	.slots({ items: {} })
+	.slots({ items: { description: undocumented } })
 	.state(state => state.level({
+		description: undocumented,
 		validate: (input): input is number => typeof input === 'number',
 		default: () => 0,
 	}))
 	.properties(properties => properties.shown({
+		description: undocumented,
 		compute: (ctx) => {
 			if (flags.propertyFails) {
 				ctx.addDiagnostic({
@@ -71,6 +75,7 @@ const GaugePlugin = createWidgetPlugin('DetailsGauge')
 		},
 	}))
 	.methods(methods => methods.add({
+		description: undocumented,
 		validateArgs: (args, ctx): args is [number] => {
 			if (typeof args[0] !== 'number') {
 				ctx.addDiagnostic({ message: 'amount must be a number', path: [0], reason: 'not-a-number' })
@@ -84,6 +89,7 @@ const GaugePlugin = createWidgetPlugin('DetailsGauge')
 		},
 		execute: ({ args: [amount] }) => amount,
 	}))
+	.reasons({ 'too-large': undocumented, 'not-a-number': undocumented, 'long': undocumented })
 	.done()
 
 const system = createWidgetSystem({ plugins: [GaugePlugin] })

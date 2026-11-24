@@ -31,7 +31,7 @@ import type {
 } from './index'
 import type { WidgetChild } from './types'
 import { describe, expect, expectTypeOf, it } from 'vitest'
-import { createWidgetPlugin } from './index'
+import { createWidgetPlugin, undocumented } from './index'
 
 interface AllInterfaces extends WidgetInterfaces {
 	config: { raw: { label?: string }, resolved: { label: string } }
@@ -66,7 +66,7 @@ type ReportedReason<Member> = Member extends (...args: infer Args) => unknown
 	: never
 
 /** True when the marker's reason names `.Name()`; wording beyond the phase name is not pinned. */
-type Names<Member, Name extends Phase | 'done'> = [ReportedReason<Member>] extends [never]
+type Names<Member, Name extends Phase | 'reasons' | 'done'> = [ReportedReason<Member>] extends [never]
 	? false
 	: ReportedReason<Member> extends `${string}'.${Name}()'${string}` ? true : false
 
@@ -192,6 +192,7 @@ describe('builder phase-order markers (type-level)', () => {
 				// @ts-expect-error `methods` is declared but must come after `properties`
 				(methods) => {
 					return methods.reset({
+						description: undocumented,
 						validateArgs: (args): args is [] => args.length === 0,
 						execute: () => {},
 					})
@@ -203,6 +204,7 @@ describe('builder phase-order markers (type-level)', () => {
 				// @ts-expect-error `state` is declared but was already passed
 				(state) => {
 					return state.count({
+						description: undocumented,
 						validate: (value): value is number => typeof value === 'number',
 						default: () => 0,
 					})
@@ -220,7 +222,7 @@ describe('builder phase-order markers (type-level)', () => {
 		const tooEarlySlots = (afterInterfaces: Stages['config']): void => {
 			afterInterfaces.slots(
 				// @ts-expect-error `slots` is declared but must come after `config`
-				{ body: {} },
+				{ body: { description: undocumented } },
 			)
 		}
 		const tooEarlyStructure = (afterInterfaces: Stages['config']): void => {
@@ -283,12 +285,14 @@ describe('builder phase-order markers (type-level)', () => {
 			.toBeNever()
 
 		const plugin = createWidgetPlugin('structure-without-slots')
+			.description(undocumented)
 			.interfaces<StateOnlyInterfaces>()
 			.structure((ctx) => {
 				expectTypeOf(ctx)
 					.toEqualTypeOf<WidgetPluginValidateStructureContext<StateOnlyInterfaces>>()
 			})
 			.state(state => state.count({
+				description: undocumented,
 				validate: (value): value is number => typeof value === 'number',
 				default: () => 0,
 			}))
@@ -302,7 +306,7 @@ describe('builder phase-order markers (type-level)', () => {
 	it('takes only the slot definitions in `.slots()`; the plugin-level validator moved to `.structure()`', () => {
 		const withValidator = (afterConfig: Stages['slots']): void => {
 			afterConfig.slots(
-				{ body: {} },
+				{ body: { description: undocumented } },
 				// @ts-expect-error `.slots()` no longer accepts a plugin-level validateStructure argument
 				(ctx: WidgetPluginValidateStructureContext<AllInterfaces>) => {
 					ctx.addDiagnostic({ message: 'plugin' })
@@ -339,9 +343,11 @@ describe('builder phase-order markers (type-level)', () => {
 			.toEqualTypeOf<true>()
 
 		const plugin = createWidgetPlugin('empty-slots')
+			.description(undocumented)
 			.interfaces<EmptySlotsAndStateInterfaces>()
 			.slots({})
 			.state(state => state.count({
+				description: undocumented,
 				validate: (value): value is number => typeof value === 'number',
 				default: () => 0,
 			}))
@@ -363,34 +369,40 @@ describe('builder phase-order markers (type-level)', () => {
 
 	it('leaves correct chains, including skipped optional phases, with unchanged inferred types', () => {
 		const full = createWidgetPlugin('full')
+			.description(undocumented)
 			.interfaces<AllInterfaces>()
 			.config({
+				description: undocumented,
 				validate: (input): input is { label?: string } => typeof input === 'object' && input !== null,
 				resolve: raw => ({ label: raw?.label ?? '' }),
 			})
-			.slots({ body: {} })
+			.slots({ body: { description: undocumented } })
 			.structure(ctx => ctx.addDiagnostic({ message: 'structure' }))
 			.state(state => state.count({
+				description: undocumented,
 				validate: (value): value is number => typeof value === 'number',
 				default: () => 0,
 			}))
-			.properties(properties => properties.doubled({ compute: () => 0 }))
+			.properties(properties => properties.doubled({ description: undocumented, compute: () => 0 }))
 			.methods(methods => methods.reset({
+				description: undocumented,
 				validateArgs: (args): args is [] => args.length === 0,
 				execute: () => {},
 			}))
-			.events(['changed'])
+			.events({ changed: undocumented })
 			.done()
 		expectTypeOf(full)
 			.toEqualTypeOf<WidgetPlugin<'full', AllInterfaces>>()
 
 		const skipping = createWidgetPlugin('skipping')
+			.description(undocumented)
 			.interfaces<StateAndEventsInterfaces>()
 			.state(state => state.count({
+				description: undocumented,
 				validate: (value): value is number => typeof value === 'number',
 				default: () => 0,
 			}))
-			.events(['changed'])
+			.events({ changed: undocumented })
 			.done()
 		expectTypeOf(skipping)
 			.toEqualTypeOf<WidgetPlugin<'skipping', StateAndEventsInterfaces>>()
@@ -399,5 +411,34 @@ describe('builder phase-order markers (type-level)', () => {
 			.toEqual({ config: true, slots: true, state: true, properties: true, methods: true, events: true })
 		expect(skipping.type)
 			.toBe('skipping')
+	})
+
+	it('places `.reasons()` after `events` when reasons are declared, and requires it before `.done()`', () => {
+		interface ReasonsInterfaces extends WidgetInterfaces {
+			state: { count: number }
+			events: { changed: [value: number] }
+			reasons: { 'too-big': { readonly max: number } }
+		}
+		type AfterState = WidgetPluginStatePhase<'p', ReasonsInterfaces> extends { state: (...args: any[]) => infer Next } ? Next : never
+		type AfterEvents = WidgetPluginEventsPhase<'p', ReasonsInterfaces> extends { events: (...args: any[]) => infer Next } ? Next : never
+
+		expectTypeOf<keyof AfterEvents>()
+			.toEqualTypeOf<'state' | 'structure' | 'events' | 'reasons'>()
+		expectTypeOf<Names<AfterState extends { reasons: infer Member } ? Member : never, 'events'>>()
+			.toEqualTypeOf<true>()
+		expectTypeOf<Names<AfterEvents extends { events: infer Member } ? Member : never, 'reasons'>>()
+			.toEqualTypeOf<true>()
+
+		const plugin = createWidgetPlugin('reasons-last')
+			.description(undocumented)
+			.interfaces<ReasonsInterfaces>()
+			.state(state => state.count({ description: undocumented, validate: (value): value is number => typeof value === 'number' }))
+			.events({ changed: undocumented })
+			.reasons({ 'too-big': undocumented })
+			.done()
+		expectTypeOf(plugin)
+			.toEqualTypeOf<WidgetPlugin<'reasons-last', ReasonsInterfaces>>()
+		expect(plugin.capabilities)
+			.not.toHaveProperty('reasons')
 	})
 })

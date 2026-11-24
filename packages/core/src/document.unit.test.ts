@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createWidgetDocument, createWidgetPlugin, createWidgetSystem } from './index'
+import { createWidgetDocument, createWidgetPlugin, createWidgetSystem, undocumented } from './index'
 
 function createFixture() {
 	const plugin = createWidgetPlugin('panel')
+		.description(undocumented)
 		.interfaces<Record<never, never>>()
 		.done()
 	const system = createWidgetSystem({ plugins: [plugin] })

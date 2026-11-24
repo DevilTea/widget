@@ -7,7 +7,7 @@
 import type { DiagnosticCollector } from './index'
 import type { WidgetChild } from './types'
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from './index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from './index'
 
 type Retained = Partial<Record<'config' | 'slot' | 'plugin' | 'system' | 'state' | 'compute' | 'validateArgs' | 'execute', DiagnosticCollector<never>>>
 const retained: Retained = {}
@@ -24,8 +24,10 @@ interface ProbeInterfaces {
 }
 
 const probePlugin = createWidgetPlugin('probe')
+	.description(undocumented)
 	.interfaces<ProbeInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input, ctx): input is { ok: boolean } => {
 			retained.config = ctx as DiagnosticCollector<never>
 			return typeof input === 'object' && input !== null
@@ -34,6 +36,7 @@ const probePlugin = createWidgetPlugin('probe')
 	})
 	.slots({
 		items: {
+			description: undocumented,
 			validateStructure: (ctx) => {
 				retained.slot = ctx as DiagnosticCollector<never>
 			},
@@ -43,6 +46,7 @@ const probePlugin = createWidgetPlugin('probe')
 		retained.plugin = ctx as DiagnosticCollector<never>
 	})
 	.state(state => state.value({
+		description: undocumented,
 		validate: (input, ctx): input is number => {
 			retained.state = ctx as DiagnosticCollector<never>
 			return typeof input === 'number'
@@ -50,6 +54,7 @@ const probePlugin = createWidgetPlugin('probe')
 		default: () => 1,
 	}))
 	.properties(properties => properties.doubled({
+		description: undocumented,
 		registerDeps: ({ dep }) => ({ value: dep.self.state.get('value') }),
 		compute: (ctx) => {
 			retained.compute = ctx as unknown as DiagnosticCollector<never>
@@ -58,6 +63,7 @@ const probePlugin = createWidgetPlugin('probe')
 		},
 	}))
 	.methods(methods => methods.run({
+		description: undocumented,
 		validateArgs: (args, ctx): args is [] => {
 			retained.validateArgs = ctx as DiagnosticCollector<never>
 			return args.length === 0

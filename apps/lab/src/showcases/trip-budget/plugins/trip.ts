@@ -11,7 +11,7 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { TripConfig, TripRawConfig } from '../config'
 import type { TripView } from '../domain'
-import { createWidgetPlugin } from '@deviltea/widget-core'
+import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
 import { checkTripConfig, resolveTripConfig } from '../config'
 import { DEFAULT_TRIP_LANGUAGE, isTripLanguage, localize } from '../domain'
 import { baseRead, viewFrom } from './reads'
@@ -47,8 +47,10 @@ export interface TripInterfaces extends WidgetInterfaces {
 }
 
 export const TripPlugin = createWidgetPlugin('Trip')
+	.description(undocumented)
 	.interfaces<TripInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input, ctx): input is TripRawConfig => {
 			checkTripConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -57,6 +59,7 @@ export const TripPlugin = createWidgetPlugin('Trip')
 	})
 	.slots({
 		settings: {
+			description: undocumented,
 			validateStructure: ({ children, addDiagnostic }) => {
 				if (children.length !== 1)
 					addDiagnostic({ message: `The settings slot needs exactly one Currency, found ${children.length}.`, reason: 'settings-needs-one-currency' })
@@ -67,6 +70,7 @@ export const TripPlugin = createWidgetPlugin('Trip')
 			},
 		},
 		people: {
+			description: undocumented,
 			validateStructure: ({ children, addDiagnostic }) => {
 				children.forEach((child, index) => {
 					if (child.resolved && child.type !== 'Person')
@@ -75,6 +79,7 @@ export const TripPlugin = createWidgetPlugin('Trip')
 			},
 		},
 		expenses: {
+			description: undocumented,
 			validateStructure: ({ children, addDiagnostic }) => {
 				children.forEach((child, index) => {
 					if (child.resolved && child.type !== 'Expense')
@@ -83,6 +88,7 @@ export const TripPlugin = createWidgetPlugin('Trip')
 			},
 		},
 		summary: {
+			description: undocumented,
 			validateStructure: ({ children, addDiagnostic }) => {
 				if (children.length > 1)
 					addDiagnostic({ message: `The summary slot takes at most one Settlement, found ${children.length}.`, index: 1, reason: 'too-many-settlements' })
@@ -98,11 +104,13 @@ export const TripPlugin = createWidgetPlugin('Trip')
 			addDiagnostic({ message: 'A Trip must be the root widget.', reason: 'trip-not-root' })
 	})
 	.state(state => state.language({
+		description: undocumented,
 		validate: (input): input is string => isTripLanguage(input),
 		default: () => DEFAULT_TRIP_LANGUAGE,
 	}))
 	.properties(properties => properties
 		.title({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ language: dep.self.state.get('language') }),
 			compute: ({ deps, config }) => {
 				const language = deps.language()
@@ -110,6 +118,7 @@ export const TripPlugin = createWidgetPlugin('Trip')
 			},
 		})
 		.view({
+			description: undocumented,
 			registerDeps: ({ dep, blueprint }) => ({
 				language: dep.self.state.get('language'),
 				...baseRead(dep, blueprint),

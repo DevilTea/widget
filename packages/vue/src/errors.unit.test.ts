@@ -4,7 +4,7 @@
  * class and `code`; these tests never assert message text.
  */
 
-import { createWidgetPlugin } from '@deviltea/widget-core'
+import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
 import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { defineComponent, h, Suspense } from 'vue'
@@ -382,6 +382,7 @@ describe('widgetVueIntegrationError codes', () => {
 
 		it('is thrown for a distinct plugin instance that has the same type string', () => {
 			const impostor = createWidgetPlugin('Counter')
+				.description(undocumented)
 				.interfaces<Record<never, never>>()
 				.done()
 			const runtime = createFixtureRuntime({ id: 'impostor', type: 'Counter' })

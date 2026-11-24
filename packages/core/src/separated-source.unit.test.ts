@@ -1,7 +1,7 @@
 import type { WidgetSource } from './index'
 import type { WidgetChild } from './types'
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem, MAX_JSON_DEPTH, normalizeSeparatedWidgetSource, separateWidgetSource } from './index'
+import { createWidgetPlugin, createWidgetSystem, MAX_JSON_DEPTH, normalizeSeparatedWidgetSource, separateWidgetSource, undocumented } from './index'
 
 function createPlugins() {
 	interface ContainerInterfaces {
@@ -13,14 +13,17 @@ function createPlugins() {
 	}
 
 	const container = createWidgetPlugin('container')
+		.description(undocumented)
 		.interfaces<ContainerInterfaces>()
 		.config({
+			description: undocumented,
 			validate: (input): input is { readonly label?: string, readonly flags?: { readonly enabled: boolean } } => typeof input === 'object' && input !== null,
 			resolve: raw => ({ label: raw?.label ?? 'Container' }),
 		})
-		.slots({ items: {} })
+		.slots({ items: { description: undocumented } })
 		.done()
 	const leaf = createWidgetPlugin('leaf')
+		.description(undocumented)
 		.interfaces<Record<never, never>>()
 		.done()
 	return { container, leaf }

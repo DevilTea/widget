@@ -11,7 +11,7 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { MultipleChoiceConfig, MultipleChoiceRawConfig } from '../config'
 import type { AnswerError, OptionState, QuestionText } from '../domain'
-import { createWidgetPlugin } from '@deviltea/widget-core'
+import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
 import { checkMultipleChoiceConfig, resolveMultipleChoiceConfig } from '../config'
 import { builtinError, questionText } from '../domain'
 import { checkQuestion } from './check-question'
@@ -55,8 +55,10 @@ export interface MultipleChoiceInterfaces extends WidgetInterfaces {
 }
 
 export const MultipleChoicePlugin = createWidgetPlugin('MultipleChoice')
+	.description(undocumented)
 	.interfaces<MultipleChoiceInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input, ctx): input is MultipleChoiceRawConfig => {
 			checkMultipleChoiceConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -65,27 +67,33 @@ export const MultipleChoicePlugin = createWidgetPlugin('MultipleChoice')
 	})
 	.structure(ctx => checkQuestion(ctx, ctx.config))
 	.state(state => state.answer({
+		description: undocumented,
 		validate: (input): input is readonly string[] | null => input === null || (Array.isArray(input) && input.every(item => typeof item === 'string')),
 		default: () => null,
 	}))
 	.properties(properties => properties
 		.text({
+			description: undocumented,
 			registerDeps: ({ dep, blueprint }) => languageReads(dep, blueprint),
 			compute: ({ deps, config }) => questionText(config, languageFrom(deps)),
 		})
 		.visible({
+			description: undocumented,
 			registerDeps: ({ dep, config }) => visibleReads(dep, config),
 			compute: ({ deps, config }) => computeVisible(config, deps),
 		})
 		.required({
+			description: undocumented,
 			registerDeps: ({ dep, config }) => requiredReads(dep, config),
 			compute: ({ deps, config }) => computeRequired(config, deps),
 		})
 		.options({
+			description: undocumented,
 			registerDeps: ({ dep, config }) => optionReads(dep, config.options),
 			compute: ({ deps, config }) => computeOptions(config.options, deps),
 		})
 		.value({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({
 				answer: dep.self.state.get('answer'),
 				visible: dep.self.properties.get('visible'),
@@ -105,6 +113,7 @@ export const MultipleChoicePlugin = createWidgetPlugin('MultipleChoice')
 			},
 		})
 		.errors({
+			description: undocumented,
 			registerDeps: ({ dep, config, widget, blueprint }) => ({
 				visible: dep.self.properties.get('visible'),
 				required: dep.self.properties.get('required'),
@@ -132,6 +141,7 @@ export const MultipleChoicePlugin = createWidgetPlugin('MultipleChoice')
 			},
 		}))
 	.methods(methods => methods.clear({
+		description: undocumented,
 		registerDeps: ({ dep }) => dep.self.state.set('answer'),
 		validateArgs: (args): args is [] => args.length === 0,
 		execute: ({ deps }) => {

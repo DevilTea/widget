@@ -15,7 +15,7 @@
 
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { BalanceEntry, SettlementOutcome, TripView } from '../domain'
-import { createWidgetPlugin } from '@deviltea/widget-core'
+import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
 import { settle } from '../domain'
 import { childIds, currencyIdOf, isBoolean, isNumber, isString, viewFrom, viewReads } from './reads'
 import { checkInsideTrip } from './structure'
@@ -39,14 +39,17 @@ export interface SettlementInterfaces extends WidgetInterfaces {
 }
 
 export const SettlementPlugin = createWidgetPlugin('Settlement')
+	.description(undocumented)
 	.interfaces<SettlementInterfaces>()
 	.structure(ctx => checkInsideTrip(ctx, 'Settlement'))
 	.properties(properties => properties
 		.view({
+			description: undocumented,
 			registerDeps: ({ dep, blueprint }) => viewReads(dep, blueprint),
 			compute: ({ deps }) => viewFrom(deps),
 		})
 		.balances({
+			description: undocumented,
 			registerDeps: ({ dep, blueprint }) => ({
 				people: Object.fromEntries(childIds(blueprint, 'people', 'Person')
 					.map((id) => {
@@ -67,6 +70,7 @@ export const SettlementPlugin = createWidgetPlugin('Settlement')
 				}),
 		})
 		.total({
+			description: undocumented,
 			registerDeps: ({ dep, blueprint }) => ({
 				expenses: Object.fromEntries(childIds(blueprint, 'expenses', 'Expense')
 					.map((id) => {
@@ -90,6 +94,7 @@ export const SettlementPlugin = createWidgetPlugin('Settlement')
 				}, 0),
 		})
 		.transfers({
+			description: undocumented,
 			registerDeps: ({ dep, blueprint }) => {
 				const currency = currencyIdOf(blueprint)
 				return {

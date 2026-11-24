@@ -7,7 +7,7 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { ShortAnswerConfig, ShortAnswerRawConfig } from '../config'
 import type { AnswerError, QuestionText } from '../domain'
-import { createWidgetPlugin } from '@deviltea/widget-core'
+import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
 import { checkShortAnswerConfig, resolveShortAnswerConfig } from '../config'
 import { builtinError, questionText } from '../domain'
 import { checkQuestion } from './check-question'
@@ -45,8 +45,10 @@ export interface ShortAnswerInterfaces extends WidgetInterfaces {
 }
 
 export const ShortAnswerPlugin = createWidgetPlugin('ShortAnswer')
+	.description(undocumented)
 	.interfaces<ShortAnswerInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input, ctx): input is ShortAnswerRawConfig => {
 			checkShortAnswerConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -55,23 +57,28 @@ export const ShortAnswerPlugin = createWidgetPlugin('ShortAnswer')
 	})
 	.structure(ctx => checkQuestion(ctx, ctx.config))
 	.state(state => state.answer({
+		description: undocumented,
 		validate: (input): input is string | null => input === null || typeof input === 'string',
 		default: () => null,
 	}))
 	.properties(properties => properties
 		.text({
+			description: undocumented,
 			registerDeps: ({ dep, blueprint }) => languageReads(dep, blueprint),
 			compute: ({ deps, config }) => questionText(config, languageFrom(deps)),
 		})
 		.visible({
+			description: undocumented,
 			registerDeps: ({ dep, config }) => visibleReads(dep, config),
 			compute: ({ deps, config }) => computeVisible(config, deps),
 		})
 		.required({
+			description: undocumented,
 			registerDeps: ({ dep, config }) => requiredReads(dep, config),
 			compute: ({ deps, config }) => computeRequired(config, deps),
 		})
 		.value({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({
 				answer: dep.self.state.get('answer'),
 				visible: dep.self.properties.get('visible'),
@@ -86,6 +93,7 @@ export const ShortAnswerPlugin = createWidgetPlugin('ShortAnswer')
 			},
 		})
 		.errors({
+			description: undocumented,
 			registerDeps: ({ dep, config, widget, blueprint }) => ({
 				visible: dep.self.properties.get('visible'),
 				required: dep.self.properties.get('required'),
@@ -99,6 +107,7 @@ export const ShortAnswerPlugin = createWidgetPlugin('ShortAnswer')
 					: [], { selfId: widget.id }),
 		}))
 	.methods(methods => methods.clear({
+		description: undocumented,
 		registerDeps: ({ dep }) => dep.self.state.set('answer'),
 		validateArgs: (args): args is [] => args.length === 0,
 		execute: ({ deps }) => {

@@ -1,5 +1,5 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 import { describe, expect, it } from 'vitest'
 import { createInspectorAgent } from './agent'
 import { createInspectorClient } from './client'
@@ -16,20 +16,24 @@ interface MetadataWireInterfaces extends WidgetInterfaces {
 }
 
 const ConfiguredPlugin = createWidgetPlugin('MetadataWireConfigured')
+	.description(undocumented)
 	.interfaces<MetadataWireInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input): input is MetadataWireInterfaces['config']['raw'] => typeof input === 'object' && input !== null,
 		resolve: raw => ({ variant: raw?.variant ?? 'primary' }),
 	})
 	.methods(methods => methods.fire({
+		description: undocumented,
 		validateArgs: (args): args is [] => args.length === 0,
 		emits: ['fired'],
 		execute: ({ emit }) => emit.fired(),
 	}))
-	.events(['fired'])
+	.events({ fired: undocumented })
 	.done()
 
 const PlainPlugin = createWidgetPlugin('MetadataWirePlain')
+	.description(undocumented)
 	.interfaces<WidgetInterfaces>()
 	.done()
 

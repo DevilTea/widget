@@ -5,7 +5,7 @@
  * Event, itself or through the Methods it invokes), and it is the only kind of Method a Property may depend on.
  */
 
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 import { describe, expect, it } from 'vitest'
 import { tripBudgetPresets } from '../presets'
@@ -107,13 +107,16 @@ describe('both are read-only, as Core derives it', () => {
 
 	it('is what lets a Property depend on them: Core rejects a Property that depends on a Method that writes State', () => {
 		const writer = createWidgetPlugin('writer')
+			.description(undocumented)
 			.interfaces<{ state: { n: number }, properties: { bad: number }, methods: { bump: () => void } }>()
-			.state(state => state.n({ validate: (input): input is number => typeof input === 'number', default: () => 0 }))
+			.state(state => state.n({ description: undocumented, validate: (input): input is number => typeof input === 'number', default: () => 0 }))
 			.properties(properties => properties.bad({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ bump: dep.self.methods.invoke('bump') }),
 				compute: () => 0,
 			}))
 			.methods(methods => methods.bump({
+				description: undocumented,
 				validateArgs: (args): args is [] => args.length === 0,
 				registerDeps: ({ dep }) => ({ setN: dep.self.state.set('n') }),
 				execute: ({ deps }) => {

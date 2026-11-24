@@ -1,6 +1,6 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { InspectionNodeId } from '@deviltea/widget-core/inspection'
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 import { describe, expect, it } from 'vitest'
 import { sandboxPresets } from '../sandbox/presets'
@@ -74,8 +74,10 @@ describe('author command lowering', () => {
 			config: { raw: { readonly 'a/b~c': string }, resolved: { readonly 'a/b~c': string } }
 		}
 		const plugin = createWidgetPlugin('Special')
+			.description(undocumented)
 			.interfaces<SpecialInterfaces>()
 			.config({
+				description: undocumented,
 				validate: (input): input is { readonly 'a/b~c': string } => typeof input === 'object' && input !== null && typeof (input as Record<string, unknown>)['a/b~c'] === 'string',
 				resolve: raw => ({ 'a/b~c': raw?.['a/b~c'] ?? '' }),
 			})

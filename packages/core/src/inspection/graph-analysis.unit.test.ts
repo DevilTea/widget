@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 import { inspectBlueprint } from './index'
 
 interface WriteChain3Interfaces {
@@ -27,25 +27,30 @@ interface WriteChain3Interfaces {
 
 /** `reader` -> method `a` -> method `b` -> method `c` -> direct `state.set` (3-layer chain). */
 const writeChain3Plugin = createWidgetPlugin('graph-write-chain-3')
+	.description(undocumented)
 	.interfaces<WriteChain3Interfaces>()
-	.state(state => state.value({ validate: (input): input is number => typeof input === 'number' }))
+	.state(state => state.value({ description: undocumented, validate: (input): input is number => typeof input === 'number' }))
 	.properties(properties => properties.reader({
+		description: undocumented,
 		registerDeps: ({ dep }) => ({ call: dep.self.methods.invoke('a') }),
 		compute: () => null,
 	}))
 	.methods(methods =>
 		methods
 			.a({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ call: dep.self.methods.invoke('b') }),
 				validateArgs: (args): args is [] => args.length === 0,
 				execute: () => null,
 			})
 			.b({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ call: dep.self.methods.invoke('c') }),
 				validateArgs: (args): args is [] => args.length === 0,
 				execute: () => null,
 			})
 			.c({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ setValue: dep.self.state.set('value') }),
 				validateArgs: (args): args is [number] => args.length === 1 && typeof args[0] === 'number',
 				execute: () => null,
@@ -60,8 +65,10 @@ interface PureMethodInterfaces {
 }
 
 const pureMethodPlugin = createWidgetPlugin('graph-pure-method')
+	.description(undocumented)
 	.interfaces<PureMethodInterfaces>()
 	.methods(methods => methods.noop({
+		description: undocumented,
 		validateArgs: (args): args is [] => args.length === 0,
 		execute: () => null,
 	}))
@@ -74,8 +81,10 @@ interface SelfLoopInterfaces {
 }
 
 const selfLoopPlugin = createWidgetPlugin('graph-self-loop')
+	.description(undocumented)
 	.interfaces<SelfLoopInterfaces>()
 	.properties(properties => properties.loop({
+		description: undocumented,
 		registerDeps: ({ dep }) => ({ self: dep.self.properties.get('loop') }),
 		compute: () => null,
 	}))
@@ -92,12 +101,15 @@ interface PropMethodCycleInterfaces {
 
 /** `p` -> method `m` -> `p`: a 2-member mixed cyclic SCC containing one Property and one Method. */
 const propMethodCyclePlugin = createWidgetPlugin('graph-prop-method-cycle')
+	.description(undocumented)
 	.interfaces<PropMethodCycleInterfaces>()
 	.properties(properties => properties.p({
+		description: undocumented,
 		registerDeps: ({ dep }) => ({ call: dep.self.methods.invoke('m') }),
 		compute: () => null,
 	}))
 	.methods(methods => methods.m({
+		description: undocumented,
 		registerDeps: ({ dep }) => ({ read: dep.self.properties.get('p') }),
 		validateArgs: (args): args is [] => args.length === 0,
 		execute: () => null,
@@ -113,14 +125,17 @@ interface PropPropCycleInterfaces {
 
 /** `p1` <-> `p2`: a 2-member Property<->Property cyclic SCC. */
 const propPropCyclePlugin = createWidgetPlugin('graph-prop-prop-cycle')
+	.description(undocumented)
 	.interfaces<PropPropCycleInterfaces>()
 	.properties(properties =>
 		properties
 			.p1({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ read: dep.self.properties.get('p2') }),
 				compute: () => null,
 			})
 			.p2({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ read: dep.self.properties.get('p1') }),
 				compute: () => null,
 			}),
@@ -136,15 +151,18 @@ interface MethodOnlyCycleInterfaces {
 
 /** `m1` <-> `m2` with no Property participant: a valid, standalone method-only cyclic SCC. */
 const methodOnlyCyclePlugin = createWidgetPlugin('graph-method-only-cycle')
+	.description(undocumented)
 	.interfaces<MethodOnlyCycleInterfaces>()
 	.methods(methods =>
 		methods
 			.m1({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ call: dep.self.methods.invoke('m2') }),
 				validateArgs: (args): args is [] => args.length === 0,
 				execute: () => null,
 			})
 			.m2({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ call: dep.self.methods.invoke('m1') }),
 				validateArgs: (args): args is [] => args.length === 0,
 				execute: () => null,

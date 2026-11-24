@@ -9,7 +9,7 @@
  */
 
 import type { WidgetInterfaces } from '@deviltea/widget-core'
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 import { describe, expect, it, vi } from 'vitest'
 import { nextTick, watchEffect } from 'vue'
 import { WidgetVueIntegrationError } from './errors'
@@ -34,18 +34,22 @@ interface AggregateLabelInterfaces extends WidgetInterfaces {
 }
 
 const AggregateLabelPlugin = createWidgetPlugin('Label')
+	.description(undocumented)
 	.interfaces<AggregateLabelInterfaces>()
 	.state(state => state.count({
+		description: undocumented,
 		validate: (input): input is number => typeof input === 'number' && input >= 0,
 		default: () => 0,
 	}))
 	.properties(properties => properties.failing({
+		description: undocumented,
 		compute: ({ addDiagnostic }) => {
 			addDiagnostic({ message: 'aggregate Label property failed' })
 			return ''
 		},
 	}))
 	.methods(methods => methods.increment({
+		description: undocumented,
 		validateArgs: (args): args is [number] => args.length === 1 && typeof args[0] === 'number',
 		execute: ({ args: [step] }) => step,
 	}))

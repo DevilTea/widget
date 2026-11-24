@@ -15,7 +15,7 @@
 import type { ExecutionResult } from '../index'
 import type { WidgetChild } from '../types'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 
 /** A genuine engine stack overflow, captured once at a shallow stack so a compute can rethrow it. */
 function captureEngineStackOverflow(): unknown {
@@ -48,10 +48,12 @@ function numberOf(result: ExecutionResult<number | null, unknown>): number {
 function createHarness() {
 	const control = { throwing: null as unknown, computeRuns: 0 }
 	const plugin = createWidgetPlugin('host')
+		.description(undocumented)
 		.interfaces<HostInterfaces>()
-		.state(state => state.n({ validate: (input): input is number => typeof input === 'number', default: () => 1 }))
+		.state(state => state.n({ description: undocumented, validate: (input): input is number => typeof input === 'number', default: () => 1 }))
 		.properties(properties => properties
 			.flaky({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ n: dep.self.state.get('n') }),
 				compute: ({ deps }) => {
 					control.computeRuns++
@@ -63,6 +65,7 @@ function createHarness() {
 				},
 			})
 			.dependent({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ flaky: dep.self.properties.get('flaky') }),
 				compute: ({ deps }) => numberOf(deps.flaky()) + 1,
 			}))
@@ -192,12 +195,15 @@ describe('a chain of Properties far longer than the engine could nest', () => {
 	}
 
 	const rowPlugin = createWidgetPlugin('row')
+		.description(undocumented)
 		.interfaces<RowInterfaces>()
 		.config({
+			description: undocumented,
 			validate: (input): input is { prev: string | null } => typeof input === 'object' && input !== null,
 			resolve: raw => raw ?? { prev: null },
 		})
 		.properties(properties => properties.total({
+			description: undocumented,
 			// The first row's previous row is absent.
 			registerDeps: ({ dep, config }) => ({
 				prev: dep.widget(config.prev ?? 'none')
@@ -212,8 +218,9 @@ describe('a chain of Properties far longer than the engine could nest', () => {
 		}))
 		.done()
 	const tablePlugin = createWidgetPlugin('table')
+		.description(undocumented)
 		.interfaces<{ slots: { rows: WidgetChild } }>()
-		.slots({ rows: {} })
+		.slots({ rows: { description: undocumented } })
 		.done()
 	const chainSystem = createWidgetSystem({ plugins: [rowPlugin, tablePlugin] })
 

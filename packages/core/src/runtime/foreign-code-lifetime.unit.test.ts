@@ -14,7 +14,7 @@
 
 import type { ExecutionResult, JsonValue } from '../index'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createWidgetDocument, createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetDocument, createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 import { inspectRuntime } from '../inspection'
 
 interface ExecuteContext {
@@ -64,8 +64,10 @@ interface HostInterfaces {
 const isNumber = (input: unknown): input is number => typeof input === 'number'
 
 const plugin = createWidgetPlugin('host')
+	.description(undocumented)
 	.interfaces<HostInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (_input): _input is Record<string, JsonValue> | null => {
 			hooks.configValidate?.()
 			return true
@@ -73,6 +75,7 @@ const plugin = createWidgetPlugin('host')
 		resolve: raw => raw ?? {},
 	})
 	.state(state => state.n({
+		description: undocumented,
 		validate: (input): input is number => {
 			hooks.validate?.()
 			return isNumber(input)
@@ -83,6 +86,7 @@ const plugin = createWidgetPlugin('host')
 		},
 	}))
 	.properties(properties => properties.twice({
+		description: undocumented,
 		registerDeps: ({ dep }) => ({ n: dep.self.state.get('n') }),
 		compute: ({ deps }) => {
 			const n = deps.n()
@@ -91,6 +95,7 @@ const plugin = createWidgetPlugin('host')
 	}))
 	.methods(methods => methods
 		.run({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({
 				setN: dep.self.state.set('n'),
 				twice: dep.self.properties.get('twice'),
@@ -110,13 +115,14 @@ const plugin = createWidgetPlugin('host')
 			},
 		})
 		.helper({
+			description: undocumented,
 			validateArgs: (args): args is [] => {
 				hooks.validateArgs?.()
 				return args.length === 0
 			},
 			execute: () => 'helper',
 		}))
-	.events(['changed'])
+	.events({ changed: undocumented })
 	.done()
 
 const system = createWidgetSystem({ plugins: [plugin] })

@@ -11,7 +11,7 @@
 
 import type { RuntimeDiagnostic } from '../index'
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 
 interface CounterInterfaces {
 	state: {
@@ -20,14 +20,17 @@ interface CounterInterfaces {
 }
 
 const counterPlugin = createWidgetPlugin('counter')
+	.description(undocumented)
 	.interfaces<CounterInterfaces>()
 	.state(section => section.count({
+		description: undocumented,
 		validate: (input): input is number => typeof input === 'number',
 		default: () => 0,
 	}))
 	.done()
 
 const statelessPlugin = createWidgetPlugin('stateless')
+	.description(undocumented)
 	.interfaces<Record<never, never>>()
 	.done()
 

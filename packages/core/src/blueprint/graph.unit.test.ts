@@ -13,7 +13,7 @@
 import type { AnyWidgetPluginTuple, BlueprintDependencyDiagnostic, BlueprintDependencyReference, BlueprintDiagnostic, WidgetSystemBlueprint } from '../index'
 import type { WidgetChild } from '../types'
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 import { inspectBlueprint } from '../inspection'
 
 // -------------------------------------------------------------------------------------------------
@@ -35,15 +35,19 @@ interface WriteDirectInterfaces {
 
 /** Property `reader` directly invokes the directly-writeful method `write`. */
 const writeDirectPlugin = createWidgetPlugin('write-direct')
+	.description(undocumented)
 	.interfaces<WriteDirectInterfaces>()
 	.state(state => state.value({
+		description: undocumented,
 		validate: (input): input is number => typeof input === 'number',
 	}))
 	.properties(properties => properties.reader({
+		description: undocumented,
 		registerDeps: ({ dep }) => ({ call: dep.self.methods.invoke('write') }),
 		compute: () => null,
 	}))
 	.methods(methods => methods.write({
+		description: undocumented,
 		registerDeps: ({ dep }) => ({ setValue: dep.self.state.set('value') }),
 		validateArgs: (args): args is [number] => args.length === 1 && typeof args[0] === 'number',
 		execute: () => null,
@@ -61,11 +65,14 @@ interface WriteNoInvokeInterfaces {
 
 /** A directly-writeful method that no Property depends on: writeful methods are valid by themselves. */
 const writeNoInvokePlugin = createWidgetPlugin('write-no-invoke')
+	.description(undocumented)
 	.interfaces<WriteNoInvokeInterfaces>()
 	.state(state => state.value({
+		description: undocumented,
 		validate: (input): input is number => typeof input === 'number',
 	}))
 	.methods(methods => methods.write({
+		description: undocumented,
 		registerDeps: ({ dep }) => ({ setValue: dep.self.state.set('value') }),
 		validateArgs: (args): args is [number] => args.length === 1 && typeof args[0] === 'number',
 		execute: () => null,
@@ -88,27 +95,33 @@ interface WriteChain3Interfaces {
 
 /** Property `reader` -> method `a` -> method `b` -> method `c` -> direct `state.set` (3-layer chain). */
 const writeChain3Plugin = createWidgetPlugin('write-chain-3')
+	.description(undocumented)
 	.interfaces<WriteChain3Interfaces>()
 	.state(state => state.value({
+		description: undocumented,
 		validate: (input): input is number => typeof input === 'number',
 	}))
 	.properties(properties => properties.reader({
+		description: undocumented,
 		registerDeps: ({ dep }) => ({ call: dep.self.methods.invoke('a') }),
 		compute: () => null,
 	}))
 	.methods(methods =>
 		methods
 			.a({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ call: dep.self.methods.invoke('b') }),
 				validateArgs: (args): args is [] => args.length === 0,
 				execute: () => null,
 			})
 			.b({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ call: dep.self.methods.invoke('c') }),
 				validateArgs: (args): args is [] => args.length === 0,
 				execute: () => null,
 			})
 			.c({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ setValue: dep.self.state.set('value') }),
 				validateArgs: (args): args is [number] => args.length === 1 && typeof args[0] === 'number',
 				execute: () => null,
@@ -127,11 +140,14 @@ interface CrossWidgetWriterInterfaces {
 
 /** A child Widget whose Method writes State directly. */
 const crossWidgetWriterPlugin = createWidgetPlugin('cross-widget-writer')
+	.description(undocumented)
 	.interfaces<CrossWidgetWriterInterfaces>()
 	.state(state => state.value({
+		description: undocumented,
 		validate: (input): input is number => typeof input === 'number',
 	}))
 	.methods(methods => methods.write({
+		description: undocumented,
 		registerDeps: ({ dep }) => ({ setValue: dep.self.state.set('value') }),
 		validateArgs: (args): args is [number] => args.length === 1 && typeof args[0] === 'number',
 		execute: () => null,
@@ -150,13 +166,16 @@ interface CrossWidgetRelayInterfaces {
 
 /** Parent `reader` -> `outer` -> child `write` -> child `state.set`. */
 const crossWidgetRelayPlugin = createWidgetPlugin('cross-widget-relay')
+	.description(undocumented)
 	.interfaces<CrossWidgetRelayInterfaces>()
-	.slots({ children: {} })
+	.slots({ children: { description: undocumented } })
 	.properties(properties => properties.reader({
+		description: undocumented,
 		registerDeps: ({ dep }) => ({ call: dep.self.methods.invoke('outer') }),
 		compute: () => null,
 	}))
 	.methods(methods => methods.outer({
+		description: undocumented,
 		registerDeps: ({ dep }) => ({ call: dep.widget('writer').methods.invoke('write') }),
 		validateArgs: (args): args is [number] => args.length === 1 && typeof args[0] === 'number',
 		execute: () => null,
@@ -177,11 +196,14 @@ interface DedupEdgeInterfaces {
 
 /** Property `reader` registers the *same* Property->Method edge twice, through different container placements. */
 const dedupEdgePlugin = createWidgetPlugin('dedup-edge')
+	.description(undocumented)
 	.interfaces<DedupEdgeInterfaces>()
 	.state(state => state.value({
+		description: undocumented,
 		validate: (input): input is number => typeof input === 'number',
 	}))
 	.properties(properties => properties.reader({
+		description: undocumented,
 		registerDeps: ({ dep }) => ({
 			direct: dep.self.methods.invoke('write'),
 			nested: {
@@ -191,6 +213,7 @@ const dedupEdgePlugin = createWidgetPlugin('dedup-edge')
 		compute: () => null,
 	}))
 	.methods(methods => methods.write({
+		description: undocumented,
 		registerDeps: ({ dep }) => ({ setValue: dep.self.state.set('value') }),
 		validateArgs: (args): args is [number] => args.length === 1 && typeof args[0] === 'number',
 		execute: () => null,
@@ -205,8 +228,10 @@ interface SelfLoopInterfaces {
 
 /** Property `loop` depends on its own `properties.get`: a self-loop singleton SCC. */
 const selfLoopPlugin = createWidgetPlugin('self-loop-prop')
+	.description(undocumented)
 	.interfaces<SelfLoopInterfaces>()
 	.properties(properties => properties.loop({
+		description: undocumented,
 		registerDeps: ({ dep }) => ({ self: dep.self.properties.get('loop') }),
 		compute: () => null,
 	}))
@@ -223,12 +248,15 @@ interface PropMethodCycleInterfaces {
 
 /** Property `p` -> method `m` -> property `p`: a 2-member cyclic SCC containing one Property. */
 const propMethodCyclePlugin = createWidgetPlugin('prop-method-cycle')
+	.description(undocumented)
 	.interfaces<PropMethodCycleInterfaces>()
 	.properties(properties => properties.p({
+		description: undocumented,
 		registerDeps: ({ dep }) => ({ call: dep.self.methods.invoke('m') }),
 		compute: () => null,
 	}))
 	.methods(methods => methods.m({
+		description: undocumented,
 		registerDeps: ({ dep }) => ({ read: dep.self.properties.get('p') }),
 		validateArgs: (args): args is [] => args.length === 0,
 		execute: () => null,
@@ -244,15 +272,18 @@ interface MethodOnlyPureInterfaces {
 
 /** `m1` <-> `m2` mutual recursion with no Property participant: a standalone method-only cyclic SCC. */
 const methodOnlyPurePlugin = createWidgetPlugin('method-only-pure')
+	.description(undocumented)
 	.interfaces<MethodOnlyPureInterfaces>()
 	.methods(methods =>
 		methods
 			.m1({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ call: dep.self.methods.invoke('m2') }),
 				validateArgs: (args): args is [] => args.length === 0,
 				execute: () => null,
 			})
 			.m2({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ call: dep.self.methods.invoke('m1') }),
 				validateArgs: (args): args is [] => args.length === 0,
 				execute: () => null,
@@ -276,19 +307,23 @@ interface PropReachSafeInterfaces {
  * invalidate; COMMENT 18 requires it to stay valid.
  */
 const propReachSafePlugin = createWidgetPlugin('prop-reach-method-only-safe')
+	.description(undocumented)
 	.interfaces<PropReachSafeInterfaces>()
 	.properties(properties => properties.p({
+		description: undocumented,
 		registerDeps: ({ dep }) => ({ call: dep.self.methods.invoke('m1') }),
 		compute: () => null,
 	}))
 	.methods(methods =>
 		methods
 			.m1({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ call: dep.self.methods.invoke('m2') }),
 				validateArgs: (args): args is [] => args.length === 0,
 				execute: () => null,
 			})
 			.m2({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ call: dep.self.methods.invoke('m1') }),
 				validateArgs: (args): args is [] => args.length === 0,
 				execute: () => null,
@@ -308,19 +343,23 @@ interface MultiPropertyCycleInterfaces {
 
 /** `p1` -> `p2` -> `m` -> `p1`: a 3-member cyclic SCC containing two Properties and one Method. */
 const multiPropertyCyclePlugin = createWidgetPlugin('multi-property-cycle')
+	.description(undocumented)
 	.interfaces<MultiPropertyCycleInterfaces>()
 	.properties(properties =>
 		properties
 			.p1({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ read: dep.self.properties.get('p2') }),
 				compute: () => null,
 			})
 			.p2({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ call: dep.self.methods.invoke('m') }),
 				compute: () => null,
 			}),
 	)
 	.methods(methods => methods.m({
+		description: undocumented,
 		registerDeps: ({ dep }) => ({ read: dep.self.properties.get('p1') }),
 		validateArgs: (args): args is [] => args.length === 0,
 		execute: () => null,
@@ -575,15 +614,19 @@ interface ChainLinkInterfaces {
  * config says so, so one chain can end in a write while another one stays pure.
  */
 const chainLinkPlugin = createWidgetPlugin('chain-link')
+	.description(undocumented)
 	.interfaces<ChainLinkInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input): input is ChainLinkInterfaces['config']['raw'] => typeof input === 'object' && input !== null,
 		resolve: raw => raw ?? { next: null, writes: false },
 	})
 	.state(state => state.value({
+		description: undocumented,
 		validate: (input): input is number => typeof input === 'number',
 	}))
 	.methods(methods => methods.step({
+		description: undocumented,
 		registerDeps: ({ dep, config }) => ({
 			effect: config.next !== null
 				? dep.widget(config.next).methods.invoke('step')
@@ -595,8 +638,9 @@ const chainLinkPlugin = createWidgetPlugin('chain-link')
 	.done()
 
 const chainHolderPlugin = createWidgetPlugin('chain-holder')
+	.description(undocumented)
 	.interfaces<{ slots: { items: WidgetChild } }>()
-	.slots({ items: {} })
+	.slots({ items: { description: undocumented } })
 	.done()
 
 describe('write-effect propagation along a long Method chain', () => {
@@ -660,15 +704,19 @@ interface RingInterfaces {
 
 /** Property `p` reads the next ring member's `p`; the member without a successor reads its own State. */
 const ringPlugin = createWidgetPlugin('ring')
+	.description(undocumented)
 	.interfaces<RingInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input): input is RingInterfaces['config']['raw'] => typeof input === 'object' && input !== null,
 		resolve: raw => raw ?? { next: null },
 	})
 	.state(state => state.value({
+		description: undocumented,
 		validate: (input): input is number => typeof input === 'number',
 	}))
 	.properties(properties => properties.p({
+		description: undocumented,
 		registerDeps: ({ dep, config }) => ({
 			read: config.next !== null
 				? dep.widget(config.next).properties.get('p')

@@ -52,7 +52,7 @@
 
 import * as core from '@bench/core'
 
-const { createWidgetPlugin, createWidgetSystem } = core
+const { createWidgetPlugin, createWidgetSystem, undocumented } = core
 
 /** The value written to the tail State by the phases that write. */
 const WRITTEN = 5
@@ -75,12 +75,14 @@ function buildChain(length, variant) {
 	if (variant === 'state-first')
 		return buildStateFirstChain(length)
 	const plugin = createWidgetPlugin('chain')
+		.description(undocumented)
 		.interfaces()
-		.state(s => s.x({ validate: v => typeof v === 'number', default: () => 0 }))
+		.state(s => s.x({ description: undocumented, validate: v => typeof v === 'number', default: () => 0 }))
 		.properties((s) => {
 			let t = s
 			for (let i = 0; i < length; i++) {
 				t = t[`p${i}`]({
+					description: undocumented,
 					registerDeps: ({ dep }) => ({ next: i === length - 1 ? dep.self.state.get('x') : dep.self.properties.get(`p${i + 1}`) }),
 					compute: ({ deps }) => {
 						const r = deps.next()
@@ -110,17 +112,19 @@ function buildChain(length, variant) {
 /** The chain whose every Property reads a State of its own first (see the header); the head reads `L + sum of s{i}`. */
 function buildStateFirstChain(length) {
 	const plugin = createWidgetPlugin('chain')
+		.description(undocumented)
 		.interfaces()
 		.state((s) => {
 			let t = s
 			for (let i = 0; i < length; i++)
-				t = t[`s${i}`]({ validate: v => typeof v === 'number', default: () => 0 })
+				t = t[`s${i}`]({ description: undocumented, validate: v => typeof v === 'number', default: () => 0 })
 			return t
 		})
 		.properties((s) => {
 			let t = s
 			for (let i = 0; i < length; i++) {
 				t = t[`p${i}`]({
+					description: undocumented,
 					registerDeps: ({ dep }) => (i === length - 1
 						? { own: dep.self.state.get(`s${i}`) }
 						: { own: dep.self.state.get(`s${i}`), next: dep.self.properties.get(`p${i + 1}`) }),
@@ -156,14 +160,17 @@ function buildSurvey(widgets, variant) {
 	const live = variant === 'live' || variant === 'state-first'
 	const stateFirst = variant === 'state-first'
 	const root = createWidgetPlugin('qroot')
+		.description(undocumented)
 		.interfaces()
-		.slots({ children: {} })
+		.slots({ children: { description: undocumented } })
 		.done()
 	const question = createWidgetPlugin('q')
+		.description(undocumented)
 		.interfaces()
-		.state(s => s.answer({ validate: v => typeof v === 'number', default: () => 0 }))
+		.state(s => s.answer({ description: undocumented, validate: v => typeof v === 'number', default: () => 0 }))
 		.properties(s => s
 			.visible({
+				description: undocumented,
 				registerDeps: ({ widget, dep }) => {
 					const next = Number(widget.id.slice(1)) + 1
 					return next < widgets ? { next: dep.widget(`q${next}`).properties.get('value') } : {}
@@ -178,6 +185,7 @@ function buildSurvey(widgets, variant) {
 					: ({ deps }) => (deps.next === undefined ? true : deps.next().ok),
 			})
 			.value({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({
 					answer: dep.self.state.get('answer'),
 					visible: dep.self.properties.get('visible'),

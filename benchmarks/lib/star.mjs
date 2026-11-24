@@ -5,21 +5,25 @@
 
 import { loadCore } from './load.mjs'
 
-const { createWidgetPlugin, createWidgetSystem } = await loadCore()
+const { createWidgetPlugin, createWidgetSystem, undocumented } = await loadCore()
 
 export const rootPlugin = createWidgetPlugin('root')
+	.description(undocumented)
 	.interfaces()
-	.slots({ children: {} })
+	.slots({ children: { description: undocumented } })
 	.done()
 
 export const srcPlugin = createWidgetPlugin('src')
+	.description(undocumented)
 	.interfaces()
-	.state(s => s.v({ validate: v => typeof v === 'number', default: () => 0 }))
+	.state(s => s.v({ description: undocumented, validate: v => typeof v === 'number', default: () => 0 }))
 	.done()
 
 export const followerPlugin = createWidgetPlugin('follower')
+	.description(undocumented)
 	.interfaces()
 	.properties(p => p.p({
+		description: undocumented,
 		registerDeps: ({ dep }) => ({ v: dep.widget('src').state.get('v') }),
 		compute: ({ deps }) => {
 			const r = deps.v()

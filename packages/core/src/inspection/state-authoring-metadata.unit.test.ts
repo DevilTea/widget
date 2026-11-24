@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 import { inspectBlueprint } from './index'
 
 interface FixtureInterfaces {
@@ -11,16 +11,20 @@ interface FixtureInterfaces {
 }
 
 const plugin = createWidgetPlugin('state-authoring-metadata')
+	.description(undocumented)
 	.interfaces<FixtureInterfaces>()
 	.state(state => state
 		.authorVisible({
+			description: undocumented,
 			authorWritable: true,
 			validate: (input): input is number => typeof input === 'number',
 		})
 		.internal({
+			description: undocumented,
 			validate: (input): input is number => typeof input === 'number',
 		})
 		.explicitFalse({
+			description: undocumented,
 			authorWritable: false,
 			validate: (input): input is number => typeof input === 'number',
 		}))

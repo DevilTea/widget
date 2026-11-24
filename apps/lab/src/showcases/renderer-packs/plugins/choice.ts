@@ -6,7 +6,7 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { ChoiceConfig, ChoiceRawConfig } from '../config'
 import type { ChoiceOption, Density, I18nText } from '../domain'
-import { createWidgetPlugin } from '@deviltea/widget-core'
+import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
 import { checkChoiceConfig, resolveChoiceConfig } from '../config'
 import { isDensity, isString } from '../domain'
 import { checkInsideSection, checkProvider, densityReads } from './structure'
@@ -33,8 +33,10 @@ export interface ChoiceInterfaces extends WidgetInterfaces {
 }
 
 export const ChoicePlugin = createWidgetPlugin('Choice')
+	.description(undocumented)
 	.interfaces<ChoiceInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input, ctx): input is ChoiceRawConfig => {
 			checkChoiceConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -48,13 +50,15 @@ export const ChoicePlugin = createWidgetPlugin('Choice')
 			checkProvider(ctx, ctx.config.appearance, 'Appearance', 'appearance')
 	})
 	.state(state => state.value({
+		description: undocumented,
 		validate: (input, ctx): input is string => isString(input) && ctx.config.options.some(option => option.value === input),
 		default: ({ config }) => config.value,
 	}))
 	.properties(properties => properties
-		.label({ compute: ({ config }) => config.label })
-		.options({ compute: ({ config }) => config.options })
+		.label({ description: undocumented, compute: ({ config }) => config.label })
+		.options({ description: undocumented, compute: ({ config }) => config.options })
 		.density({
+			description: undocumented,
 			registerDeps: ({ dep, blueprint, config }) => densityReads(dep, blueprint, config.appearance),
 			compute: ({ deps }) => {
 				const density = deps.density?.()

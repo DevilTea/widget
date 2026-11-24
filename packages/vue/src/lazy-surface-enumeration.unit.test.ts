@@ -5,7 +5,7 @@
  * exactly the declared members, while enumerating never subscribes the Runtime.
  */
 
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 import { describe, expect, it, vi } from 'vitest'
 import { isRef } from 'vue'
 import {
@@ -28,8 +28,9 @@ interface EventInterfaces {
 }
 
 const EventPlugin = createWidgetPlugin('EnumerableEvents')
+	.description(undocumented)
 	.interfaces<EventInterfaces>()
-	.events(['press', 'change', PROTO_KEY])
+	.events({ press: undocumented, change: undocumented, [PROTO_KEY]: undocumented })
 	.done()
 
 function mountCounter() {

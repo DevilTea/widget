@@ -31,7 +31,7 @@ where a plugin is needed.
 <!-- sample: core-quick-start run -->
 ```ts
 import type { WidgetChild } from '@deviltea/widget-core'
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 
 // 1. Declare each plugin's capabilities. `counter` has every runtime
 //    capability; `panel` is a container with one slot and one Property.
@@ -56,8 +56,10 @@ interface PanelInterfaces {
 
 // 2. Build the plugins through the capability-phase builder.
 const counterPlugin = createWidgetPlugin('counter')
+	.description(undocumented)
 	.interfaces<CounterInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input): input is { step?: number } | null =>
 			input === null
 			|| (typeof input === 'object' && !Array.isArray(input)
@@ -66,12 +68,14 @@ const counterPlugin = createWidgetPlugin('counter')
 	})
 	.state(state =>
 		state.count({
+			description: undocumented,
 			validate: (input): input is number => typeof input === 'number',
 			default: () => 0,
 		}),
 	)
 	.properties(properties =>
 		properties.doubled({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ count: dep.self.state.get('count') }),
 			compute: ({ deps }) => {
 				const count = deps.count()
@@ -82,6 +86,7 @@ const counterPlugin = createWidgetPlugin('counter')
 	.methods(methods =>
 		methods
 			.increment({
+				description: undocumented,
 				validateArgs: (args): args is [] => args.length === 0,
 				registerDeps: ({ dep }) => ({
 					count: dep.self.state.get('count'),
@@ -99,6 +104,7 @@ const counterPlugin = createWidgetPlugin('counter')
 				},
 			})
 			.reset({
+				description: undocumented,
 				validateArgs: (args): args is [] => args.length === 0,
 				registerDeps: ({ dep }) => ({ setCount: dep.self.state.set('count') }),
 				execute: ({ deps }) => {
@@ -106,14 +112,16 @@ const counterPlugin = createWidgetPlugin('counter')
 				},
 			}),
 	)
-	.events(['changed'])
+	.events({ changed: undocumented })
 	.done()
 
 const panelPlugin = createWidgetPlugin('panel')
+	.description(undocumented)
 	.interfaces<PanelInterfaces>()
-	.slots({ content: {} })
+	.slots({ content: { description: undocumented } })
 	.properties(properties =>
 		properties.total({
+			description: undocumented,
 			// Runs once per Blueprint. `widget` and `blueprint` are the
 			// compile-time view of this panel and of the whole tree.
 			registerDeps: ({ widget, blueprint, dep }) => ({
@@ -269,16 +277,15 @@ interface WidgetInterfaces {
 }
 ```
 
-The interfaces type, with its JSDoc, is the single source of a plugin's shape
-and of its documentation. Core keeps the semantic facts only: it stores and
-transports no prose and no schema. Write the description of the plugin, of
-each slot, member, Event and reason as a JSDoc comment on the interfaces type;
-documentation and JSON Schema are generated from the types by tooling outside
-Core.
+The interfaces type is the single source of a plugin's shape. Its prose is
+written in the builder, beside each definition (see
+[Documentation in the builder](#documentation-in-the-builder)); Core keeps it on
+`plugin.docs` and never reads it. JSON Schema is inferred from the types by
+tooling outside Core.
 
-`reasons` is not a capability (it has no builder phase and no entry in
-`plugin.capabilities`): it types the `reason` and `details` of the
-diagnostics the plugin reports (see
+`reasons` is not a capability (it has no entry in `plugin.capabilities`; its
+`.reasons()` phase records docs only): it types the `reason` and `details` of
+the diagnostics the plugin reports (see
 [Diagnostic reasons and details](#diagnostic-reasons-and-details)).
 
 `RawConfig` is authored JSON data: its values must stay within `JsonValue`
@@ -323,15 +330,17 @@ inspection/DevTools API:
 
 <!-- sample: capabilities run -->
 ```ts
-import { createWidgetPlugin } from '@deviltea/widget-core'
+import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
 
 interface LabelInterfaces {
 	state: { text: string }
 }
 
 const plugin = createWidgetPlugin('label')
+	.description(undocumented)
 	.interfaces<LabelInterfaces>()
 	.state(state => state.text({
+		description: undocumented,
 		validate: (input): input is string => typeof input === 'string',
 		default: () => '',
 	}))
@@ -368,19 +377,21 @@ names. It contains no prose, no schema and no Blueprint or Runtime state.
 ### Builder phase order
 
 ```text
-interfaces -> config? -> slots? -> structure? -> state? -> properties? -> methods? -> events? -> done
+description -> interfaces -> config? -> slots? -> structure? -> state? -> properties? -> methods? -> events? -> reasons? -> done
 ```
 
 ```ts
 createWidgetPlugin('counter')
+	.description('A counter.') // always first
 	.interfaces<CounterInterfaces>()
-	.config({ /* ... */ }) // only if `config` is declared
+	.config({ description: undocumented }) // only if `config` is declared
 	.slots({ /* ... */ }) // only if `slots` is declared
 	.structure((ctx) => { /* ... */ }) // optional for every plugin; not a capability
 	.state(state => state /* ... */) // only if `state` is declared
 	.properties(properties => properties /* ... */) // only if `properties` is declared
 	.methods(methods => methods /* ... */) // only if `methods` is declared
-	.events([/* every Event name */]) // only if `events` is declared
+	.events({ /* one docs entry per Event */ }) // only if `events` is declared
+	.reasons({ /* one docs entry per reason */ }) // only if `reasons` is declared
 	.done()
 ```
 
@@ -418,6 +429,7 @@ these member sections specifically (only the outer builder has `.done()`).
 
 ```ts
 createWidgetPlugin('example')
+	.description(undocumented)
 	.interfaces<ExampleInterfaces>()
 	.state(state =>
 		state
@@ -426,20 +438,14 @@ createWidgetPlugin('example')
 	)
 ```
 
-`events` is declared by name only: `.events(names)` takes the list of every
-key of `Interfaces['events']`, each exactly once, in any order
-(`.events(['changed', 'reset'])`, and `.events([])` for an explicitly empty
-capability). A missing name, a name the interfaces do not declare, and a
-widened array such as `('changed' | 'reset')[]` (pass a list literal or an
-`as const` array) are type errors. The argument types of an Event live in the
-interfaces; there is nothing else to define.
-
-The error names the problem in the parameter type: a missing name shows as
-`WidgetEventNamesViolation<Missing>`, whose one key reads
-`'widget-core: .events() must list every declared Event; missing'`, and a
-widened array as `WidgetEventNamesTupleViolation`, whose key starts with
-`'widget-core: .events() takes a tuple of Event names'`. `ExactWidgetEventNames<Interfaces, Names>`
-is the check itself: `unknown` when `Names` lists every declared Event.
+`events` is declared by its docs: `.events(definitions)` takes one entry for
+every key of `Interfaces['events']`, keyed by the Event name, in any order
+(`.events({ changed: { description: 'The count changed.', payload: [{ description: 'The new count.' }] } })`,
+and `.events({})` for an explicitly empty capability). The keys are the Events
+the plugin declares at run time. A missing name and a name the interfaces do
+not declare are type errors, also when the record arrives through a variable
+(an undeclared name then shows as `WidgetUndeclaredMemberViolation<'events'>`).
+The argument types of an Event live in the interfaces.
 
 #### Runtime validation of declarations
 
@@ -459,16 +465,128 @@ interaction:
 - A missing or ill-typed required callback (for example a `compute` that is
   not a function) throws a `TypeError` that names the plugin type, the section,
   the member and the field. Optional fields are checked only when present.
-- `.events()` must be given a dense array of strings; anything else, and a name
-  listed twice, throws a `TypeError` that names the plugin, the section and
-  (for a repeated name) the Event. The list is captured by value. Whether it
-  covers the interfaces is a type-level check only: the types do not exist at
-  run time.
+- `.events()` must be given an object of docs entries; anything else, and a
+  malformed entry, throws a `TypeError` that names the plugin, the section and
+  the Event. Whether it covers the interfaces is a type-level check only: the
+  types do not exist at run time.
+- Every description must be a string or `undocumented`, and every docs object
+  may only have its known keys; see
+  [Documentation in the builder](#documentation-in-the-builder).
 
 Plugin and callback contract violations are uncoded `TypeError`s: they are
 implementation bugs, not Diagnostics (see
 [Error taxonomy](#error-taxonomy)). Hosts no longer need to re-validate an
 untyped plugin themselves.
+
+### Documentation in the builder
+
+A plugin's prose is written beside each definition: `.description(text)`
+starts the builder, `.config()` takes `description`, `raw` and `resolved`,
+every slot, State member and Property takes `description`, a Method takes
+`description`, `params` (one entry per parameter, by position) and `returns`,
+`.events()` takes one entry per Event with its `payload`, and `.reasons()` one
+entry per reason with its `details`. A description is Markdown prose.
+
+The types require the docs to be complete. For a value of type `T`,
+`FieldDocs<T>` needs `fields` with an entry for every key of an object type
+(optional keys included, every key of every member of a union), `items` for an
+array and `values` for a dictionary when their elements have fields of their
+own, and nothing beyond the description for a primitive or a built-in object
+such as `Date`, `Map` or `Set` (a class of your own is documented field by
+field). `null` and `undefined` are ignored, so `raw: Raw | null` is documented
+as `Raw`. A Method's `params` needs one entry per parameter and at least one
+for a rest parameter, and `returns` is left out when the Method returns no
+value (`void`, `undefined`, `never`).
+
+Known limits: an object type with both an index signature and fixed keys is
+documented as a dictionary (`values` only), and the check that `items` or
+`values` is present looks at most four nested arrays or dictionaries deep.
+
+- `defineTypeDocs<T>(name, docs)` declares the docs of a named type once; a
+  field refers to them with `ref`, and a recursive type refers to itself with a
+  thunk (`ref: () => conditionDocs`). A `ref` must name docs of exactly the
+  field's object type. A recursive declaration needs the explicit annotation
+  `const conditionDocs: TypeDocs<Condition> = …` (otherwise TypeScript reports
+  TS7022).
+- `defineFieldDocs<T>()(docs)` checks a docs value where it is written, at every
+  depth, so a key `T` does not have is an error even through a spread or a
+  variable. The builder sections and `defineTypeDocs` only get TypeScript's
+  check of an object literal written in place: a stale key that arrives
+  through a spread is caught by `defineFieldDocs` alone.
+- `WidgetRef<Types>` types a config field that holds the id of a widget of one
+  of `Types`. Any string is accepted without a cast; tooling reads `Types`
+  from the type, and nothing is checked at run time. `WidgetRef<'A' | 'B'>` is
+  not assignable to `WidgetRef<'A'>`.
+- `undocumented` is accepted wherever a description or a docs object is
+  required. As a description it also waives the nested docs of that entry.
+  Documentation tooling reports it.
+
+`plugin.docs` holds the result as plain data: `null` where `undocumented` was
+written, and each `ref` as a name in `types`. Its records keep the key order of
+the objects they were declared with: declaration order, except that
+integer-like names (`'2'`, `'10'`) come first, as in any JavaScript object. It
+is not part of the catalog, inspection, Blueprints or the Inspector protocol.
+
+<!-- sample: docs-in-the-builder run -->
+```ts
+import type { TypeDocs, WidgetRef } from '@deviltea/widget-core'
+import { createWidgetPlugin, defineTypeDocs, undocumented } from '@deviltea/widget-core'
+
+type Condition
+	= | { readonly op: 'all', readonly conditions: readonly Condition[] }
+		| { readonly op: 'answered', readonly question: WidgetRef<'Rating'> }
+
+const conditionDocs: TypeDocs<Condition> = defineTypeDocs<Condition>('Condition', {
+	description: 'A rule over the answers.',
+	fields: {
+		op: { description: 'The kind of rule.' },
+		conditions: { description: 'Every rule that must hold.', items: { ref: () => conditionDocs } },
+		question: { description: 'The question that must be answered.' },
+	},
+})
+
+interface QuestionRaw {
+	readonly title: string
+	readonly visibleWhen?: Condition
+}
+
+interface QuestionInterfaces {
+	config: { raw: QuestionRaw, resolved: QuestionRaw }
+	state: { answer: string | null }
+	events: { answered: [answer: string] }
+}
+
+const question = createWidgetPlugin('question')
+	.description('A question with a free-text answer.')
+	.interfaces<QuestionInterfaces>()
+	.config({
+		description: 'What the question asks, and when it is shown.',
+		raw: {
+			fields: {
+				title: { description: 'The question text.' },
+				visibleWhen: { description: 'Shown only while this rule holds.', ref: conditionDocs },
+			},
+		},
+		resolved: undocumented,
+		validate: (input): input is QuestionRaw => typeof input === 'object' && input !== null,
+		resolve: raw => raw ?? { title: '' },
+	})
+	.state(state => state.answer({
+		description: 'The answer; `null` until the respondent answers.',
+		validate: (input): input is string | null => input === null || typeof input === 'string',
+		default: () => null,
+	}))
+	.events({ answered: { description: 'The respondent answered.', payload: [{ description: 'The answer.' }] } })
+	.done()
+
+console.log(question.docs.description) // A question with a free-text answer.
+console.log(JSON.stringify(question.docs.config?.raw))
+// {"fields":{"title":{"description":"The question text."},"visibleWhen":{"description":"Shown only while this rule holds.","ref":"Condition"}}}
+console.log(question.docs.config?.resolved) // null
+console.log(Object.keys(question.docs.types)) // [ 'Condition' ]
+console.log(JSON.stringify(question.docs.types.Condition?.fields?.conditions))
+// {"description":"Every rule that must hold.","items":{"ref":"Condition"}}
+```
 
 ### Member declaration facts and value contracts
 
@@ -481,7 +599,7 @@ a stable semantic value contract:
 
 <!-- sample: value-contract run -->
 ```ts
-import { createWidgetPlugin, createWidgetValueContract } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetValueContract, undocumented } from '@deviltea/widget-core'
 import { inspectPlugin } from '@deviltea/widget-core/inspection'
 
 // A semantic-contract owner normally defines and exports the typed token once.
@@ -493,14 +611,17 @@ interface ExampleInterfaces {
 }
 
 const plugin = createWidgetPlugin('example')
+	.description(undocumented)
 	.interfaces<ExampleInterfaces>()
 	.state(state => state
 		.count({
+			description: undocumented,
 			authorWritable: true,
 			validate: (input): input is number => typeof input === 'number',
 		}))
 	.properties(properties => properties
 		.label({
+			description: undocumented,
 			valueContract: stringValueContract,
 			compute: () => 'Example',
 		}))
@@ -543,7 +664,7 @@ or other executable callbacks.
 
 <!-- sample: config run -->
 ```ts
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 
 interface BadgeInterfaces {
 	/** How the badge is labelled. */
@@ -557,8 +678,10 @@ interface BadgeInterfaces {
 }
 
 const badgePlugin = createWidgetPlugin('badge')
+	.description(undocumented)
 	.interfaces<BadgeInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input): input is { label?: string } | null =>
 			input === null || (typeof input === 'object' && !Array.isArray(input)),
 		resolve: rawConfig => ({ label: rawConfig?.label ?? 'Badge' }),
@@ -607,9 +730,9 @@ console.log(blueprint.root.resolved ? blueprint.root.config : null) // { label: 
 - `validate` is an authoritative predicate (`input is RawConfig`), not a
   coercion step. To derive it from a Zod, Valibot or ArkType schema, see
   [Using a schema library](#using-a-schema-library-zod-valibot-arktype).
-- Core carries no config description and no JSON Schema: document the config
-  with JSDoc on `config.raw`, from which tooling generates a JSON Schema for
-  authored config. Whether a plugin has a config capability is
+- Core carries no JSON Schema: document the config with `description`, `raw`
+  and `resolved` in `.config()`; tooling infers a JSON Schema for authored config
+  from `config.raw`. Whether a plugin has a config capability is
   `plugin.capabilities.config`.
 - The resolved config that callbacks receive as `ctx.config` (the same
   object as `node.config` on the Blueprint) is resolved once at compile time and
@@ -707,15 +830,17 @@ interface ContainerInterfaces {
 }
 
 createWidgetPlugin('container')
+	.description(undocumented)
 	.interfaces<ContainerInterfaces>()
 	.slots({
 		header: {
+			description: undocumented,
 			validateStructure: ({ children, addDiagnostic }) => {
 				if (children.length > 1)
 					addDiagnostic({ message: 'header accepts at most one widget', index: 1 })
 			},
 		},
-		content: {},
+		content: { description: undocumented },
 	})
 	// ...
 ```
@@ -767,7 +892,7 @@ validate its own placement:
 <!-- sample: structure run -->
 ```ts
 import type { WidgetChild } from '@deviltea/widget-core'
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 
 interface ContainerInterfaces {
 	slots: { header: WidgetChild, content: WidgetChild }
@@ -777,16 +902,18 @@ interface LeafInterfaces {
 }
 
 const containerPlugin = createWidgetPlugin('container')
+	.description(undocumented)
 	.interfaces<ContainerInterfaces>()
 	.slots({
 		header: {
+			description: undocumented,
 			// Slot-level: `widget`, `slot`, `children`, `blueprint` and the collector.
 			validateStructure: ({ children, addDiagnostic }) => {
 				if (children.length > 1)
 					addDiagnostic({ message: 'header accepts at most one widget', index: 1 })
 			},
 		},
-		content: {},
+		content: { description: undocumented },
 	})
 	// Plugin-level: `widget`, `blueprint` and the collector; may target a slot or a slot child.
 	.structure(({ widget, addDiagnostic }) => {
@@ -796,6 +923,7 @@ const containerPlugin = createWidgetPlugin('container')
 	.done()
 
 const leafPlugin = createWidgetPlugin('leaf')
+	.description(undocumented)
 	.interfaces<LeafInterfaces>()
 	// Available to every plugin, even one without slots: a leaf validates its own placement.
 	.structure(({ widget, blueprint, addDiagnostic }) => {
@@ -803,6 +931,7 @@ const leafPlugin = createWidgetPlugin('leaf')
 			addDiagnostic({ message: 'a leaf cannot be the root', reason: 'leaf-at-root' })
 	})
 	.state(state => state.text({
+		description: undocumented,
 		validate: (input): input is string => typeof input === 'string',
 		default: () => '',
 	}))
@@ -839,7 +968,7 @@ each value is the type of its `details` (`void` when it has none).
 
 <!-- sample: reasons run -->
 ```ts
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 
 interface GaugeInterfaces {
 	state: { level: number }
@@ -852,8 +981,10 @@ interface GaugeInterfaces {
 }
 
 const gaugePlugin = createWidgetPlugin('gauge')
+	.description(undocumented)
 	.interfaces<GaugeInterfaces>()
 	.state(state => state.level({
+		description: undocumented,
 		validate: (input, ctx): input is number => {
 			if (typeof input !== 'number') {
 				ctx.addDiagnostic({ message: 'The level must be a number.', reason: 'not-a-number' })
@@ -867,6 +998,7 @@ const gaugePlugin = createWidgetPlugin('gauge')
 		},
 		default: () => 0,
 	}))
+	.reasons({ 'not-a-number': undocumented, 'too-large': undocumented })
 	.done()
 
 const blueprint = createWidgetSystem({ plugins: [gaugePlugin] })
@@ -905,9 +1037,9 @@ if (!result.ok) {
   `invalid-method-arguments`, `invalid-method-result`) and through inspection,
   which exposes the same diagnostic objects. The field is absent when no
   `details` was reported. Do not mutate a payload after reporting it.
-- `reasons` is not a capability: it has no builder phase, and it is not
+- `reasons` is not a capability: its `.reasons()` phase records docs only, and it is not
   listed by `plugin.capabilities`, the catalog or inspection. Like every other
-  section, it is documented by JSDoc on the interfaces type.
+  section, it is documented in the builder (`.reasons()`, required when `reasons` is declared).
 - For a helper that reports on a plugin's behalf, `WidgetReasonsOf<Interfaces>`
   is the declared record (`never` without `reasons`),
   `WidgetReasonKeyOf<Interfaces>` its keys, and
@@ -918,9 +1050,11 @@ if (!result.ok) {
 
 ```ts
 createWidgetPlugin('counter')
+	.description(undocumented)
 	.interfaces<CounterInterfaces>()
 	.state(state =>
 		state.count({
+			description: undocumented,
 			validate: (input): input is number => typeof input === 'number',
 			default: () => 0,
 		}),
@@ -953,9 +1087,11 @@ does not freeze values written through `state.set`.
 
 ```ts
 createWidgetPlugin('counter')
+	.description(undocumented)
 	.interfaces<CounterInterfaces>()
 	.properties(properties =>
 		properties.doubled({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({
 				count: dep.self.state.get('count'),
 			}),
@@ -1004,10 +1140,12 @@ createWidgetPlugin('counter')
 
 ```ts
 createWidgetPlugin('counter')
+	.description(undocumented)
 	.interfaces<CounterInterfaces>()
 	.methods(methods =>
 		methods
 			.increment({
+				description: undocumented,
 				validateArgs: (args): args is [] => args.length === 0,
 				registerDeps: ({ dep }) => ({
 					count: dep.self.state.get('count'),
@@ -1023,6 +1161,7 @@ createWidgetPlugin('counter')
 				},
 			})
 			.reset({
+				description: undocumented,
 				validateArgs: (args): args is [] => args.length === 0,
 				registerDeps: ({ dep }) => ({ setCount: dep.self.state.set('count') }),
 				execute: ({ deps }) => { deps.setCount(0) },
@@ -1163,7 +1302,7 @@ A container usually cannot know the ids of its children statically. The
 <!-- sample: slot-deps after -->
 ```ts
 import type { WidgetContract } from '@deviltea/widget-core'
-import { createWidgetPlugin } from '@deviltea/widget-core'
+import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
 
 interface WizardInterfaces {
 	slots: {
@@ -1174,9 +1313,11 @@ interface WizardInterfaces {
 }
 
 export const wizardPlugin = createWidgetPlugin('wizard')
+	.description(undocumented)
 	.interfaces<WizardInterfaces>()
-	.slots({ steps: {} })
+	.slots({ steps: { description: undocumented } })
 	.properties(properties => properties.titles({
+		description: undocumented,
 		// One read per step, in the order the steps were authored.
 		registerDeps: ({ slot }) => slot('steps')
 			.map(step => step.properties.get('title')),
@@ -1311,9 +1452,10 @@ except `duplicate-plugin-type`.
 
 <!-- sample: registration-errors run -->
 ```ts
-import { createWidgetPlugin, createWidgetSystem, WidgetSystemConfigurationError } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented, WidgetSystemConfigurationError } from '@deviltea/widget-core'
 
 const plugin = createWidgetPlugin('note')
+	.description(undocumented)
 	.interfaces<Record<never, never>>()
 	.done()
 
@@ -1538,11 +1680,12 @@ of widgets.
 <!-- sample: blueprint-diagnostics run -->
 ```ts
 import type { WidgetChild } from '@deviltea/widget-core'
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 
 const boxPlugin = createWidgetPlugin('box')
+	.description(undocumented)
 	.interfaces<{ slots: { items: WidgetChild } }>()
-	.slots({ items: {} })
+	.slots({ items: { description: undocumented } })
 	.done()
 const system = createWidgetSystem({ plugins: [boxPlugin] })
 
@@ -1631,7 +1774,7 @@ A patch is a readonly array of operations (`SourcePatchOperation`); a path
 
 <!-- sample: document-patch run -->
 ```ts
-import { createWidgetDocument, createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetDocument, createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 
 interface CounterInterfaces {
 	config: {
@@ -1641,8 +1784,10 @@ interface CounterInterfaces {
 }
 
 const counterPlugin = createWidgetPlugin('counter')
+	.description(undocumented)
 	.interfaces<CounterInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input): input is { step: number } =>
 			typeof input === 'object' && input !== null && typeof (input as { step?: unknown }).step === 'number',
 		resolve: rawConfig => ({ step: rawConfig?.step ?? 1 }),
@@ -2090,14 +2235,14 @@ any other, stays consistent and usable afterwards.
 
 An Event is a public semantic notification declared by the plugin. Its
 arguments are a typed tuple in the plugin's `events` interface, and the builder
-lists the Event names in `.events([...])`. The `counter` in the
+documents each Event in `.events({ ... })`. The `counter` in the
 [Quick start](#quick-start) declares `changed: [count: number]` and emits it from
 `increment`, which lists it in `emits`. A self-contained example with a second plugin registered, so that
 `getWidget` returns a union that must be narrowed on `type`:
 
 <!-- sample: events run -->
 ```ts
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 
 interface NotifierInterfaces {
 	methods: { fire: (value: string) => void }
@@ -2105,22 +2250,26 @@ interface NotifierInterfaces {
 }
 
 const notifierPlugin = createWidgetPlugin('notifier')
+	.description(undocumented)
 	.interfaces<NotifierInterfaces>()
 	.methods(methods =>
 		methods.fire({
+			description: undocumented,
 			validateArgs: (args): args is [string] =>
 				args.length === 1 && typeof args[0] === 'string',
 			emits: ['change'],
 			execute: ({ args, emit }) => emit.change(args[0]),
 		}),
 	)
-	.events(['change'])
+	.events({ change: undocumented })
 	.done()
 
 // A second plugin: with more than one plugin registered, `getWidget` returns a union.
 const labelPlugin = createWidgetPlugin('label')
+	.description(undocumented)
 	.interfaces<{ state: { text: string } }>()
 	.state(state => state.text({
+		description: undocumented,
 		validate: (input): input is string => typeof input === 'string',
 		default: () => '',
 	}))
@@ -2274,7 +2423,7 @@ Property you rely on first, then read the aggregate:
 <!-- sample: headless run -->
 ```ts
 import type { WidgetSystemRuntime } from '@deviltea/widget-core'
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 import { inspectRuntime } from '@deviltea/widget-core/inspection'
 
 interface ScoreInterfaces {
@@ -2283,12 +2432,15 @@ interface ScoreInterfaces {
 }
 
 const scorePlugin = createWidgetPlugin('score')
+	.description(undocumented)
 	.interfaces<ScoreInterfaces>()
 	.state(state => state.score({
+		description: undocumented,
 		validate: (input): input is number => typeof input === 'number',
 		default: () => -1,
 	}))
 	.properties(properties => properties.grade({
+		description: undocumented,
 		registerDeps: ({ dep }) => ({ score: dep.self.state.get('score') }),
 		compute: ({ deps, addDiagnostic }) => {
 			const score = deps.score()
@@ -2377,9 +2529,10 @@ The error's `code` is `'runtime-disposed'`.
 
 <!-- sample: disposed run -->
 ```ts
-import { createWidgetPlugin, createWidgetSystem, WidgetSystemRuntimeDisposedError } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented, WidgetSystemRuntimeDisposedError } from '@deviltea/widget-core'
 
 const plugin = createWidgetPlugin('note')
+	.description(undocumented)
 	.interfaces<Record<never, never>>()
 	.done()
 const blueprint = createWidgetSystem({ plugins: [plugin] })
@@ -2431,12 +2584,13 @@ work when the Runtime goes away:
 
 <!-- sample: disposal-listener run -->
 ```ts
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 
 const plugin = createWidgetPlugin('profile')
+	.description(undocumented)
 	.interfaces<{ state: { title: string } }>()
 	.state(state => state
-		.title({ validate: (input): input is string => typeof input === 'string' }))
+		.title({ description: undocumented, validate: (input): input is string => typeof input === 'string' }))
 	.done()
 const blueprint = createWidgetSystem({ plugins: [plugin] })
 	.createBlueprint({ id: 'profile-1', type: 'profile' })
@@ -2487,17 +2641,19 @@ stable coded integration exception (`runtime-widget-mismatch`):
 
 <!-- sample: integration run -->
 ```ts
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 import {
 	getWidgetEventEmitter,
 	WidgetIntegrationError,
 } from '@deviltea/widget-core/integration'
 
 const buttonPlugin = createWidgetPlugin('button')
+	.description(undocumented)
 	.interfaces<{ events: { press: [] } }>()
-	.events(['press'])
+	.events({ press: undocumented })
 	.done()
 const labelPlugin = createWidgetPlugin('label')
+	.description(undocumented)
 	.interfaces<Record<never, never>>()
 	.done()
 
@@ -2548,10 +2704,11 @@ application and the adapter resolved two different copies of
 
 <!-- sample: integration-assert run -->
 ```ts
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 import { assertCoreRuntime, WidgetIntegrationError } from '@deviltea/widget-core/integration'
 
 const plugin = createWidgetPlugin('label')
+	.description(undocumented)
 	.interfaces<Record<never, never>>()
 	.done()
 const blueprint = createWidgetSystem({ plugins: [plugin] })
@@ -2633,8 +2790,8 @@ including when a subscription is active.
 declares, before any authored View or Blueprint exists. It is a superset of the
 plugin's `system.catalog` entry (`type`, `capabilities`, slot names), so a host
 that holds a plugin needs no System to list its members. Like the catalog it
-carries semantic facts only: descriptions and schema are generated from the
-plugin's interfaces type by tooling, and are not available here.
+carries semantic facts only: the prose is on `plugin.docs`, and the schema is
+inferred from the plugin's interfaces type by tooling; neither is here.
 
 ```ts
 const inspection = inspectPlugin(plugin)
@@ -2923,19 +3080,22 @@ that anything observing `ready` finds the data already in place.
 
 <!-- sample: async run -->
 ```ts
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 
 type Status = 'idle' | 'loading' | 'ready' | 'failed'
 
 const profilePlugin = createWidgetPlugin('profile')
+	.description(undocumented)
 	.interfaces<{ state: { status: Status, title: string | null } }>()
 	.state(state => state
 		.status({
+			description: undocumented,
 			validate: (input): input is Status =>
 				input === 'idle' || input === 'loading' || input === 'ready' || input === 'failed',
 			default: () => 'idle',
 		})
 		.title({
+			description: undocumented,
 			validate: (input): input is string | null => input === null || typeof input === 'string',
 			default: () => null,
 		}))
@@ -2984,7 +3144,7 @@ through a single Method.
 
 <!-- sample: async-batch run -->
 ```ts
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 
 type Status = 'loading' | 'ready'
 
@@ -2995,18 +3155,22 @@ interface ProfileInterfaces {
 }
 
 const profilePlugin = createWidgetPlugin('profile')
+	.description(undocumented)
 	.interfaces<ProfileInterfaces>()
 	.state(state => state
 		.status({
+			description: undocumented,
 			validate: (input): input is Status => input === 'loading' || input === 'ready',
 			default: () => 'loading',
 		})
 		.title({
+			description: undocumented,
 			validate: (input): input is string | null => input === null || typeof input === 'string',
 			default: () => null,
 		}))
 	.properties(properties => properties
 		.headline({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({
 				status: dep.self.state.get('status'),
 				title: dep.self.state.get('title'),
@@ -3020,6 +3184,7 @@ const profilePlugin = createWidgetPlugin('profile')
 	.methods(methods => methods
 		// One invocation is one batch: both writes land together.
 		.commit({
+			description: undocumented,
 			validateArgs: (args): args is [string] => args.length === 1 && typeof args[0] === 'string',
 			registerDeps: ({ dep }) => ({
 				setStatus: dep.self.state.set('status'),
@@ -3071,12 +3236,14 @@ already disposed by then.
 
 <!-- sample: async-cancel run -->
 ```ts
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 
 const plugin = createWidgetPlugin('profile')
+	.description(undocumented)
 	.interfaces<{ state: { title: string | null } }>()
 	.state(state => state
 		.title({
+			description: undocumented,
 			validate: (input): input is string | null => input === null || typeof input === 'string',
 			default: () => null,
 		}))
@@ -3138,7 +3305,7 @@ when it is stale.
 
 <!-- sample: async-ticket run -->
 ```ts
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 
 type Status = 'idle' | 'loading' | 'ready' | 'failed'
 
@@ -3151,18 +3318,21 @@ interface ProfileInterfaces {
 }
 
 const profilePlugin = createWidgetPlugin('profile')
+	.description(undocumented)
 	.interfaces<ProfileInterfaces>()
 	.state(state => state
 		.status({
+			description: undocumented,
 			validate: (input): input is Status =>
 				input === 'idle' || input === 'loading' || input === 'ready' || input === 'failed',
 			default: () => 'idle',
 		})
-		.requestId({ validate: (input): input is number => typeof input === 'number', default: () => 0 })
-		.data({ validate: (input): input is string | null => input === null || typeof input === 'string', default: () => null }))
+		.requestId({ description: undocumented, validate: (input): input is number => typeof input === 'number', default: () => 0 })
+		.data({ description: undocumented, validate: (input): input is string | null => input === null || typeof input === 'string', default: () => null }))
 	.methods(methods => methods
 		// Marks a load as started and hands the host a ticket.
 		.begin({
+			description: undocumented,
 			validateArgs: (args): args is [] => args.length === 0,
 			registerDeps: ({ dep }) => ({
 				requestId: dep.self.state.get('requestId'),
@@ -3179,6 +3349,7 @@ const profilePlugin = createWidgetPlugin('profile')
 		})
 		// Commits a result (`null` means the request failed); a stale ticket is ignored.
 		.settle({
+			description: undocumented,
 			validateArgs: (args): args is [number, string | null] =>
 				args.length === 2 && typeof args[0] === 'number' && (args[1] === null || typeof args[1] === 'string'),
 			registerDeps: ({ dep }) => ({
@@ -3261,7 +3432,7 @@ patches are copy-on-write.
 <!-- sample: persisted run -->
 ```ts
 import type { SourcePatch, WidgetChild, WidgetDocument } from '@deviltea/widget-core'
-import { createWidgetDocument, createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetDocument, createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 
 interface CounterInterfaces {
 	config: { raw: { step: number } | null, resolved: { step: number } }
@@ -3270,20 +3441,24 @@ interface CounterInterfaces {
 interface PanelInterfaces { slots: { content: WidgetChild } }
 
 const counterPlugin = createWidgetPlugin('counter')
+	.description(undocumented)
 	.interfaces<CounterInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input): input is { step: number } | null =>
 			input === null || (typeof input === 'object' && !Array.isArray(input) && typeof (input as { step?: unknown }).step === 'number'),
 		resolve: rawConfig => ({ step: rawConfig?.step ?? 1 }),
 	})
 	.state(state => state.count({
+		description: undocumented,
 		validate: (input): input is number => typeof input === 'number',
 		default: () => 0,
 	}))
 	.done()
 const panelPlugin = createWidgetPlugin('panel')
+	.description(undocumented)
 	.interfaces<PanelInterfaces>()
-	.slots({ content: {} })
+	.slots({ content: { description: undocumented } })
 	.done()
 
 const system = createWidgetSystem({ plugins: [counterPlugin, panelPlugin] })
@@ -3364,18 +3539,21 @@ filter them out of the snapshot first if you do not want those diagnostics.
 <!-- sample: state-carry-over run -->
 ```ts
 import type { WidgetChild } from '@deviltea/widget-core'
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 
 const counterPlugin = createWidgetPlugin('counter')
+	.description(undocumented)
 	.interfaces<{ state: { count: number } }>()
 	.state(state => state.count({
+		description: undocumented,
 		validate: (input): input is number => typeof input === 'number',
 		default: () => 0,
 	}))
 	.done()
 const panelPlugin = createWidgetPlugin('panel')
+	.description(undocumented)
 	.interfaces<{ slots: { content: WidgetChild } }>()
-	.slots({ content: {} })
+	.slots({ content: { description: undocumented } })
 	.done()
 const system = createWidgetSystem({ plugins: [counterPlugin, panelPlugin] })
 
@@ -3445,18 +3623,21 @@ each step.
 <!-- sample: editing-invalid run -->
 ```ts
 import type { SourcePatch, WidgetChild, WidgetSystemRuntime } from '@deviltea/widget-core'
-import { createWidgetDocument, createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetDocument, createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 
 const counterPlugin = createWidgetPlugin('counter')
+	.description(undocumented)
 	.interfaces<{ state: { count: number } }>()
 	.state(state => state.count({
+		description: undocumented,
 		validate: (input): input is number => typeof input === 'number',
 		default: () => 0,
 	}))
 	.done()
 const panelPlugin = createWidgetPlugin('panel')
+	.description(undocumented)
 	.interfaces<{ slots: { content: WidgetChild } }>()
-	.slots({ content: {} })
+	.slots({ content: { description: undocumented } })
 	.done()
 const plugins = [counterPlugin, panelPlugin] as const
 const system = createWidgetSystem({ plugins })
@@ -3558,7 +3739,7 @@ normally against `I`:
 <!-- sample: generic-factory run -->
 ```ts
 import type { WidgetPluginConfigPhase } from '@deviltea/widget-core'
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 
 interface BoxInterfaces<Value> {
 	state: { value: Value }
@@ -3570,8 +3751,9 @@ export function createBoxPlugin<const Type extends string, Value>(
 	initial: Value,
 ) {
 	return (createWidgetPlugin(type)
+		.description(undocumented)
 		.interfaces<BoxInterfaces<Value>>() as WidgetPluginConfigPhase<Type, BoxInterfaces<Value>>)
-		.state(state => state.value({ validate: isValue, default: () => initial }))
+		.state(state => state.value({ description: undocumented, validate: isValue, default: () => initial }))
 		.done()
 }
 
@@ -3634,7 +3816,7 @@ against Core without either library as a dependency.
 <!-- sample: standard-schema run -->
 ```ts
 import type { DiagnosticCollector, RelativeValueDiagnosticInput } from '@deviltea/widget-core'
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 
 // The Standard Schema interface, trimmed. The spec recommends copying it
 // instead of depending on `@standard-schema/spec`.
@@ -3718,13 +3900,16 @@ interface CounterInterfaces {
 	methods: { add: (amount: number) => number }
 }
 const counterPlugin = createWidgetPlugin('counter')
+	.description(undocumented)
 	.interfaces<CounterInterfaces>()
 	.config({
+		description: undocumented,
 		validate: guard(counterConfig),
 		resolve: rawConfig => ({ step: rawConfig?.step ?? 1 }),
 	})
-	.state(state => state.count({ validate: guard(countSchema), default: () => 0 }))
+	.state(state => state.count({ description: undocumented, validate: guard(countSchema), default: () => 0 }))
 	.methods(methods => methods.add({
+		description: undocumented,
 		validateArgs: guard(addArgsSchema),
 		registerDeps: ({ dep }) => ({ count: dep.self.state.get('count'), setCount: dep.self.state.set('count') }),
 		execute: ({ args: [amount], deps }) => {
@@ -3773,8 +3958,10 @@ const CounterConfig = z.strictObject({ step: z.number(), label: z.string()
 	.optional() })
 
 createWidgetPlugin('counter')
+	.description(undocumented)
 	.interfaces<{ config: { raw: z.input<typeof CounterConfig>, resolved: { step: number } } }>()
 	.config({
+		description: undocumented,
 		validate: guard(CounterConfig),
 		resolve: rawConfig => ({ step: rawConfig?.step ?? 1 }),
 	})
@@ -3937,11 +4124,13 @@ caused it. `setIsolatedErrorHandler(handler)` hands them to a function instead:
 
 <!-- sample: isolated-error-handler run -->
 ```ts
-import { createWidgetPlugin, createWidgetSystem, setIsolatedErrorHandler } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, setIsolatedErrorHandler, undocumented } from '@deviltea/widget-core'
 
 const counterPlugin = createWidgetPlugin('counter')
+	.description(undocumented)
 	.interfaces<{ state: { count: number } }>()
 	.state(state => state.count({
+		description: undocumented,
 		validate: (input): input is number => typeof input === 'number',
 		default: () => 0,
 	}))

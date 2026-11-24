@@ -2,10 +2,11 @@ import type { AnyWidgetPlugin, AnyWidgetPluginTuple, WidgetSystem, WidgetSystemC
 import type { WidgetChild } from './types'
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 import * as core from './index'
-import { createWidgetPlugin, createWidgetSystem, WidgetSystemConfigurationError } from './index'
+import { createWidgetPlugin, createWidgetSystem, undocumented, WidgetSystemConfigurationError } from './index'
 
 function plain(type: string) {
 	return createWidgetPlugin(type)
+		.description(undocumented)
 		.interfaces<Record<never, never>>()
 		.done()
 }
@@ -35,6 +36,7 @@ describe('createWidgetSystem plugin registration errors', () => {
 	it('rejects a plugin completed by another module instance with foreign-plugin', async () => {
 		const foreign = await loadForeignCore()
 		const foreignPlugin = foreign.createWidgetPlugin('alien')
+			.description(foreign.undocumented)
 			.interfaces<Record<never, never>>()
 			.done()
 
@@ -144,6 +146,7 @@ describe('createWidgetSystem plugin registration errors', () => {
 describe('widgetSystem.getPlugin', () => {
 	function literal<const Type extends string>(type: Type) {
 		return createWidgetPlugin(type)
+			.description(undocumented)
 			.interfaces<Record<never, never>>()
 			.done()
 	}
@@ -200,9 +203,11 @@ describe('widgetSystem.getPlugin', () => {
 describe('widgetSystem catalog', () => {
 	it('rejects plugins with duplicate types', () => {
 		const first = createWidgetPlugin('duplicate')
+			.description(undocumented)
 			.interfaces<Record<never, never>>()
 			.done()
 		const second = createWidgetPlugin('duplicate')
+			.description(undocumented)
 			.interfaces<Record<never, never>>()
 			.done()
 
@@ -224,15 +229,18 @@ describe('widgetSystem catalog', () => {
 		}
 
 		const card = createWidgetPlugin('card')
+			.description(undocumented)
 			.interfaces<CardInterfaces>()
 			.config({
+				description: undocumented,
 				validate: (input): input is { readonly label?: string } => typeof input === 'object' && input !== null,
 				resolve: raw => ({ label: raw?.label ?? 'Card' }),
 			})
-			.slots({ content: {} })
-			.events(['press', 'change'])
+			.slots({ content: { description: undocumented } })
+			.events({ press: undocumented, change: undocumented })
 			.done()
 		const label = createWidgetPlugin('label')
+			.description(undocumented)
 			.interfaces<Record<never, never>>()
 			.done()
 		const system = createWidgetSystem({ plugins: [card, label] })

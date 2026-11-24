@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 import { describe, expect, it } from 'vitest'
 import { mountWidgetBridge } from './test-fixtures'
 
@@ -20,12 +20,15 @@ interface SpecialMemberInterfaces {
 }
 
 const SpecialMemberPlugin = createWidgetPlugin('SpecialMemberProjection')
+	.description(undocumented)
 	.interfaces<SpecialMemberInterfaces>()
 	.state(state => state[PROTO_KEY]({
+		description: undocumented,
 		validate: (input): input is number => typeof input === 'number',
 		default: () => 1,
 	}))
 	.properties(properties => properties[PROTO_KEY]({
+		description: undocumented,
 		registerDeps: ({ dep }) => ({ stateValue: dep.self.state.get(PROTO_KEY) }),
 		compute: ({ deps }) => {
 			const stateValue = deps.stateValue()
@@ -33,6 +36,7 @@ const SpecialMemberPlugin = createWidgetPlugin('SpecialMemberProjection')
 		},
 	}))
 	.methods(methods => methods[CONSTRUCTOR_KEY]({
+		description: undocumented,
 		validateArgs: (args): args is [] => args.length === 0,
 		execute: () => 'constructor method invoked',
 	}))

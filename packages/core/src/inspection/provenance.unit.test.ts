@@ -4,12 +4,13 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import * as core from '../index'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 import * as InspectionModule from './index'
 import { inspectBlueprint, inspectPlugin, inspectRuntime, WidgetInspectionError } from './index'
 
 function build(api: typeof core) {
 	const plugin = api.createWidgetPlugin('plain')
+		.description(api.undocumented)
 		.interfaces<Record<never, never>>()
 		.done()
 	const system = api.createWidgetSystem({ plugins: [plugin] as const })
@@ -71,6 +72,7 @@ describe('inspection provenance errors', () => {
 
 	it('still inspects genuine objects, including after disposal', () => {
 		const plugin = createWidgetPlugin('p')
+			.description(undocumented)
 			.interfaces<Record<never, never>>()
 			.done()
 		const blueprint = createWidgetSystem({ plugins: [plugin] as const })

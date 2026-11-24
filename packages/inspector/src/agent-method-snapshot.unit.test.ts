@@ -2,7 +2,7 @@
 import type { WidgetChild, WidgetInterfaces } from '@deviltea/widget-core'
 import type { CreateInspectorAgentOptions } from './agent'
 import type { InspectorEventMessage, InspectorResponseMessage } from './protocol'
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 import { describe, expect, it, vi } from 'vitest'
 import { createInspectorAgent } from './agent'
 import { createInspectorClient } from './client'
@@ -35,22 +35,27 @@ const executeSpies = {
 }
 
 const MethodPlugin = createWidgetPlugin('MethodSnapshotFixture')
+	.description(undocumented)
 	.interfaces<MethodInterfaces>()
-	.state(state => state.count({ validate: validateCount, default: () => 1 }))
+	.state(state => state.count({ description: undocumented, validate: validateCount, default: () => 1 }))
 	.properties(properties => properties.doubled({
+		description: undocumented,
 		registerDeps: ({ dep }) => dep.self.state.get('count'),
 		compute: ({ deps }) => (deps().ok ? 2 : 0),
 	}))
 	.methods(methods => methods
 		.__proto__({
+			description: undocumented,
 			validateArgs: (args): args is [] => args.length === 0,
 			execute: () => 1,
 		})
 		.constructor({
+			description: undocumented,
 			validateArgs: (args): args is [] => args.length === 0,
 			execute: () => 2,
 		})
 		.check({
+			description: undocumented,
 			validateArgs: (args): args is [boolean] => args.length === 1 && typeof args[0] === 'boolean',
 			execute: ({ args: [ok], addDiagnostic }) => {
 				executeSpies.check()
@@ -60,6 +65,7 @@ const MethodPlugin = createWidgetPlugin('MethodSnapshotFixture')
 			},
 		})
 		.fail({
+			description: undocumented,
 			validateArgs: (args): args is [string] => args.length === 1 && typeof args[0] === 'string',
 			execute: ({ args: [text], addDiagnostic }) => {
 				addDiagnostic({ message: 'always fails', reason: 'always' })
@@ -67,6 +73,7 @@ const MethodPlugin = createWidgetPlugin('MethodSnapshotFixture')
 			},
 		})
 		.strict({
+			description: undocumented,
 			validateArgs: (args): args is [number] => {
 				executeSpies.validateStrict()
 				return args.length === 1 && typeof args[0] === 'number'
@@ -74,6 +81,7 @@ const MethodPlugin = createWidgetPlugin('MethodSnapshotFixture')
 			execute: ({ args: [value] }) => value,
 		})
 		.chain({
+			description: undocumented,
 			registerDeps: ({ dep }) => dep.self.methods.invoke('fail'),
 			validateArgs: (args): args is [] => args.length === 0,
 			execute: ({ deps }) => {
@@ -82,6 +90,7 @@ const MethodPlugin = createWidgetPlugin('MethodSnapshotFixture')
 			},
 		})
 		.outer({
+			description: undocumented,
 			registerDeps: ({ dep }) => dep.self.methods.invoke('check'),
 			validateArgs: (args): args is [] => args.length === 0,
 			execute: ({ deps }) => {
@@ -91,12 +100,14 @@ const MethodPlugin = createWidgetPlugin('MethodSnapshotFixture')
 			},
 		})
 		.explode({
+			description: undocumented,
 			validateArgs: (args): args is [] => args.length === 0,
 			execute: () => {
 				throw new Error('explode')
 			},
 		})
 		.bump({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ count: dep.self.state.get('count'), setCount: dep.self.state.set('count') }),
 			validateArgs: (args): args is [] => args.length === 0,
 			execute: ({ deps }) => {
@@ -110,6 +121,7 @@ const MethodPlugin = createWidgetPlugin('MethodSnapshotFixture')
 	.done()
 
 const NoMethodPlugin = createWidgetPlugin('NoMethodFixture')
+	.description(undocumented)
 	.interfaces<WidgetInterfaces>()
 	.done()
 
@@ -118,8 +130,9 @@ interface MethodRootInterfaces extends WidgetInterfaces {
 }
 
 const RootPlugin = createWidgetPlugin('MethodSnapshotRoot')
+	.description(undocumented)
 	.interfaces<MethodRootInterfaces>()
-	.slots({ body: {} })
+	.slots({ body: { description: undocumented } })
 	.done()
 
 const RUNTIME_ID = 'runtime-method'

@@ -1,6 +1,6 @@
 // @vitest-environment node
 import type { InspectableValue } from './value'
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createInspectorAgent } from './agent'
 import { createInspectorClient } from './client'
@@ -170,8 +170,9 @@ describe('inspectorAgent valueLimits', () => {
 		}
 		big['x'.repeat(600)] = 'long-key'
 		const plugin = createWidgetPlugin('BlobFixture')
+			.description(undocumented)
 			.interfaces<BlobInterfaces>()
-			.state(state => state.blob({ validate: (input): input is Record<string, unknown> => typeof input === 'object', default: () => big }))
+			.state(state => state.blob({ description: undocumented, validate: (input): input is Record<string, unknown> => typeof input === 'object', default: () => big }))
 			.done()
 		const system = createWidgetSystem({ plugins: [plugin] })
 		const blueprint = system.createBlueprint({ id: 'root', type: 'BlobFixture' })

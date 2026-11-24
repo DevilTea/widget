@@ -7,7 +7,7 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { InterestOptionRaw, InterestsConfig, InterestsRawConfig } from '../config'
 import type { I18nText } from '../domain'
-import { createWidgetPlugin } from '@deviltea/widget-core'
+import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
 import { checkInterestsConfig, resolveInterestsConfig } from '../config'
 import { isStringArray } from '../domain'
 import { checkInsideOnboarding } from './structure'
@@ -39,8 +39,10 @@ export interface InterestsInterfaces extends WidgetInterfaces {
 }
 
 export const InterestsStepPlugin = createWidgetPlugin('InterestsStep')
+	.description(undocumented)
 	.interfaces<InterestsInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input, ctx): input is InterestsRawConfig => {
 			checkInterestsConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -49,6 +51,7 @@ export const InterestsStepPlugin = createWidgetPlugin('InterestsStep')
 	})
 	.structure(ctx => checkInsideOnboarding(ctx, 'InterestsStep'))
 	.state(state => state.selected({
+		description: undocumented,
 		validate: (input, ctx): input is readonly string[] => {
 			if (!isStringArray(input))
 				return false
@@ -59,9 +62,10 @@ export const InterestsStepPlugin = createWidgetPlugin('InterestsStep')
 			.filter(id => config.preselected.includes(id)),
 	}))
 	.properties(properties => properties
-		.title({ compute: ({ config }) => config.title })
-		.options({ compute: ({ config }) => config.options })
+		.title({ description: undocumented, compute: ({ config }) => config.title })
+		.options({ description: undocumented, compute: ({ config }) => config.options })
 		.missing({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ selected: dep.self.state.get('selected') }),
 			compute: ({ deps, config }) => {
 				const selected = deps.selected()
@@ -70,6 +74,7 @@ export const InterestsStepPlugin = createWidgetPlugin('InterestsStep')
 			},
 		})
 		.complete({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ missing: dep.self.properties.get('missing') }),
 			compute: ({ deps }) => {
 				const missing = deps.missing()
@@ -77,6 +82,7 @@ export const InterestsStepPlugin = createWidgetPlugin('InterestsStep')
 			},
 		})
 		.answers({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ selected: dep.self.state.get('selected') }),
 			compute: ({ deps }) => {
 				const selected = deps.selected()

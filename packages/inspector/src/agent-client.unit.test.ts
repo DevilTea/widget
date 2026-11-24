@@ -1,5 +1,5 @@
 import type { InspectorRequestMessage, InspectorResponseMessage } from './protocol'
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 import { describe, expect, it, vi } from 'vitest'
 import { createInspectorAgent } from './agent'
 import { createInspectorClient } from './client'
@@ -14,12 +14,15 @@ interface FixtureInterfaces {
 function createFixture() {
 	let computeCalls = 0
 	const plugin = createWidgetPlugin('devtools-fixture')
+		.description(undocumented)
 		.interfaces<FixtureInterfaces>()
 		.state(state => state.count({
+			description: undocumented,
 			validate: (input): input is number => typeof input === 'number',
 			default: () => 2,
 		}))
 		.properties(properties => properties.doubled({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ count: dep.self.state.get('count') }),
 			compute: ({ deps }) => {
 				computeCalls++

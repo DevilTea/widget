@@ -7,7 +7,7 @@
  */
 
 import type { JsonValue } from '@deviltea/widget-core'
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 
 /** A condition on another field, or a combination of conditions. */
 export type Rule = { field: string } | { all: readonly Rule[] }
@@ -103,8 +103,10 @@ export interface FormInterfaces {
 }
 
 export const FormPlugin = createWidgetPlugin('Form')
+	.description(undocumented)
 	.interfaces<FormInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input): input is FormRawConfig => typeof input === 'object' && input !== null,
 		resolve: raw => raw ?? { fields: [], weights: {}, retries: null, extraFields: null, hidden: [], step: 1, people: [], limit: null, title: '' },
 	})

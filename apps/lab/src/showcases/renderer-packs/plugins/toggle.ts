@@ -5,7 +5,7 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { ToggleConfig, ToggleRawConfig } from '../config'
 import type { Density, I18nText } from '../domain'
-import { createWidgetPlugin } from '@deviltea/widget-core'
+import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
 import { checkToggleConfig, resolveToggleConfig } from '../config'
 import { isBoolean, isDensity } from '../domain'
 import { checkInsideSection, checkProvider, densityReads } from './structure'
@@ -30,8 +30,10 @@ export interface ToggleInterfaces extends WidgetInterfaces {
 }
 
 export const TogglePlugin = createWidgetPlugin('Toggle')
+	.description(undocumented)
 	.interfaces<ToggleInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input, ctx): input is ToggleRawConfig => {
 			checkToggleConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -45,12 +47,14 @@ export const TogglePlugin = createWidgetPlugin('Toggle')
 			checkProvider(ctx, ctx.config.appearance, 'Appearance', 'appearance')
 	})
 	.state(state => state.on({
+		description: undocumented,
 		validate: (input): input is boolean => isBoolean(input),
 		default: ({ config }) => config.on,
 	}))
 	.properties(properties => properties
-		.label({ compute: ({ config }) => config.label })
+		.label({ description: undocumented, compute: ({ config }) => config.label })
 		.density({
+			description: undocumented,
 			registerDeps: ({ dep, blueprint, config }) => densityReads(dep, blueprint, config.appearance),
 			compute: ({ deps }) => {
 				const density = deps.density?.()

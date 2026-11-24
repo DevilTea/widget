@@ -21,7 +21,7 @@ afterAll(() => rmSync(scratch, { recursive: true, force: true }))
 /** A Badge plugin with the given State members, each a number. */
 function systemSource(members: readonly string[]): string {
 	return [
-		'import { createWidgetPlugin, createWidgetSystem } from \'@deviltea/widget-core\'',
+		'import { createWidgetPlugin, createWidgetSystem, undocumented } from \'@deviltea/widget-core\'',
 		'/** A badge. */',
 		'interface BadgeInterfaces {',
 		'\tstate: {',
@@ -29,8 +29,9 @@ function systemSource(members: readonly string[]): string {
 		'\t}',
 		'}',
 		'const Badge = createWidgetPlugin(\'Badge\')',
+		'\t.description(undocumented)',
 		'\t.interfaces<BadgeInterfaces>()',
-		`\t.state(state => state${members.map(member => `.${member}({ validate: (input): input is number => typeof input === 'number', default: () => 0${member === 'count' ? ', authorWritable: true' : ''} })`)
+		`\t.state(state => state${members.map(member => `.${member}({ description: undocumented, validate: (input): input is number => typeof input === 'number', default: () => 0${member === 'count' ? ', authorWritable: true' : ''} })`)
 			.join('')})`,
 		'\t.done()',
 		'export const system = createWidgetSystem({ plugins: [Badge] as const })',

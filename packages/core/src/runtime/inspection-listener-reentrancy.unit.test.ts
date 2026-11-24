@@ -13,7 +13,7 @@ import type { ExecutionResult } from '../index'
 import type { WidgetChild } from '../types'
 import { effect as alienEffect } from 'alien-signals'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 import { inspectRuntime } from '../inspection'
 
 interface LinkConfig { readonly me: string, readonly prev: string | null }
@@ -34,10 +34,12 @@ const isNumber = (input: unknown): input is number => typeof input === 'number'
 const numberOf = (result: ExecutionResult<unknown, unknown>): number => (result.ok && typeof result.value === 'number' ? result.value : 0)
 
 const linkPlugin = createWidgetPlugin('link')
+	.description(undocumented)
 	.interfaces<LinkInterfaces>()
-	.config({ validate: (input): input is LinkConfig => typeof input === 'object' && input !== null, resolve: raw => raw! })
-	.state(state => state.n({ validate: isNumber, default: () => 1 }))
+	.config({ description: undocumented, validate: (input): input is LinkConfig => typeof input === 'object' && input !== null, resolve: raw => raw! })
+	.state(state => state.n({ description: undocumented, validate: isNumber, default: () => 1 }))
 	.properties(properties => properties.total({
+		description: undocumented,
 		registerDeps: ({ dep, config }) => ({
 			prev: dep.widget(config.prev ?? 'absent')
 				.optional()
@@ -60,11 +62,13 @@ const linkPlugin = createWidgetPlugin('link')
 	}))
 	.methods(methods => methods
 		.bump({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ n: dep.self.state.get('n'), set: dep.self.state.set('n') }),
 			validateArgs: (args): args is [number] => args.length === 1 && isNumber(args[0]),
 			execute: ({ deps, args }) => deps.set(numberOf(deps.n()) + args[0]).ok,
 		})
 		.rereadAfterWrite({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ total: dep.self.properties.get('total'), n: dep.self.state.get('n'), set: dep.self.state.set('n') }),
 			validateArgs: (args): args is [] => args.length === 0,
 			execute: ({ deps }) => {
@@ -75,8 +79,9 @@ const linkPlugin = createWidgetPlugin('link')
 		}))
 	.done()
 const listPlugin = createWidgetPlugin('list')
+	.description(undocumented)
 	.interfaces<{ slots: { items: WidgetChild } }>()
-	.slots({ items: {} })
+	.slots({ items: { description: undocumented } })
 	.done()
 const system = createWidgetSystem({ plugins: [linkPlugin, listPlugin] })
 

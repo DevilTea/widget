@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem, EMPTY_DIAGNOSTICS } from '../index'
+import { createWidgetPlugin, createWidgetSystem, EMPTY_DIAGNOSTICS, undocumented } from '../index'
 
 interface SnapshotInterfaces {
 	state: {
@@ -31,9 +31,11 @@ function createHarness() {
 	let methodFailNow = false
 
 	const plugin = createWidgetPlugin('counter')
+		.description(undocumented)
 		.interfaces<SnapshotInterfaces>()
 		.state(state => state
 			.count({
+				description: undocumented,
 				validate: (input, ctx): input is number => {
 					if (stateThrowNow) {
 						stateThrowNow = false
@@ -49,6 +51,7 @@ function createHarness() {
 			}))
 		.properties(properties => properties
 			.doubled({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ count: dep.self.state.get('count') }),
 				compute: ({ deps, addDiagnostic }) => {
 					if (propertyThrowNow) {
@@ -64,6 +67,7 @@ function createHarness() {
 			}))
 		.methods(methods => methods
 			.bump({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({
 					get: dep.self.state.get('count'),
 					set: dep.self.state.set('count'),

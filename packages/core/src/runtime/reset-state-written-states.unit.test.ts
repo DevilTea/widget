@@ -8,7 +8,7 @@
 import type { WidgetInterfaces } from '../index'
 import type { WidgetChild } from '../types'
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 import { inspectRuntime } from '../inspection'
 
 interface CellInterfaces extends WidgetInterfaces {
@@ -20,11 +20,12 @@ interface CellInterfaces extends WidgetInterfaces {
 }
 
 const cell = createWidgetPlugin('cell')
+	.description(undocumented)
 	.interfaces<CellInterfaces>()
 	.state(state => state
-		.a({ validate: (input): input is number => typeof input === 'number', default: () => 1 })
-		.b({ validate: (input): input is number => typeof input === 'number', default: () => 2 })
-		.c({ validate: (input): input is number => typeof input === 'number', default: () => 3 }))
+		.a({ description: undocumented, validate: (input): input is number => typeof input === 'number', default: () => 1 })
+		.b({ description: undocumented, validate: (input): input is number => typeof input === 'number', default: () => 2 })
+		.c({ description: undocumented, validate: (input): input is number => typeof input === 'number', default: () => 3 }))
 	.done()
 
 interface NanInterfaces extends WidgetInterfaces {
@@ -32,13 +33,15 @@ interface NanInterfaces extends WidgetInterfaces {
 }
 
 const nan = createWidgetPlugin('nan')
+	.description(undocumented)
 	.interfaces<NanInterfaces>()
-	.state(state => state.value({ validate: (input): input is number => typeof input === 'number', default: () => Number.NaN }))
+	.state(state => state.value({ description: undocumented, validate: (input): input is number => typeof input === 'number', default: () => Number.NaN }))
 	.done()
 
 const group = createWidgetPlugin('group')
+	.description(undocumented)
 	.interfaces<{ slots: { children: WidgetChild } }>()
-	.slots({ children: {} })
+	.slots({ children: { description: undocumented } })
 	.done()
 
 const system = createWidgetSystem({ plugins: [cell, nan, group] })

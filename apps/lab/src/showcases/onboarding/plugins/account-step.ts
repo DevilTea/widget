@@ -10,7 +10,7 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { AccountConfig, AccountRawConfig } from '../config'
 import type { AccountAnswers, I18nText } from '../domain'
-import { createWidgetPlugin } from '@deviltea/widget-core'
+import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
 import { checkAccountConfig, resolveAccountConfig } from '../config'
 import { isEmail, isString } from '../domain'
 import { checkInsideOnboarding } from './structure'
@@ -42,8 +42,10 @@ export interface AccountInterfaces extends WidgetInterfaces {
 }
 
 export const AccountStepPlugin = createWidgetPlugin('AccountStep')
+	.description(undocumented)
 	.interfaces<AccountInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input, ctx): input is AccountRawConfig => {
 			checkAccountConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -53,16 +55,19 @@ export const AccountStepPlugin = createWidgetPlugin('AccountStep')
 	.structure(ctx => checkInsideOnboarding(ctx, 'AccountStep'))
 	.state(state => state
 		.name({
+			description: undocumented,
 			validate: (input): input is string => isString(input),
 			default: ({ config }) => config.name,
 		})
 		.email({
+			description: undocumented,
 			validate: (input): input is string => isString(input),
 			default: ({ config }) => config.email,
 		}))
 	.properties(properties => properties
-		.title({ compute: ({ config }) => config.title })
+		.title({ description: undocumented, compute: ({ config }) => config.title })
 		.missing({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ name: dep.self.state.get('name'), email: dep.self.state.get('email') }),
 			compute: ({ deps }) => {
 				const name = deps.name()
@@ -76,6 +81,7 @@ export const AccountStepPlugin = createWidgetPlugin('AccountStep')
 			},
 		})
 		.complete({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ missing: dep.self.properties.get('missing') }),
 			compute: ({ deps }) => {
 				const missing = deps.missing()
@@ -83,6 +89,7 @@ export const AccountStepPlugin = createWidgetPlugin('AccountStep')
 			},
 		})
 		.answers({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ name: dep.self.state.get('name'), email: dep.self.state.get('email') }),
 			compute: ({ deps }) => {
 				const name = deps.name()
