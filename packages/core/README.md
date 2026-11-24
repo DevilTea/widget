@@ -78,11 +78,13 @@ empty — a completed plugin exposes these facts at runtime as
 in the full guide.
 
 The phase order of `createWidgetPlugin` is
-`interfaces → config? → slots? → structure? → state? → properties? → methods? → events? → done`.
+`description → interfaces → config? → slots? → structure? → state? → properties? → methods? → events? → reasons? → done`.
 `.structure(validateStructure)` is an optional plugin-level structure validator
 available to every plugin (it is not a capability); `.slots(definitions)` takes
-only the slot definitions, and `.events(names)` the list of every declared
-Event name. Declarations are validated when the plugin is built,
+only the slot definitions, `.events(definitions)` one docs entry per declared
+Event, and `.reasons(definitions)` one per declared diagnostic reason. Every
+definition carries its `description` (or `undocumented`); the docs end up as
+plain data on `plugin.docs`. Declarations are validated when the plugin is built,
 so a malformed member throws a `TypeError` naming the plugin, section, member
 and field.
 
@@ -112,9 +114,9 @@ config may be omitted, or `raw: Config` to require it. A rejected config yields
 [Config](https://deviltea.github.io/widget/packages/widget-core#config) in the
 full guide.
 
-The plugin's `Interfaces` type, with its JSDoc, is the single source of its
-shape and documentation: Core stores no descriptions and no JSON Schema, and
-documentation and schema are generated from the types by tooling outside Core.
+The plugin's `Interfaces` type is the single source of its shape; its prose is
+written in the builder and kept as plain data on `plugin.docs`. Core stores no
+JSON Schema: tooling infers it from the types.
 `Interfaces['slots']` is a record of slot name to what the slot expects
 (a union of plugin types, a `WidgetContract`, or `WidgetChild`), which is
 type-level only; `Interfaces['reasons']` types the `reason` and JSON `details`
@@ -133,7 +135,7 @@ that aggregates its children.
 
 <!-- sample: usage run -->
 ```typescript
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 
 // 1. Declare the plugin's capabilities.
 interface CounterInterfaces {
@@ -151,15 +153,18 @@ interface CounterInterfaces {
 
 // 2. Build the plugin through the capability-phase builder.
 const counterPlugin = createWidgetPlugin('counter')
+	.description(undocumented)
 	.interfaces<CounterInterfaces>()
 	.state(state =>
 		state.count({
+			description: undocumented,
 			validate: (input): input is number => typeof input === 'number',
 			default: () => 0,
 		}),
 	)
 	.properties(properties =>
 		properties.doubled({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({
 				count: dep.self.state.get('count'),
 			}),
@@ -172,6 +177,7 @@ const counterPlugin = createWidgetPlugin('counter')
 	.methods(methods =>
 		methods
 			.increment({
+				description: undocumented,
 				validateArgs: (args): args is [number] => args.length === 1 && typeof args[0] === 'number',
 				registerDeps: ({ dep }) => ({
 					count: dep.self.state.get('count'),
@@ -185,6 +191,7 @@ const counterPlugin = createWidgetPlugin('counter')
 				},
 			})
 			.reset({
+				description: undocumented,
 				validateArgs: (args): args is [] => args.length === 0,
 				registerDeps: ({ dep }) => ({
 					setCount: dep.self.state.set('count'),
@@ -298,7 +305,7 @@ Blueprint for inspection.
 
 <!-- sample: document-patch run -->
 ```typescript
-import { createWidgetDocument, createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetDocument, createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 
 interface CounterInterfaces {
 	config: {
@@ -308,8 +315,10 @@ interface CounterInterfaces {
 }
 
 const counterPlugin = createWidgetPlugin('counter')
+	.description(undocumented)
 	.interfaces<CounterInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input): input is { step: number } =>
 			typeof input === 'object' && input !== null && typeof (input as { step?: unknown }).step === 'number',
 		resolve: rawConfig => ({ step: rawConfig?.step ?? 1 }),
