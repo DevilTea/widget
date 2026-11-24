@@ -142,7 +142,7 @@ describe('buildWhySentences — Trip budget splitter', () => {
 			])
 	})
 
-	it('describes a @widgetRef field with its generated description', () => {
+	it('describes a `WidgetRef` field with its generated description', () => {
 		const roster = trip.sentencesOf('hotel')
 			.find(sentence => sentence.property === 'roster' && sentence.target.widgetId === 'ana')!
 		expect(roster.fields[0])

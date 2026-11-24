@@ -59,7 +59,7 @@ export function describeDoc(doc: Doc): string {
 		.join(' ')
 }
 
-/** The sentence a widget reference adds to its description (the Lab reads it to locate a broken reference). */
+/** The sentence a widget reference adds to its description, prose for human and LLM readers (the Lab reads `x-widgetRef`, not this sentence). */
 export function describeWidgetRef(types: readonly string[]): string {
 	return `Must be the id of a widget of type ${types.join(' | ')} in the same document.`
 }

@@ -889,7 +889,7 @@ names and capabilities only. JSDoc on the Interfaces is an ordinary comment that
   can delete the last option, language, day, time or rule. Each of these is reported by Core's diagnostics at the field.
   The editor's behaviour is unchanged; only the schema it reads lost those keywords. A constraint the validator enforces may narrow the type itself (survey
   `languages: SupportedLanguage[]`, trip-budget `roundTransfersTo: RoundStep`, the `I18nText` with a required `en`). A widget
-  reference carries `x-widgetRef` (the types it names) beside the sentence the Lab reads today. quote-rules
+  reference carries `x-widgetRef` (the types it names), which the Lab reads, beside a sentence in its description for readers. quote-rules
   overrides the map with the JSON Schemas of its Valibot validators (`quoteConfigSchemas`; its files, which the Web Worker
   bundles, use their own structurally equal type), which keep their constraint keywords; the sandbox has none.
   `lab/showcase-config-schemas.unit.test.ts` holds the generated schemas to the showcases' code: their properties are exactly
@@ -1623,8 +1623,11 @@ this; the owner agreed). The Lab derives the location from public facts only, in
 (`referenceConfigPaths()`, pure and framework-free: no Vue, no store, no i18n; its only import is the pure `config-schema.ts`, so a later
 shared inspector-tools package can take it as it is):
 1. in the owner widget's authored config (`node.source.config` of the committed Document), every value the plugin's generated config
-   schema marks as a widget reference (the sentence `widgetDocs()` writes for a `WidgetRef<…>` value, `widgetRefTypesOf()`, read along the value
-   the way the Structure editor reads it, union branches chosen by the value) and that equals the target id;
+   schema marks as a widget reference (the `x-widgetRef` annotation, the types it names, that `widgetDocs()` writes on a `WidgetRef<…>` value;
+   `widgetRefTypesAt()` / `widgetRefTypesOf()`, read along the value the way the Structure editor reads it: through `$ref`, a `null`
+   alternative, the union branch chosen by the value, list items and dictionary values, so an item of a `WidgetRef[]` or a value of a
+   `Record<string, WidgetRef>` is located too) and that equals the target id. The sentence the generator still adds to the description
+   ("Must be the id of a widget of type A | B in the same document.") is prose for readers and is not matched;
 2. with at least one match the problem is at those paths: the first is `LabProblem.sourcePath` / `configPath` (`widgetLevel: false`), the
    others are `LabProblem.moreLocations` (all of them are wrong values);
 3. with none, the placement stays widget-level, unchanged: no `WidgetRef` type (quote-rules' Valibot schemas have none), an id that does
@@ -1662,9 +1665,9 @@ Limits:
   committed; `invalid-widget-config` paths behave the same way.
 - "Show problems" in Structure focuses the first field in the page that shows the first problem (`[data-problem-keys~=key]` in document
   order), which is not necessarily its first location.
-- Only a string value whose own schema carries the mark is found: an id written as an object key (trip-budget's `percents`), a `string[]`
-  item or a dictionary value (the generator writes the mark on the list or the dictionary, not on the value) is not, and the problem stays at
-  the widget; nothing is located wrongly.
+- Only a string value whose own schema carries `x-widgetRef` is found. An item of a `WidgetRef[]` and a value of a
+  `Record<string, WidgetRef>` are (the generator writes the mark on the item or value schema); an id written as an object key (trip-budget's
+  `percents`) or in a plain `string` field is not, and the problem stays at the widget; nothing is located wrongly.
 
 `lab/reference-locations.unit.test.ts` pins the rule, `lab/problems.unit.test.ts` the problems built from Core's diagnostics (a typo, a
 reference written twice, an ambiguous id, a missing member on a widget of a type the reference does not allow, an unresolved target) and the
@@ -1922,8 +1925,8 @@ Structure tree only). Top to bottom, each part its own component in `components/
    "failed". Core does not say which config field produced a dependency, so the **config field is an inference**: a string value of the authored
    config equal to the other widget's id names it; a dependency path that starts with a top-level config key (`["rules", "guests"]`) limits the search
    to that field, and keys another Property's dependency on the same widget claims that way are skipped (so `sessions.options` does not borrow
-   `rules`). Outside such a field a matching value counts only when the generated schema marks it as a widget reference, the sentence
-   `widgetDocs()` writes for a `WidgetRef` value ("Must be the id of a widget of type A | B in the same document.", `widgetRefTypesOf`), preferring one
+   `rules`). Outside such a field a matching value counts only when the generated schema marks it as a widget reference, the `x-widgetRef`
+   annotation `widgetDocs()` writes for a `WidgetRef` value (`widgetRefTypesAt`, shared with the Problems list's locations), preferring one
    that names the other widget's type; otherwise no field is shown, so a string that only equals the id (`{ inputType: "email" }` beside a widget
    `email`) is never taken for a reference. The survey's condition `question` is typed `WidgetRef` for this (the four question types; `Numeric` for
    `greaterThan`/`lessThan`, `MultipleChoice` for `includes`/`excludes`). The field shown is the top-level key, or, inside a list of objects, the item's key (`options[1].enabledWhen.question` -> `enabledWhen`),
