@@ -3,13 +3,19 @@ import type { JsonSchema } from './config-schema'
 import type { ReferenceDiagnosticFacts } from './reference-locations'
 import { describe, expect, it } from 'vitest'
 import { getShowcase } from '../showcases/registry'
-import { LOCATED_DEPENDENCY_CODES, referenceConfigPaths, schemaWidgetRefs, stringValuePaths, widgetRefTypesOf } from './reference-locations'
+import { fieldModelAt, LOCATED_DEPENDENCY_CODES, referenceConfigPaths, schemaWidgetRefs, stringValuePaths, WIDGET_REF_KEYWORD, widgetRefTypesAt, widgetRefTypesOf } from './reference-locations'
 
-const REF = (types: string) => `Must be the id of a widget of type ${types} in the same document.`
+const SENTENCE = (types: string) => `Must be the id of a widget of type ${types} in the same document.`
+
+/** A value typed `WidgetRef<Types>` as `widgetDocs()` writes it in the full profile: `x-widgetRef` beside the sentence. */
+function ref(description: string, ...types: string[]): JsonSchema {
+	return { type: 'string', [WIDGET_REF_KEYWORD]: types, description: `${description} ${SENTENCE(types.join(' | '))}`.trim() }
+}
 
 /**
- * A small config schema in the shape `widgetDocs()` generates: a `$ref` root with `$defs`, a condition union (`anyOf`) and the
- * `@widgetRef` sentence on the values that name widgets.
+ * A small config schema in the shape `widgetDocs()` generates: a `$ref` root with `$defs`, a condition union (`anyOf`), a
+ * nullable reference, a list and a dictionary of references, and `x-widgetRef` on the values that name widgets. `note` carries
+ * only the sentence, without the annotation: it is prose, not a mark.
  */
 const schema: JsonSchema = {
 	$ref: '#/$defs/Config',
@@ -19,7 +25,11 @@ const schema: JsonSchema = {
 			properties: {
 				label: { type: 'string', description: 'The label.' },
 				inputType: { type: 'string', description: 'The input type, for example "email".' },
-				target: { type: 'string', description: `The widget to copy from. ${REF('Numeric')}` },
+				note: { type: 'string', description: `Free text. ${SENTENCE('Numeric')}` },
+				target: ref('The widget to copy from.', 'Numeric'),
+				fallback: { anyOf: [ref('', 'Numeric', 'Rating'), { type: 'null' }], description: 'Another widget, or none.' },
+				reviewers: { type: 'array', items: ref('', 'Form'), description: 'The Forms that review this one.' },
+				owners: { type: 'object', additionalProperties: ref('', 'Person'), description: 'The owner of each section.' },
 				visibleWhen: { $ref: '#/$defs/Condition' },
 				rules: { type: 'array', items: { $ref: '#/$defs/Rule' } },
 			},
@@ -35,7 +45,7 @@ const schema: JsonSchema = {
 				{
 					type: 'object',
 					properties: {
-						question: { type: 'string', description: `The question it reads. ${REF('SingleChoice | Numeric')}` },
+						question: ref('The question it reads.', 'SingleChoice', 'Numeric'),
 						op: { type: 'string' },
 					},
 					required: ['question', 'op'],
@@ -89,6 +99,25 @@ describe('referenceConfigPaths', () => {
 			.toEqual([['rules', 0, 'when', 'all', 1, 'all', 0, 'question']])
 	})
 
+	it('locates a reference held in a list of references, a dictionary of references, or a nullable reference', () => {
+		// `x-widgetRef` sits on the item schema of `WidgetRef[]` and the value schema of `Record<string, WidgetRef>`.
+		const config = { reviewers: ['legal', 'mdoe'], owners: { intro: 'ana', pricing: 'mdoe' }, fallback: 'mdoe' }
+		expect(locate(missing('mdoe'), config))
+			.toEqual([['reviewers', 1], ['owners', 'pricing'], ['fallback']])
+		expect(widgetRefTypesAt(schema, config, ['owners', 'pricing']))
+			.toEqual(['Person'])
+		expect(widgetRefTypesAt(schema, config, ['fallback']))
+			.toEqual(['Numeric', 'Rating'])
+		// The list and the dictionary themselves are not references.
+		expect(widgetRefTypesAt(schema, config, ['reviewers']))
+			.toBeNull()
+		expect(widgetRefTypesAt(schema, config, ['owners']))
+			.toBeNull()
+		// A missing member: located only where the target's type is outside the item's allowed types.
+		expect(locate({ ...missing('mdoe', 'missing-dependency-member'), targetType: 'Rating' }, config))
+			.toEqual([['reviewers', 1], ['owners', 'pricing']])
+	})
+
 	it('does not match a value that equals the id in a field that is not a widget reference', () => {
 		// `label` and `inputType` are plain strings: only the marked `question` is a location.
 		const config = { label: 'email', inputType: 'email', visibleWhen: { question: 'email', op: 'answered' } }
@@ -99,7 +128,17 @@ describe('referenceConfigPaths', () => {
 			.toBeNull()
 	})
 
-	it('is null when the schema marks no widget reference (no @widgetRef tag), or there is no schema', () => {
+	it('reads the `x-widgetRef` annotation, never the sentence in a description', () => {
+		// `note`'s description has the sentence but no annotation: not a reference.
+		expect(locate(missing('mdoe'), { note: 'mdoe' }))
+			.toBeNull()
+		// The annotation alone is a mark.
+		const bare: JsonSchema = { type: 'object', properties: { question: { type: 'string', [WIDGET_REF_KEYWORD]: ['Numeric'] } } }
+		expect(locate(missing('mdoe'), { question: 'mdoe' }, bare))
+			.toEqual([['question']])
+	})
+
+	it('is null when the schema marks no widget reference (no `WidgetRef` type), or there is no schema', () => {
 		const untagged: JsonSchema = { type: 'object', properties: { question: { type: 'string', description: 'A question id.' } } }
 		expect(locate(missing('mdoe'), { question: 'mdoe' }, untagged))
 			.toBeNull()
@@ -167,21 +206,48 @@ describe('referenceConfigPaths', () => {
 				message: { en: 'At most 2 guests.' },
 			}],
 		}
-		expect(referenceConfigPaths(missing('gusets'), config, schemaWidgetRefs(survey.configSchemas.MultipleChoice!, config)))
-			.toEqual([['options', 0, 'visibleWhen', 'question'], ['rules', 0, 'when', 'all', 1, 'question']])
+		const generated = survey.configSchemas.MultipleChoice!
+		const expected = [['options', 0, 'visibleWhen', 'question'], ['rules', 0, 'when', 'all', 1, 'question']]
+		expect(referenceConfigPaths(missing('gusets'), config, schemaWidgetRefs(generated, config)))
+			.toEqual(expected)
+		// The generated schema annotates the question with the types its `WidgetRef<…>` names (and still has the sentence): the
+		// `greaterThan` branch, chosen by the value, reads a Numeric.
+		expect(fieldModelAt(generated, config, expected[1]!)?.schema)
+			.toMatchObject({ [WIDGET_REF_KEYWORD]: ['Numeric'], description: expect.stringContaining(SENTENCE('Numeric')) })
+		// The annotation is what is read: without the sentences the locations are the same, without the annotations there are none.
+		const withoutSentences = mapSchema(generated, (key, value) => key === 'description' && typeof value === 'string' ? value.replace(/Must be the id of a widget of type .+? in the same document\./g, '') : value)
+		expect(JSON.stringify(withoutSentences))
+			.not
+			.toContain('Must be the id')
+		expect(referenceConfigPaths(missing('gusets'), config, schemaWidgetRefs(withoutSentences, config)))
+			.toEqual(expected)
+		const withoutAnnotations = mapSchema(generated, (key, value) => key === WIDGET_REF_KEYWORD ? undefined : value)
+		expect(referenceConfigPaths(missing('gusets'), config, schemaWidgetRefs(withoutAnnotations, config)))
+			.toBeNull()
 	})
 })
 
+/** A deep copy of `schema` with each keyword's value replaced by `replace(key, value)`; `undefined` drops the keyword. */
+function mapSchema(schema: JsonSchema, replace: (key: string, value: unknown) => unknown): JsonSchema {
+	return JSON.parse(JSON.stringify(schema, (key, value: unknown) => key === '' ? value : replace(key, value))) as JsonSchema
+}
+
 describe('widgetRefTypesOf', () => {
-	it('reads the type list of the sentence widgetDocs() writes for @widgetRef', () => {
-		expect(widgetRefTypesOf('The id of the Person who paid at the start. Must be the id of a widget of type Person in the same document.'))
+	it('reads the plugin types of the `x-widgetRef` annotation, in written order', () => {
+		expect(widgetRefTypesOf({ type: 'string', [WIDGET_REF_KEYWORD]: ['Person'] }))
 			.toEqual(['Person'])
-		expect(widgetRefTypesOf('Must be the id of a widget of type SingleChoice | MultipleChoice in the same document.'))
+		expect(widgetRefTypesOf({ type: 'string', [WIDGET_REF_KEYWORD]: ['SingleChoice', 'MultipleChoice'] }))
 			.toEqual(['SingleChoice', 'MultipleChoice'])
-		// A line wrap inside the sentence still reads.
-		expect(widgetRefTypesOf('Must be the id of a widget\nof type Numeric in the same document.'))
-			.toEqual(['Numeric'])
-		expect(widgetRefTypesOf('The input type, for example "email".'))
+	})
+
+	it('is null without the annotation, for a malformed one, and for no schema', () => {
+		expect(widgetRefTypesOf({ type: 'string', description: SENTENCE('Person') }))
+			.toBeNull()
+		for (const malformed of [[], 'Person', ['Person', 1], null]) {
+			expect(widgetRefTypesOf({ type: 'string', [WIDGET_REF_KEYWORD]: malformed }))
+				.toBeNull()
+		}
+		expect(widgetRefTypesOf(null))
 			.toBeNull()
 	})
 })

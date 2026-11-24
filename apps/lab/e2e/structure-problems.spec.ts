@@ -58,7 +58,7 @@ test.describe('problems in Structure (report item 12)', () => {
 		await page.getByRole('button', { name: /^guests : Numeric/ })
 			.click()
 		// guests' condition names a question that does not exist (`"mod"`). Core reports the dependency at the widget; the config
-		// value the schema marks as a widget reference (`@widgetRef`) is where it is written, so it shows there, not at the header.
+		// value the schema marks as a widget reference (`x-widgetRef`, from a `WidgetRef` type) is where it is written, so it shows there, not at the header.
 		const question = field(editor, 'visibleWhen.question')
 		await expect(question.getByTestId('field-problem'))
 			.toHaveText(/^missing-dependency-target: /)

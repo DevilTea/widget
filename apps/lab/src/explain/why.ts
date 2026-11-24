@@ -11,7 +11,7 @@
  * as a question id). So the config field is an inference, made the same way for every plugin: a string value of the
  * widget's authored config that equals the other widget's id names it. When the dependency's path starts with a top-level
  * config key (`["rules", "guests"]`), only that field is searched. Otherwise a matching value counts only when the generated
- * schema marks it as a widget reference (the sentence `widgetDocs()` writes for a `WidgetRef` value, read by `lab/reference-locations.ts`,
+ * schema marks it as a widget reference (the `x-widgetRef` annotation `widgetDocs()` writes for a `WidgetRef` value, read by `lab/reference-locations.ts`,
  * which the Problems list's precise locations share), preferring one that names the
  * other widget's type, so a string that merely equals the id (`{ inputType: "email" }` beside a widget `email`) is not taken
  * for one. The field shown is the top-level config field, or, inside a list of objects, the field of the list item
@@ -23,7 +23,7 @@
 import type { BlueprintInspection, BlueprintInspectionDependency, InspectionNodeId, ResolvedBlueprintInspectionNode } from '@deviltea/widget-core/inspection'
 import type { ConfigPath, JsonSchema } from '../lab/config-schema'
 import { docText } from '../author/widget-docs'
-import { fieldModelAt, stringValuePaths, widgetRefTypesOf } from '../lab/reference-locations'
+import { fieldModelAt, stringValuePaths, widgetRefTypesAt } from '../lab/reference-locations'
 
 export type WhyOperation = 'reads' | 'invokes'
 
@@ -130,7 +130,7 @@ function configFieldsNaming(
 			candidates.push({ match, typeMatches: true })
 			continue
 		}
-		const types = schema === null ? null : widgetRefTypesOf(describeAt(schema, rawConfig, match))
+		const types = schema === null ? null : widgetRefTypesAt(schema, rawConfig, match)
 		if (types !== null)
 			candidates.push({ match, typeMatches: types.includes(target.widgetType) })
 	}
