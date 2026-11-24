@@ -491,25 +491,41 @@ The types require the docs to be complete. For a value of type `T`,
 `FieldDocs<T>` needs `fields` with an entry for every key of an object type
 (optional keys included, every key of every member of a union), `items` for an
 array and `values` for a dictionary when their elements have fields of their
-own, and nothing beyond the description for a primitive. `null` and `undefined`
-are ignored, so `raw: Raw | null` is documented as `Raw`.
+own, and nothing beyond the description for a primitive or a built-in object
+such as `Date`, `Map` or `Set` (a class of your own is documented field by
+field). `null` and `undefined` are ignored, so `raw: Raw | null` is documented
+as `Raw`. A Method's `params` needs one entry per parameter and at least one
+for a rest parameter, and `returns` is left out when the Method returns no
+value (`void`, `undefined`, `never`).
+
+Known limits: an object type with both an index signature and fixed keys is
+documented as a dictionary (`values` only), and the check that `items` or
+`values` is present looks at most four nested arrays or dictionaries deep.
 
 - `defineTypeDocs<T>(name, docs)` declares the docs of a named type once; a
   field refers to them with `ref`, and a recursive type refers to itself with a
   thunk (`ref: () => conditionDocs`). A `ref` must name docs of exactly the
-  field's object type.
+  field's object type. A recursive declaration needs the explicit annotation
+  `const conditionDocs: TypeDocs<Condition> = …` (otherwise TypeScript reports
+  TS7022).
 - `defineFieldDocs<T>()(docs)` checks a docs value where it is written, at every
-  depth, so a key `T` does not have is an error even through a spread.
+  depth, so a key `T` does not have is an error even through a spread or a
+  variable. The builder sections and `defineTypeDocs` only get TypeScript's
+  check of an object literal written in place: a stale key that arrives
+  through a spread is caught by `defineFieldDocs` alone.
 - `WidgetRef<Types>` types a config field that holds the id of a widget of one
-  of `Types`. Any string is accepted; tooling reads `Types` from the type, and
-  nothing is checked at run time.
+  of `Types`. Any string is accepted without a cast; tooling reads `Types`
+  from the type, and nothing is checked at run time. `WidgetRef<'A' | 'B'>` is
+  not assignable to `WidgetRef<'A'>`.
 - `undocumented` is accepted wherever a description or a docs object is
   required. As a description it also waives the nested docs of that entry.
   Documentation tooling reports it.
 
 `plugin.docs` holds the result as plain data: `null` where `undocumented` was
-written, and each `ref` as a name in `types`. It is not part of the catalog,
-inspection, Blueprints or the Inspector protocol.
+written, and each `ref` as a name in `types`. Its records keep the key order of
+the objects they were declared with: declaration order, except that
+integer-like names (`'2'`, `'10'`) come first, as in any JavaScript object. It
+is not part of the catalog, inspection, Blueprints or the Inspector protocol.
 
 <!-- sample: docs-in-the-builder run -->
 ```ts
