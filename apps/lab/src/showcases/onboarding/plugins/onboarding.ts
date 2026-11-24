@@ -19,8 +19,9 @@
 import type { WidgetContract, WidgetInterfaces } from '@deviltea/widget-core'
 import type { OnboardingConfig, OnboardingRawConfig } from '../config'
 import type { Completion, I18nText, Progress, StepChange, StepSummary, StepType } from '../domain'
-import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
+import { createWidgetPlugin } from '@deviltea/widget-core'
 import { checkOnboardingConfig, resolveOnboardingConfig } from '../config'
+import { completionDocs, onboardingConfigDocs, onboardingRawConfigDocs, progressDocs, stepChangeDocs, stepSummaryDocs } from '../docs'
 import { describeValue, isBoolean, isNumber, isStepType } from '../domain'
 import { stepAnswerReads, stepSummaryReads } from './reads'
 import { stepChildrenOfView } from './structure'
@@ -38,82 +39,41 @@ export interface StepContract {
 	}
 }
 
-/**
- * The root of the onboarding wizard. State: `current` (the index of the current step) and `finished`. Properties:
- * `title`, `steps` (each step's title, `complete` and `missing`), `progress` and `answers`. Methods: `canEnter(index)`
- * (read-only), `next()`, `back()`, `goTo(index)` (each writes `current` and emits `stepChanged`) and `finish()` (emits
- * `completed`). A refused move is a Method diagnostic and changes nothing.
- */
 export interface OnboardingInterfaces extends WidgetInterfaces {
-	/** The wizard title per language and, optionally, the index of the step it opens on. */
 	config: { raw: OnboardingRawConfig, resolved: OnboardingConfig }
 	slots: {
-		/** The steps in order: AccountStep, InterestsStep, SafetyStep or InductionStep. At least one. */
 		steps: WidgetContract<StepContract, StepType>
 	}
 	state: {
-		/** The index of the current step, counted from 0. Starts at config `startStep`. */
 		current: number
-		/** Whether the visitor finished the wizard. */
 		finished: boolean
 	}
 	properties: {
-		/** The wizard title per language. */
 		title: I18nText
-		/** Each step's id, type, title, `complete` and `missing`, in order. */
 		steps: readonly StepSummary[]
-		/** Where the visitor is: the step count, the current and furthest reachable step, the first incomplete one. */
 		progress: Progress
-		/** Every step's answers, by step id. */
 		answers: Completion['answers']
 	}
 	methods: {
-		/**
-		 * Whether the step at `index` may be entered: it exists and every step before it is complete. Read-only.
-		 *
-		 * @param index - The step index, counted from 0.
-		 */
 		canEnter: (index: number) => boolean
-		/**
-		 * Moves to the next step and emits `stepChanged`. Refused while the current step is incomplete, on the last step, when
-		 * the next step is locked and once the wizard is finished.
-		 *
-		 * @returns The index of the step the visitor is on afterwards.
-		 */
 		next: () => number
-		/**
-		 * Moves to the previous step and emits `stepChanged`. Refused on the first step and once the wizard is finished.
-		 *
-		 * @returns The index of the step the visitor is on afterwards.
-		 */
 		back: () => number
-		/**
-		 * Moves to the step at `index` and emits `stepChanged`. Refused for a step that does not exist or is locked.
-		 *
-		 * @param index - The step index, a whole number counted from 0.
-		 * @returns The index of the step the visitor is on afterwards.
-		 */
 		goTo: (index: number) => number
-		/**
-		 * Finishes the wizard: needs every step complete, writes `finished` and emits `completed` with every step's answers.
-		 *
-		 * @returns Whether the wizard was finished by this call.
-		 */
 		finish: () => boolean
 	}
 	events: {
-		/** The visitor moved to another step. Carries the step ids and indexes it left and entered, and how (next, back or jump). */
 		stepChanged: [change: StepChange]
-		/** The visitor finished the wizard. Carries every step's answers by step id. */
 		completed: [completion: Completion]
 	}
 }
 
 export const OnboardingPlugin = createWidgetPlugin('Onboarding')
-	.description(undocumented)
+	.description('The root of the onboarding wizard. State: `current` (the index of the current step) and `finished`. Properties: `title`, `steps` (each step\'s title, `complete` and `missing`), `progress` and `answers`. Methods: `canEnter(index)` (read-only), `next()`, `back()`, `goTo(index)` (each writes `current` and emits `stepChanged`) and `finish()` (emits `completed`). A refused move is a Method diagnostic and changes nothing.')
 	.interfaces<OnboardingInterfaces>()
 	.config({
-		description: undocumented,
+		description: 'The wizard title per language and, optionally, the index of the step it opens on.',
+		raw: onboardingRawConfigDocs,
+		resolved: onboardingConfigDocs,
 		validate: (input, ctx): input is OnboardingRawConfig => {
 			checkOnboardingConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -122,7 +82,7 @@ export const OnboardingPlugin = createWidgetPlugin('Onboarding')
 	})
 	.slots({
 		steps: {
-			description: undocumented,
+			description: 'The steps in order: AccountStep, InterestsStep, SafetyStep or InductionStep. At least one.',
 			validateStructure: ({ children, addDiagnostic }) => {
 				if (children.length === 0)
 					addDiagnostic({ message: 'An Onboarding needs at least one step.', reason: 'no-steps' })
@@ -142,19 +102,20 @@ export const OnboardingPlugin = createWidgetPlugin('Onboarding')
 	})
 	.state(state => state
 		.current({
-			description: undocumented,
+			description: 'The index of the current step, counted from 0. Starts at config `startStep`.',
 			validate: (input): input is number => isNumber(input) && Number.isInteger(input) && input >= 0,
 			default: ({ config }) => config.startStep,
 		})
 		.finished({
-			description: undocumented,
+			description: 'Whether the visitor finished the wizard.',
 			validate: (input): input is boolean => isBoolean(input),
 			default: () => false,
 		}))
 	.properties(properties => properties
-		.title({ description: undocumented, compute: ({ config }) => config.title })
+		.title({ description: 'The wizard title per language.', compute: ({ config }) => config.title })
 		.steps({
-			description: undocumented,
+			description: 'Each step\'s id, type, title, `complete` and `missing`, in order.',
+			items: { ref: stepSummaryDocs },
 			registerDeps: ({ dep, blueprint }) => ({ steps: stepSummaryReads(dep, blueprint) }),
 			compute: ({ deps, blueprint }) => stepChildrenOfView(blueprint)
 				.flatMap(({ id, type }) => {
@@ -169,7 +130,8 @@ export const OnboardingPlugin = createWidgetPlugin('Onboarding')
 				}),
 		})
 		.progress({
-			description: undocumented,
+			description: 'Where the visitor is: the step count, the current and furthest reachable step, the first incomplete one.',
+			ref: progressDocs,
 			registerDeps: ({ dep }) => ({ steps: dep.self.properties.get('steps'), current: dep.self.state.get('current') }),
 			compute: ({ deps }) => {
 				const steps = deps.steps()
@@ -189,7 +151,7 @@ export const OnboardingPlugin = createWidgetPlugin('Onboarding')
 			},
 		})
 		.answers({
-			description: undocumented,
+			description: 'Every step\'s answers, by step id.',
 			registerDeps: ({ dep, blueprint }) => ({ steps: stepAnswerReads(dep, blueprint) }),
 			compute: ({ deps, blueprint }) => Object.fromEntries(stepChildrenOfView(blueprint)
 				.flatMap(({ id }) => {
@@ -199,7 +161,9 @@ export const OnboardingPlugin = createWidgetPlugin('Onboarding')
 		}))
 	.methods(methods => methods
 		.canEnter({
-			description: undocumented,
+			description: 'Whether the step at `index` may be entered: it exists and every step before it is complete. Read-only.',
+			params: [{ description: 'The step index, counted from 0.' }],
+			returns: { description: 'Whether the step may be entered.' },
 			validateArgs: (args, { addDiagnostic }): args is [number] => {
 				const ok = args.length === 1 && typeof args[0] === 'number' && Number.isFinite(args[0])
 				if (!ok)
@@ -213,7 +177,8 @@ export const OnboardingPlugin = createWidgetPlugin('Onboarding')
 			},
 		})
 		.next({
-			description: undocumented,
+			description: 'Moves to the next step and emits `stepChanged`. Refused while the current step is incomplete, on the last step, when the next step is locked and once the wizard is finished.',
+			returns: { description: 'The index of the step the visitor is on afterwards.' },
 			validateArgs: (args): args is [] => args.length === 0,
 			registerDeps: ({ dep }) => ({
 				progress: dep.self.properties.get('progress'),
@@ -258,7 +223,8 @@ export const OnboardingPlugin = createWidgetPlugin('Onboarding')
 			},
 		})
 		.back({
-			description: undocumented,
+			description: 'Moves to the previous step and emits `stepChanged`. Refused on the first step and once the wizard is finished.',
+			returns: { description: 'The index of the step the visitor is on afterwards.' },
 			validateArgs: (args): args is [] => args.length === 0,
 			registerDeps: ({ dep }) => ({
 				progress: dep.self.properties.get('progress'),
@@ -286,7 +252,9 @@ export const OnboardingPlugin = createWidgetPlugin('Onboarding')
 			},
 		})
 		.goTo({
-			description: undocumented,
+			description: 'Moves to the step at `index` and emits `stepChanged`. Refused for a step that does not exist or is locked.',
+			params: [{ description: 'The step index, a whole number counted from 0.' }],
+			returns: { description: 'The index of the step the visitor is on afterwards.' },
 			validateArgs: (args, { addDiagnostic, hasAnyDiagnostic }): args is [number] => {
 				if (args.length !== 1) {
 					addDiagnostic({ message: `goTo(index) takes exactly one argument, the step number counted from 0, got ${args.length}.`, reason: 'wrong-arity' })
@@ -336,7 +304,8 @@ export const OnboardingPlugin = createWidgetPlugin('Onboarding')
 			},
 		})
 		.finish({
-			description: undocumented,
+			description: 'Finishes the wizard: needs every step complete, writes `finished` and emits `completed` with every step\'s answers.',
+			returns: { description: 'Whether the wizard was finished by this call.' },
 			validateArgs: (args): args is [] => args.length === 0,
 			registerDeps: ({ dep }) => ({
 				progress: dep.self.properties.get('progress'),
@@ -365,5 +334,8 @@ export const OnboardingPlugin = createWidgetPlugin('Onboarding')
 				return true
 			},
 		}))
-	.events({ stepChanged: undocumented, completed: undocumented })
+	.events({
+		stepChanged: { description: 'The visitor moved to another step. Carries the step ids and indexes it left and entered, and how (next, back or jump).', payload: [{ description: 'The step left and the step entered, and how.', ref: stepChangeDocs }] },
+		completed: { description: 'The visitor finished the wizard. Carries every step\'s answers by step id.', payload: [{ description: 'Every step\'s answers, by step id.', ref: completionDocs }] },
+	})
 	.done()

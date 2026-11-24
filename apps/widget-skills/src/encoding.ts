@@ -1,6 +1,6 @@
 /**
- * The value re-encoding the LLM profile uses for config values, shared by the schema emitter (to rewrite
- * `@default` and `@examples`) and the flat/tree converters.
+ * The value re-encoding the LLM profile uses for config values, shared by the flat/tree converters and the schema
+ * emitter (which needs `recursiveTypeNames`).
  *
  * - a dictionary (`Record<string, T>`) is a list of `{ key, value }` entries;
  * - an untyped value, or a value of a recursive named type, is JSON text;

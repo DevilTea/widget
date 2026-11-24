@@ -1,14 +1,15 @@
 /**
  * `widgetDocs(options)`: a Vite plugin that serves the documentation of a Widget System, generated from its
- * TypeScript types and JSDoc at build time, as `virtual:widget-docs/<name>` (a default export of type `WidgetDocs`,
+ * TypeScript types (the shape) and its plugins' `plugin.docs` (the prose) at build time, as `virtual:widget-docs/<name>` (a default export of type `WidgetDocs`,
  * see `docs-types.ts` and `virtual-widget-docs.d.ts`; with `slim: true`, `WidgetDocsSlim` and `virtual-widget-docs-slim.d.ts`).
  *
  * It works the same in `vite dev`, `vite build` and Vitest. Generation goes through the disk cache of
  * `docs-cache.ts`: a hit builds no TypeScript program and imports nothing.
  *
  * Unless `runtime: false`, generating **imports the System's module, which runs its top-level code** (and that of
- * everything it imports), to cross-check the names in the types against `system.catalog` and `inspectPlugin`. Only
- * name modules you would run. A disagreement fails the load with an error that lists it.
+ * everything it imports), to read each plugin's `plugin.docs` and to cross-check the names in the types against
+ * `system.catalog` and `inspectPlugin`. Only name modules you would run. A disagreement fails the load with an error
+ * that lists it. With `runtime: false` the docs carry no prose.
  *
  * In dev, the input files of each System, and the locations of its unresolved imports, are added to Vite's watcher.
  * A change to one of them (an edit, a created or deleted file) invalidates only the virtual modules of the Systems that
@@ -48,10 +49,10 @@ export interface WidgetDocsOptions {
 	 * The environment variable `WIDGET_DOCS_CACHE=off` disables it too.
 	 */
 	cacheDir?: string | false
-	/** Import the System's module for the runtime cross-check (runs its top-level code). Default `true`. */
+	/** Import the System's module to read its `plugin.docs` (the prose) and for the runtime cross-check (runs its top-level code). Default `true`; without it the docs carry no prose. */
 	runtime?: boolean
 	/**
-	 * Serve the slim docs (`WidgetDocsSlim`): the summary and `@remarks` of each plugin, its config, slots and Events, and the
+	 * Serve the slim docs (`WidgetDocsSlim`): the summary and remarks of each plugin, its config, slots and Events, and the
 	 * config schema; no `types`, printed types, tags, State, Properties, Methods or reasons. Default `false`: the full
 	 * `WidgetDocs`. The disk cache always holds the full docs and the slim object is projected from them when the module
 	 * is loaded, so switching the option regenerates nothing. Declare the module with

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * What the selected widget is: its id, its plugin type and the plugin's generated summary (the JSDoc of its `Interfaces`,
+ * What the selected widget is: its id, its plugin type and the plugin's generated summary (its `.description()`,
  * from the showcase's bundled widget docs). Ids and types are Widget data and stay as they are; the summary is source-owned
  * text, shown verbatim with its code spans as code. A widget that did not resolve shows Core's identity hints instead.
  */

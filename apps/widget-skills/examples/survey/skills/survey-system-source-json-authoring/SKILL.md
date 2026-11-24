@@ -99,8 +99,8 @@ intent: the compiler enforces only what the plugin's structure validators check,
 
 ## References between widgets
 
-A config value that names another widget holds that widget's `id` (documented with `@widgetRef` in the type's
-reference). The id must exist in the same document and be of a listed type.
+A config value that names another widget holds that widget's `id` (the type's reference says "Must be the id of a
+widget of type ..." for it). The id must exist in the same document and be of a listed type.
 
 ## Structured output: the flat node list
 

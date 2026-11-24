@@ -8,6 +8,10 @@ The root of a survey document. It counts the answered questions through the `que
 
 `config` is the resolved config: `{ title: I18nText; maxQuestions: number; submitUrl: string | null; }`.
 
+- `title`: The survey's title.
+- `maxQuestions`: The most questions the survey may hold.
+- `submitUrl`: Where the answers are sent, or `null` when they are not sent anywhere.
+
 ## State
 
 | Name | Type | authorWritable | Description |
@@ -30,6 +34,7 @@ Sends the survey.
 ## Events
 
 - `submitted(summary: SubmitSummary)`: The survey was sent.
+  - `summary`: How many questions were answered, of how many.
 
 ## Slots
 
@@ -45,42 +50,34 @@ The diagnostics of this type's State, Properties and Methods are a union discrim
 
 - `empty-title` (no `details`): The title has no language.
 - `too-many-questions` (`details: { max: number; count: number; }`): The `questions` slot holds more questions than `maxQuestions` allows.
+  - `max`: The configured maximum.
+  - `count`: How many questions the slot holds.
 
 ## Referenced types
 
 ```text
 // apps/widget-skills/fixtures/survey-system.ts
-/**
- * Text per language, keyed by language tag (`en`, `zh-TW`).
- * @remarks At least one language should be present; the renderer falls back to the first one.
- */
 export type I18nText = Record<string, string>
 
 // apps/widget-skills/fixtures/survey-system.ts
-/** What `Survey.submit()` reports when the survey is sent. */
 export interface SubmitSummary {
-	/** How many questions were answered. */
 	answered: number
-	/** How many questions the survey has. */
 	total: number
 }
 
 // apps/widget-skills/fixtures/survey-system.ts
-/** The raw config of a survey. */
 export interface SurveyRawConfig {
-	/** The survey's title. */
 	title: I18nText
-	/**
-	 * The most questions the survey may hold.
-	 * @minimum 1
-	 * @maximum 20
-	 * @default 10
-	 */
 	maxQuestions?: number
-	/**
-	 * Where the answers are sent.
-	 * @format uri
-	 */
 	submitUrl?: string
 }
 ```
+
+- `I18nText`: Text per language, keyed by language tag (`en`, `zh-TW`). At least one language should be present; the renderer falls back to the first one.
+- `SubmitSummary`: What `Survey.submit()` reports when the survey is sent.
+  - `answered`: How many questions were answered.
+  - `total`: How many questions the survey has.
+- `SurveyRawConfig`: The raw config of a survey.
+  - `title`: The survey's title.
+  - `maxQuestions` (optional): The most questions the survey may hold: from 1 to 20; 10 when left out.
+  - `submitUrl` (optional): Where the answers are sent: a URI.

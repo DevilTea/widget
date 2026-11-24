@@ -6,7 +6,7 @@
  * Implemented: `type`, `properties`, `required`, `additionalProperties`, `items`, `enum`, `const`, `anyOf`,
  * `$ref` (a JSON Pointer into the same document), `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`,
  * `multipleOf`, `minLength`, `maxLength`, `minItems`, `maxItems`, `uniqueItems`, `minProperties`, `maxProperties`,
- * `propertyNames`. Annotations are ignored. `format` and `pattern`
+ * `propertyNames`. Annotations are ignored, and so is every `x-` keyword (an extension annotation such as `x-widgetRef`). `format` and `pattern`
  * are annotations here: they are not evaluated. Any other keyword throws, so a schema this validator cannot judge
  * is never reported as passing.
  */
@@ -75,7 +75,7 @@ export function validateSchema(root: JsonSchema, value: unknown): string[] {
 			throw new Error(`${path}: a schema must be an object or a boolean.`)
 		const node = schema as JsonSchema
 		for (const keyword of Object.keys(node)) {
-			if (!IMPLEMENTED.has(keyword) && !ANNOTATIONS.has(keyword))
+			if (!IMPLEMENTED.has(keyword) && !ANNOTATIONS.has(keyword) && !keyword.startsWith('x-'))
 				throw new Error(`The keyword "${keyword}" is not implemented by this validator.`)
 		}
 		if (typeof node.$ref === 'string') {

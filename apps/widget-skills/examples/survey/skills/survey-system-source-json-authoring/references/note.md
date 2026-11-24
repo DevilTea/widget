@@ -14,12 +14,16 @@ Raw config type: `{ text: I18nText; } | null`
 
 ```text
 // apps/widget-skills/fixtures/survey-system.ts
-/**
- * Text per language, keyed by language tag (`en`, `zh-TW`).
- * @remarks At least one language should be present; the renderer falls back to the first one.
- */
 export type I18nText = Record<string, string>
 ```
+
+Fields:
+
+- `text`: The text shown.
+
+Types:
+
+- `I18nText`: Text per language, keyed by language tag (`en`, `zh-TW`). At least one language should be present; the renderer falls back to the first one.
 
 ## Slots
 

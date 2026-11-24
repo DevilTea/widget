@@ -7,48 +7,38 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { ShortAnswerConfig, ShortAnswerRawConfig } from '../config'
 import type { AnswerError, QuestionText } from '../domain'
-import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
+import { createWidgetPlugin } from '@deviltea/widget-core'
 import { checkShortAnswerConfig, resolveShortAnswerConfig } from '../config'
+import { answerErrorDocs, questionTextDocs, shortAnswerConfigDocs, shortAnswerRawConfigDocs } from '../docs'
 import { builtinError, questionText } from '../domain'
 import { checkQuestion } from './check-question'
 import { computeRequired, computeVisible, questionErrors, requiredReads, ruleReads, visibleReads } from './question-members'
 import { languageFrom, languageReads } from './reads'
 
-/**
- * A free-text question. The respondent's text is State `answer`. Properties: `text` (label and help in the survey
- * language), `visible`, `required`, `value` (the effective answer: the trimmed text, null while hidden or empty) and
- * `errors` (empty while hidden). Method `clear()` empties the answer.
- */
 export interface ShortAnswerInterfaces extends WidgetInterfaces {
-	/** Label and help text per language, required (true, false or a condition), visibleWhen, maxLength, and custom rules. */
 	config: { raw: ShortAnswerRawConfig, resolved: ShortAnswerConfig }
 	state: {
-		/** The respondent's text, as typed; `null` while unanswered. */
 		answer: string | null
 	}
 	properties: {
-		/** The label and help text in the survey language. */
 		text: QuestionText
-		/** `visibleWhen` evaluated against the other questions' effective answers; `true` without one. */
 		visible: boolean
-		/** Whether an answer is required (`required`, or its condition), whatever the visibility. */
 		required: boolean
-		/** The effective answer: the trimmed text; `null` while hidden or empty. */
 		value: string | null
-		/** The answer errors in the survey language: `required`, the built-in checks, then the custom rules. Empty while hidden. */
 		errors: readonly AnswerError[]
 	}
 	methods: {
-		/** Empties the answer. */
 		clear: () => void
 	}
 }
 
 export const ShortAnswerPlugin = createWidgetPlugin('ShortAnswer')
-	.description(undocumented)
+	.description('A free-text question. The respondent\'s text is State `answer`. Properties: `text` (label and help in the survey language), `visible`, `required`, `value` (the effective answer: the trimmed text, null while hidden or empty) and `errors` (empty while hidden). Method `clear()` empties the answer.')
 	.interfaces<ShortAnswerInterfaces>()
 	.config({
-		description: undocumented,
+		description: 'Label and help text per language, required (true, false or a condition), visibleWhen, maxLength, and custom rules.',
+		raw: shortAnswerRawConfigDocs,
+		resolved: shortAnswerConfigDocs,
 		validate: (input, ctx): input is ShortAnswerRawConfig => {
 			checkShortAnswerConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -57,28 +47,29 @@ export const ShortAnswerPlugin = createWidgetPlugin('ShortAnswer')
 	})
 	.structure(ctx => checkQuestion(ctx, ctx.config))
 	.state(state => state.answer({
-		description: undocumented,
+		description: 'The respondent\'s text, as typed; `null` while unanswered.',
 		validate: (input): input is string | null => input === null || typeof input === 'string',
 		default: () => null,
 	}))
 	.properties(properties => properties
 		.text({
-			description: undocumented,
+			description: 'The label and help text in the survey language.',
+			ref: questionTextDocs,
 			registerDeps: ({ dep, blueprint }) => languageReads(dep, blueprint),
 			compute: ({ deps, config }) => questionText(config, languageFrom(deps)),
 		})
 		.visible({
-			description: undocumented,
+			description: '`visibleWhen` evaluated against the other questions\' effective answers; `true` without one.',
 			registerDeps: ({ dep, config }) => visibleReads(dep, config),
 			compute: ({ deps, config }) => computeVisible(config, deps),
 		})
 		.required({
-			description: undocumented,
+			description: 'Whether an answer is required (`required`, or its condition), whatever the visibility.',
 			registerDeps: ({ dep, config }) => requiredReads(dep, config),
 			compute: ({ deps, config }) => computeRequired(config, deps),
 		})
 		.value({
-			description: undocumented,
+			description: 'The effective answer: the trimmed text; `null` while hidden or empty.',
 			registerDeps: ({ dep }) => ({
 				answer: dep.self.state.get('answer'),
 				visible: dep.self.properties.get('visible'),
@@ -93,7 +84,8 @@ export const ShortAnswerPlugin = createWidgetPlugin('ShortAnswer')
 			},
 		})
 		.errors({
-			description: undocumented,
+			description: 'The answer errors in the survey language: `required`, the built-in checks, then the custom rules. Empty while hidden.',
+			items: { ref: answerErrorDocs },
 			registerDeps: ({ dep, config, widget, blueprint }) => ({
 				visible: dep.self.properties.get('visible'),
 				required: dep.self.properties.get('required'),
@@ -107,7 +99,7 @@ export const ShortAnswerPlugin = createWidgetPlugin('ShortAnswer')
 					: [], { selfId: widget.id }),
 		}))
 	.methods(methods => methods.clear({
-		description: undocumented,
+		description: 'Empties the answer.',
 		registerDeps: ({ dep }) => dep.self.state.set('answer'),
 		validateArgs: (args): args is [] => args.length === 0,
 		execute: ({ deps }) => {

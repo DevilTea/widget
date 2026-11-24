@@ -17,61 +17,38 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { NotifierConfig, NotifierRawConfig } from '../config'
 import type { I18nText, NotifierItem, Tone } from '../domain'
-import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
+import { createWidgetPlugin } from '@deviltea/widget-core'
 import { checkNotifierConfig, resolveNotifierConfig } from '../config'
+import { notifierConfigDocs, notifierItemDocs, notifierRawConfigDocs } from '../docs'
 import { announcementsOf, appendNotification, describeValue, isI18nText, isNotifierItems, isTone } from '../domain'
 
-/**
- * A capability widget: the page's notifications (State `items`, the newest `limit` of them). Methods: `notify(message, tone)`
- * (appends one, writes State and emits `notified`) and `dismiss(id)` (removes one; an unknown id is refused). Properties:
- * `alert` (the newest `danger` notification), `status` (the newest of any other tone), `count` and `limit`. A DangerAction
- * reports to it by naming it in its `notifier` config.
- */
 export interface NotifierInterfaces extends WidgetInterfaces {
-	/** How many notifications are kept. */
 	config: { raw: NotifierRawConfig, resolved: NotifierConfig }
 	state: {
-		/** The notifications, newest last, at most `limit`. */
 		items: readonly NotifierItem[]
 	}
 	properties: {
-		/** How many notifications are kept. */
 		limit: number
-		/** The newest `danger` notification; `null` without one. */
 		alert: NotifierItem | null
-		/** The newest notification of any other tone; `null` without one. */
 		status: NotifierItem | null
-		/** How many notifications are kept now. */
 		count: number
 	}
 	methods: {
-		/**
-		 * Appends a notification (dropping the oldest beyond `limit`), writes State and emits `notified`.
-		 *
-		 * @param message - The text per language, with a non-empty "en".
-		 * @param tone - `info`, `success` or `danger`.
-		 * @returns The id of the new notification.
-		 */
 		notify: (message: I18nText, tone: Tone) => number
-		/**
-		 * Removes a notification. An id that is not there is refused (`no-such-item`) and changes nothing.
-		 *
-		 * @param id - The id `notify` returned.
-		 * @returns Whether a notification was removed.
-		 */
 		dismiss: (id: number) => boolean
 	}
 	events: {
-		/** A notification was added. Carries its id, its text per language and its tone. */
 		notified: [notification: NotifierItem]
 	}
 }
 
 export const NotifierPlugin = createWidgetPlugin('Notifier')
-	.description(undocumented)
+	.description('A capability widget: the page\'s notifications (State `items`, the newest `limit` of them). Methods: `notify(message, tone)` (appends one, writes State and emits `notified`) and `dismiss(id)` (removes one; an unknown id is refused). Properties: `alert` (the newest `danger` notification), `status` (the newest of any other tone), `count` and `limit`. A DangerAction reports to it by naming it in its `notifier` config.')
 	.interfaces<NotifierInterfaces>()
 	.config({
-		description: undocumented,
+		description: 'How many notifications are kept.',
+		raw: notifierRawConfigDocs,
+		resolved: notifierConfigDocs,
 		validate: (input, ctx): input is NotifierRawConfig => {
 			checkNotifierConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -79,14 +56,16 @@ export const NotifierPlugin = createWidgetPlugin('Notifier')
 		resolve: resolveNotifierConfig,
 	})
 	.state(state => state.items({
-		description: undocumented,
+		description: 'The notifications, newest last, at most `limit`.',
+		items: { ref: notifierItemDocs },
 		validate: (input): input is readonly NotifierItem[] => isNotifierItems(input),
 		default: () => [],
 	}))
 	.properties(properties => properties
-		.limit({ description: undocumented, compute: ({ config }) => config.limit })
+		.limit({ description: 'How many notifications are kept.', compute: ({ config }) => config.limit })
 		.alert({
-			description: undocumented,
+			description: 'The newest `danger` notification; `null` without one.',
+			ref: notifierItemDocs,
 			registerDeps: ({ dep }) => ({ items: dep.self.state.get('items') }),
 			compute: ({ deps }) => {
 				const items = deps.items()
@@ -94,7 +73,8 @@ export const NotifierPlugin = createWidgetPlugin('Notifier')
 			},
 		})
 		.status({
-			description: undocumented,
+			description: 'The newest notification of any other tone; `null` without one.',
+			ref: notifierItemDocs,
 			registerDeps: ({ dep }) => ({ items: dep.self.state.get('items') }),
 			compute: ({ deps }) => {
 				const items = deps.items()
@@ -102,7 +82,7 @@ export const NotifierPlugin = createWidgetPlugin('Notifier')
 			},
 		})
 		.count({
-			description: undocumented,
+			description: 'How many notifications are kept now.',
 			registerDeps: ({ dep }) => ({ items: dep.self.state.get('items') }),
 			compute: ({ deps }) => {
 				const items = deps.items()
@@ -111,7 +91,9 @@ export const NotifierPlugin = createWidgetPlugin('Notifier')
 		}))
 	.methods(methods => methods
 		.notify({
-			description: undocumented,
+			description: 'Appends a notification (dropping the oldest beyond `limit`), writes State and emits `notified`.',
+			params: [{ description: 'The text per language, with a non-empty "en".' }, { description: '`info`, `success` or `danger`.' }],
+			returns: { description: 'The id of the new notification.' },
 			validateArgs: (args, { addDiagnostic, hasAnyDiagnostic }): args is [I18nText, Tone] => {
 				if (args.length !== 2) {
 					addDiagnostic({ message: `notify(message, tone) takes exactly two arguments, got ${args.length}.`, reason: 'wrong-arity' })
@@ -142,7 +124,9 @@ export const NotifierPlugin = createWidgetPlugin('Notifier')
 			},
 		})
 		.dismiss({
-			description: undocumented,
+			description: 'Removes a notification. An id that is not there is refused (`no-such-item`) and changes nothing.',
+			params: [{ description: 'The id `notify` returned.' }],
+			returns: { description: 'Whether a notification was removed.' },
 			validateArgs: (args, { addDiagnostic, hasAnyDiagnostic }): args is [number] => {
 				if (args.length !== 1) {
 					addDiagnostic({ message: `dismiss(id) takes exactly one argument, got ${args.length}.`, reason: 'wrong-arity' })
@@ -169,5 +153,5 @@ export const NotifierPlugin = createWidgetPlugin('Notifier')
 				return true
 			},
 		}))
-	.events({ notified: undocumented })
+	.events({ notified: { description: 'A notification was added. Carries its id, its text per language and its tone.', payload: [{ description: 'The notification that was added.', ref: notifierItemDocs }] } })
 	.done()

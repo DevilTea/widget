@@ -60,7 +60,7 @@ function writableSystem(): { directory: string, system: DocsSystem } {
 			paths: { '@deviltea/widget-core': [resolve(repositoryRoot, 'packages/core/dist/index.d.mts')] },
 		},
 	}))
-	writeFileSync(join(directory, 'labels.ts'), '/** A label. */\nexport interface Label {\n\t/** The text. */\n\ttext: string\n}\n')
+	writeFileSync(join(directory, 'labels.ts'), 'export interface Label {\n\ttext: string\n}\n')
 	writeFileSync(join(directory, 'unrelated.ts'), 'export const unrelated = 1\n')
 	writeFileSync(join(directory, 'system.ts'), [
 		'import type { WidgetPlugin, WidgetSystem } from \'@deviltea/widget-core\'',
@@ -126,8 +126,9 @@ describe('createDocsCache', () => {
 		const cache = () => createDocsCache({ cacheDir, root: directory, runtime: false, createProgram: factory.createProgram })
 		const first = await cache()
 			.load('badge', system)
+		// `runtime: false`: the shape only, without prose.
 		expect(first.docs.plugins.Badge!.config!.schema)
-			.toMatchObject({ $defs: { type_Label: { properties: { text: { description: 'The text.' } } } } })
+			.toMatchObject({ $defs: { type_Label: { properties: { text: { type: 'string' } } } } })
 		// The System's own files and Core's built declarations; not the file nothing imports.
 		expect(first.files.filter(file => file.startsWith(directory)))
 			.toEqual([join(directory, 'labels.ts'), join(directory, 'system.ts'), join(directory, 'tsconfig.json')])
@@ -146,7 +147,7 @@ describe('createDocsCache', () => {
 		expect([unrelated.hit, unrelated.key, factory.count()])
 			.toEqual([true, first.key, 1])
 
-		writeFileSync(join(directory, 'labels.ts'), '/** A label. */\nexport interface Label {\n\t/** The text shown. */\n\ttext: string\n}\n')
+		writeFileSync(join(directory, 'labels.ts'), 'export interface Label {\n\ttext: string\n\tshown?: boolean\n}\n')
 		const changed = await cache()
 			.load('badge', system)
 		expect(changed.hit)
@@ -155,7 +156,7 @@ describe('createDocsCache', () => {
 		expect(factory.count())
 			.toBe(2)
 		expect(changed.docs.plugins.Badge!.config!.schema)
-			.toMatchObject({ $defs: { type_Label: { properties: { text: { description: 'The text shown.' } } } } })
+			.toMatchObject({ $defs: { type_Label: { properties: { text: { type: 'string' }, shown: { type: 'boolean' } } } } })
 		// The superseded entry is removed with the manifest that pointed at it.
 		expect(readdirSync(cacheDir)
 			.sort())
@@ -275,7 +276,7 @@ describe('createDocsCache', () => {
 	it('reports the stored documentation problems on a hit', async () => {
 		const cacheDir = mkdtempSync(join(scratch, 'cache-'))
 		const counter: DocsSystem = { module: resolve(here, 'fixtures/undocumented-system.ts'), export: 'undocumentedSystem', tsconfig }
-		const load = () => createDocsCache({ cacheDir, root: repositoryRoot, runtime: false })
+		const load = () => createDocsCache({ cacheDir, root: repositoryRoot })
 			.load('counter', counter)
 		const cold = await load()
 		expect(cold.check.ok)
@@ -286,7 +287,7 @@ describe('createDocsCache', () => {
 		expect(warm.check)
 			.toStrictEqual(cold.check)
 		expect(warm.check.problems.map(problem => problem.where))
-			.toContain('Counter.state.step')
+			.toContain('Counter: state.step')
 	}, 120_000)
 
 	it('returns the docs and warns once when the cache cannot be written', async () => {
@@ -303,8 +304,8 @@ describe('createDocsCache', () => {
 			.toEqual([false, false, 2])
 		expect(second.docs)
 			.toStrictEqual(first.docs)
-		expect(first.docs.plugins.Badge!.summary)
-			.toBe('A badge.')
+		expect(first.docs.plugins.Badge!)
+			.toMatchObject({ type: 'Badge', config: { rawType: 'Label' } })
 		expect(warnings)
 			.toHaveLength(1)
 		expect(warnings[0])
@@ -319,8 +320,8 @@ describe('createDocsCache', () => {
 		try {
 			const result = await createDocsCache({ cacheDir, root: scratch, runtime: false, warn: message => warnings.push(message) })
 				.load('badge', system)
-			expect(result.docs.plugins.Badge!.summary)
-				.toBe('A badge.')
+			expect(result.docs.plugins.Badge!)
+				.toMatchObject({ type: 'Badge', config: { rawType: 'Label' } })
 			expect(warnings)
 				.toEqual([expect.stringContaining('(EACCES)')])
 			expect(readdirSync(cacheDir))
@@ -446,7 +447,7 @@ describe('widgetDocs through Vite', () => {
 		expect(module.default.plugins.Counter!.slots!.labelled)
 			.toMatchObject({ expectedTypes: null, contract: '{ properties: { label: string; }; }' })
 		expect(warnings.join('\n'))
-			.toContain('Counter.state.step has no JSDoc.')
+			.toContain('Counter: state.step is undocumented.')
 	}, 120_000)
 })
 
@@ -504,19 +505,21 @@ describe('widgetDocs in a dev server with its real watcher', () => {
 		try {
 			const fieldsOf = (docs: WidgetDocs): string[] => Object.keys(docs.types)
 				.sort()
+			const labelFields = (docs: WidgetDocs): string[] => Object.keys(docs.types.Label!.fields!)
 			const initial = await loadUntil(server, () => true)
-			expect(initial.types.Label!.fields!.text!.summary)
-				.toBe('The text.')
+			expect(labelFields(initial))
+				.toEqual(['text'])
 			// `./extra` does not exist yet: the docs have no Extra type.
 			expect(fieldsOf(initial))
 				.toEqual(['Label'])
 
-			writeFileSync(join(directory, 'labels.ts'), '/** A label. */\nexport interface Label {\n\t/** The text shown. */\n\ttext: string\n}\n')
-			const edited = await loadUntil(server, docs => docs.types.Label!.fields!.text!.summary === 'The text shown.')
-			expect(edited.types.Label!.fields!.text!.summary)
-				.toBe('The text shown.')
+			writeFileSync(join(directory, 'labels.ts'), 'export interface Label {\n\ttext: string\n\tshown?: boolean\n}\n')
+			const edited = await loadUntil(server, docs => labelFields(docs)
+				.includes('shown'))
+			expect(labelFields(edited))
+				.toEqual(['text', 'shown'])
 
-			writeFileSync(join(directory, 'extra.ts'), '/** More. */\nexport interface Extra {\n\t/** A note. */\n\tnote?: string\n}\n')
+			writeFileSync(join(directory, 'extra.ts'), 'export interface Extra {\n\tnote?: string\n}\n')
 			const created = await loadUntil(server, docs => 'Extra' in docs.types)
 			expect(fieldsOf(created))
 				.toEqual(['Extra', 'Label'])

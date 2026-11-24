@@ -9,7 +9,7 @@ export interface ProseSegment {
 }
 
 /**
- * Splits generated documentation text (JSDoc summaries, schema descriptions) into plain text and Markdown code spans, so a
+ * Splits generated documentation text (plugin descriptions, schema descriptions) into plain text and Markdown code spans, so a
  * view can draw `` `x` `` as code instead of printing the backticks. Only single-backtick spans with content are read; a lone
  * backtick stays as it is. Nothing else of Markdown is interpreted.
  */

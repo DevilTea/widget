@@ -3,7 +3,7 @@
 	"type": "module",
 	"version": "0.0.0",
 	"private": true,
-	"description": "Private prototype: turns a Widget System's TypeScript types and JSDoc into AI-facing artifacts (IR, JSON Schemas, flat/tree converters, Agent Skills).",
+	"description": "Private prototype: turns a Widget System's TypeScript types (the shape) and its plugins' builder docs (the prose) into AI-facing artifacts (IR, JSON Schemas, flat/tree converters, Agent Skills).",
 	"license": "MIT",
 	"exports": {
 		".": "./src/index.ts",

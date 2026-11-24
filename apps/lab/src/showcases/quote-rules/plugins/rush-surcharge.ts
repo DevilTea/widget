@@ -7,50 +7,44 @@ import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { RushSurchargeConfig } from '../config'
 import type { Adjustment } from '../domain'
 import type { RushSurchargeRawConfig } from '../raw-config'
-import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
+import { createWidgetPlugin } from '@deviltea/widget-core'
 import { resolveRushSurchargeConfig } from '../config'
+import { adjustmentDocs, rushSurchargeConfigDocs, rushSurchargeRawConfigDocs } from '../docs'
 import { percentOf } from '../domain'
 import { enabledSchema, rushSurchargeConfigSchema } from '../schemas'
 import { guard } from '../standard-schema'
 import { subtotalReads, valueOr } from './reads'
 import { checkInsideQuote } from './structure'
 
-/**
- * A percentage of the subtotal added for rush production. Config: `label`, `percent` and the starting `enabled`. State
- * `enabled`: the customer's choice. Property `adjustment`: the surcharge (0 while it is off).
- */
 export interface RushSurchargeInterfaces extends WidgetInterfaces {
-	/**
-	 * The label, the percentage (counted to two decimals) and whether rush starts switched on. Validated by a Valibot schema
-	 * through Standard Schema.
-	 */
 	config: { raw: RushSurchargeRawConfig, resolved: RushSurchargeConfig }
 	state: {
-		/** Whether the customer asks for rush production. */
 		enabled: boolean
 	}
 	properties: {
-		/** The surcharge in minor units; 0 and not applied while `enabled` is off. */
 		adjustment: Adjustment
 	}
 }
 
 export const RushSurchargePlugin = createWidgetPlugin('RushSurcharge')
-	.description(undocumented)
+	.description('A percentage of the subtotal added for rush production. Config: `label`, `percent` and the starting `enabled`. State `enabled`: the customer\'s choice. Property `adjustment`: the surcharge (0 while it is off).')
 	.interfaces<RushSurchargeInterfaces>()
 	.config({
-		description: undocumented,
+		description: 'The label, the percentage (counted to two decimals) and whether rush starts switched on. Validated by a Valibot schema through Standard Schema.',
+		raw: rushSurchargeRawConfigDocs,
+		resolved: rushSurchargeConfigDocs,
 		validate: guard(rushSurchargeConfigSchema),
 		resolve: resolveRushSurchargeConfig,
 	})
 	.structure(ctx => checkInsideQuote(ctx, 'RushSurcharge'))
 	.state(state => state.enabled({
-		description: undocumented,
+		description: 'Whether the customer asks for rush production.',
 		validate: guard(enabledSchema),
 		default: ({ config }) => config.enabled,
 	}))
 	.properties(properties => properties.adjustment({
-		description: undocumented,
+		description: 'The surcharge in minor units; 0 and not applied while `enabled` is off.',
+		ref: adjustmentDocs,
 		registerDeps: ({ dep, blueprint }) => ({
 			enabled: dep.self.state.get('enabled'),
 			...subtotalReads(dep, blueprint),

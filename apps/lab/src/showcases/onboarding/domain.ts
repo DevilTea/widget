@@ -11,9 +11,7 @@
 // Text
 // -------------------------------------------------------------------------------------------------
 
-/** Text per language, `{ "en": "...", "zh-TW": "..." }`. `en` is required; a missing language falls back to it. */
 export interface I18nText {
-	/** The English text, which a missing language falls back to. */
 	readonly en: string
 	readonly [language: string]: string
 }
@@ -99,26 +97,20 @@ export function isStepType(input: unknown): input is StepType {
 	return typeof input === 'string' && (STEP_TYPES as readonly string[]).includes(input)
 }
 
-/** What the root knows of one step: read from the step's own Properties. */
 export interface StepSummary {
 	readonly id: string
 	readonly type: string
 	readonly title: I18nText
 	readonly complete: boolean
-	/** What is still missing, as machine-readable codes (`name`, `email`, `interests`, `rule:<id>`, `booking`, ...). */
 	readonly missing: readonly string[]
 }
 
-/** Where the wizard is, and how far the visitor may go. */
 export interface Progress {
 	readonly count: number
-	/** The index of the current step. */
 	readonly current: number
 	readonly currentId: string | null
 	readonly stepIds: readonly string[]
-	/** The first step that is not complete, or -1 when every step is. */
 	readonly firstIncomplete: number
-	/** The furthest step the visitor may enter: the first incomplete one (or the last when all are complete). */
 	readonly furthest: number
 	readonly allComplete: boolean
 }
@@ -126,7 +118,6 @@ export interface Progress {
 /** How the visitor changed step. */
 export type StepChangeBy = 'next' | 'back' | 'jump'
 
-/** The payload of the root's `stepChanged` Event. */
 export interface StepChange {
 	readonly from: string
 	readonly to: string
@@ -135,7 +126,6 @@ export interface StepChange {
 	readonly by: StepChangeBy
 }
 
-/** The payload of the root's `completed` Event: every step's own `answers`, by step id. */
 export interface Completion {
 	readonly answers: { readonly [stepId: string]: unknown }
 }
@@ -164,7 +154,6 @@ export function isNullableSlot(input: unknown): input is Slot | null {
 	return input === null || isSlot(input)
 }
 
-/** What the booking office answers for a request. */
 export type BookingOutcome
 	= | { readonly status: 'confirmed', readonly reference: string }
 		| { readonly status: 'declined', readonly reason: string }
@@ -177,35 +166,27 @@ export function isBookingOutcome(input: unknown): input is BookingOutcome {
 		|| (outcome.status === 'declined' && typeof outcome.reason === 'string' && outcome.reason !== '')
 }
 
-/** The payload of the induction's `slotRequested` Event: what the host is asked to book. */
 export interface SlotRequest extends Slot {
-	/** The ticket of this request: an answer is applied only while it is still the newest. */
 	readonly ticket: number
 }
 
-/** The payload of `slotConfirmed`. */
 export interface SlotConfirmation extends SlotRequest {
 	readonly reference: string
 }
 
-/** The payload of `slotDeclined`. */
 export interface SlotDeclined extends SlotRequest {
 	readonly reason: string
 }
 
-/** The payload of `slotCancelled`: the request or booking the visitor gave up. */
 export interface SlotCancelled extends SlotRequest {
-	/** `true` when the booking had been confirmed already, `false` when the request was still waiting for an answer. */
 	readonly wasConfirmed: boolean
 }
 
-/** What the induction step contributes to the `completed` Event. */
 export interface InductionAnswers {
 	readonly slot: Slot | null
 	readonly reference: string | null
 }
 
-/** What the account step contributes. */
 export interface AccountAnswers {
 	readonly name: string
 	readonly email: string

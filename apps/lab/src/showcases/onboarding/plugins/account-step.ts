@@ -10,42 +10,33 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { AccountConfig, AccountRawConfig } from '../config'
 import type { AccountAnswers, I18nText } from '../domain'
-import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
+import { createWidgetPlugin } from '@deviltea/widget-core'
 import { checkAccountConfig, resolveAccountConfig } from '../config'
+import { accountAnswersDocs, accountConfigDocs, accountRawConfigDocs } from '../docs'
 import { isEmail, isString } from '../domain'
 import { checkInsideOnboarding } from './structure'
 
-/**
- * Step 1 of the onboarding wizard: the visitor's name and e-mail address (State `name` and `email`, filled in as they
- * type). Properties: `title`, `missing` (`name` and/or `email` while they are empty or not an address), `complete` and
- * `answers`.
- */
 export interface AccountInterfaces extends WidgetInterfaces {
-	/** The step title per language and, optionally, the name and e-mail address filled in at the start. */
 	config: { raw: AccountRawConfig, resolved: AccountConfig }
 	state: {
-		/** The visitor's name, as typed. Any text: a keystroke is never refused. */
 		name: string
-		/** The visitor's e-mail address, as typed. Any text: a keystroke is never refused. */
 		email: string
 	}
 	properties: {
-		/** The step title per language. */
 		title: I18nText
-		/** `name` and/or `email` while they are empty or not an address. */
 		missing: readonly string[]
-		/** Whether nothing is missing. */
 		complete: boolean
-		/** The trimmed name and e-mail address. */
 		answers: AccountAnswers
 	}
 }
 
 export const AccountStepPlugin = createWidgetPlugin('AccountStep')
-	.description(undocumented)
+	.description('Step 1 of the onboarding wizard: the visitor\'s name and e-mail address (State `name` and `email`, filled in as they type). Properties: `title`, `missing` (`name` and/or `email` while they are empty or not an address), `complete` and `answers`.')
 	.interfaces<AccountInterfaces>()
 	.config({
-		description: undocumented,
+		description: 'The step title per language and, optionally, the name and e-mail address filled in at the start.',
+		raw: accountRawConfigDocs,
+		resolved: accountConfigDocs,
 		validate: (input, ctx): input is AccountRawConfig => {
 			checkAccountConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -55,19 +46,19 @@ export const AccountStepPlugin = createWidgetPlugin('AccountStep')
 	.structure(ctx => checkInsideOnboarding(ctx, 'AccountStep'))
 	.state(state => state
 		.name({
-			description: undocumented,
+			description: 'The visitor\'s name, as typed. Any text: a keystroke is never refused.',
 			validate: (input): input is string => isString(input),
 			default: ({ config }) => config.name,
 		})
 		.email({
-			description: undocumented,
+			description: 'The visitor\'s e-mail address, as typed. Any text: a keystroke is never refused.',
 			validate: (input): input is string => isString(input),
 			default: ({ config }) => config.email,
 		}))
 	.properties(properties => properties
-		.title({ description: undocumented, compute: ({ config }) => config.title })
+		.title({ description: 'The step title per language.', compute: ({ config }) => config.title })
 		.missing({
-			description: undocumented,
+			description: '`name` and/or `email` while they are empty or not an address.',
 			registerDeps: ({ dep }) => ({ name: dep.self.state.get('name'), email: dep.self.state.get('email') }),
 			compute: ({ deps }) => {
 				const name = deps.name()
@@ -81,7 +72,7 @@ export const AccountStepPlugin = createWidgetPlugin('AccountStep')
 			},
 		})
 		.complete({
-			description: undocumented,
+			description: 'Whether nothing is missing.',
 			registerDeps: ({ dep }) => ({ missing: dep.self.properties.get('missing') }),
 			compute: ({ deps }) => {
 				const missing = deps.missing()
@@ -89,7 +80,8 @@ export const AccountStepPlugin = createWidgetPlugin('AccountStep')
 			},
 		})
 		.answers({
-			description: undocumented,
+			description: 'The trimmed name and e-mail address.',
+			ref: accountAnswersDocs,
 			registerDeps: ({ dep }) => ({ name: dep.self.state.get('name'), email: dep.self.state.get('email') }),
 			compute: ({ deps }) => {
 				const name = deps.name()

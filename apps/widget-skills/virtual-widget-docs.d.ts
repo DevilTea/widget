@@ -3,7 +3,7 @@
 // `/// <reference types="@deviltea/widget-skills/virtual-widget-docs" />`.
 
 declare module 'virtual:widget-docs/*' {
-	/** The documentation of the System this module is named after, generated from its types and JSDoc. */
+	/** The documentation of the System this module is named after, generated from its types and its plugins' docs. */
 	const docs: import('@deviltea/widget-skills/docs').WidgetDocs
 	export default docs
 }

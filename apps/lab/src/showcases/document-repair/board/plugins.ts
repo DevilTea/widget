@@ -11,47 +11,36 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { I18nText, Tone } from '../domain'
 import type { BoardConfig, BoardRawConfig, NoticeConfig, NoticeRawConfig } from './config'
-import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
-import { checkBoardConfig, checkNoticeConfig, resolveBoardConfig, resolveNoticeConfig } from './config'
+import { createWidgetPlugin } from '@deviltea/widget-core'
+import { boardConfigDocs, boardRawConfigDocs, checkBoardConfig, checkNoticeConfig, noticeConfigDocs, noticeRawConfigDocs, resolveBoardConfig, resolveNoticeConfig } from './config'
 
-/** The root of a notice board (format v3). Slot `notices` holds the Notice widgets; Property `title` is the board title per language. */
 export interface BoardInterfaces extends WidgetInterfaces {
-	/** The board title per language. */
 	config: { raw: BoardRawConfig, resolved: BoardConfig }
 	slots: {
-		/** The notices, in order. Only Notice widgets. */
 		notices: 'Notice'
 	}
 	properties: {
-		/** The board title per language. */
 		title: I18nText
 	}
 }
 
-/**
- * One notice of a board (format v3): `title`, `body`, `until` (the last day it is shown, YYYY-MM-DD) and `tone`
- * (`info` or `warning`), each also a Property.
- */
 export interface NoticeInterfaces extends WidgetInterfaces {
-	/** The notice text, the last day it is shown and its tone. */
 	config: { raw: NoticeRawConfig, resolved: NoticeConfig }
 	properties: {
-		/** The notice title. */
 		title: string
-		/** The notice text. */
 		body: string
-		/** The last day the notice is shown, YYYY-MM-DD. */
 		until: string
-		/** `info` or `warning`. */
 		tone: Tone
 	}
 }
 
 export const BoardPlugin = createWidgetPlugin('Board')
-	.description(undocumented)
+	.description('The root of a notice board (format v3). Slot `notices` holds the Notice widgets; Property `title` is the board title per language.')
 	.interfaces<BoardInterfaces>()
 	.config({
-		description: undocumented,
+		description: 'The board title per language.',
+		raw: boardRawConfigDocs,
+		resolved: boardConfigDocs,
 		validate: (input, ctx): input is BoardRawConfig => {
 			checkBoardConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -60,7 +49,7 @@ export const BoardPlugin = createWidgetPlugin('Board')
 	})
 	.slots({
 		notices: {
-			description: undocumented,
+			description: 'The notices, in order. Only Notice widgets.',
 			validateStructure: ({ children, addDiagnostic }) => {
 				children.forEach((child, index) => {
 					if (child.resolved && child.type !== 'Notice')
@@ -74,14 +63,16 @@ export const BoardPlugin = createWidgetPlugin('Board')
 			addDiagnostic({ message: 'A Board must be the root widget.', reason: 'board-not-root' })
 	})
 	.properties(properties => properties
-		.title({ description: undocumented, compute: ({ config }) => config.title }))
+		.title({ description: 'The board title per language.', compute: ({ config }) => config.title }))
 	.done()
 
 export const NoticePlugin = createWidgetPlugin('Notice')
-	.description(undocumented)
+	.description('One notice of a board (format v3): `title`, `body`, `until` (the last day it is shown, YYYY-MM-DD) and `tone` (`info` or `warning`), each also a Property.')
 	.interfaces<NoticeInterfaces>()
 	.config({
-		description: undocumented,
+		description: 'The notice text, the last day it is shown and its tone.',
+		raw: noticeRawConfigDocs,
+		resolved: noticeConfigDocs,
 		validate: (input, ctx): input is NoticeRawConfig => {
 			checkNoticeConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -94,10 +85,10 @@ export const NoticePlugin = createWidgetPlugin('Notice')
 			addDiagnostic({ message: 'A Notice must be placed in the notices of a Board.', reason: 'outside-board' })
 	})
 	.properties(properties => properties
-		.title({ description: undocumented, compute: ({ config }) => config.title })
-		.body({ description: undocumented, compute: ({ config }) => config.body })
-		.until({ description: undocumented, compute: ({ config }) => config.until })
-		.tone({ description: undocumented, compute: ({ config }) => config.tone }))
+		.title({ description: 'The notice title.', compute: ({ config }) => config.title })
+		.body({ description: 'The notice text.', compute: ({ config }) => config.body })
+		.until({ description: 'The last day the notice is shown, YYYY-MM-DD.', compute: ({ config }) => config.until })
+		.tone({ description: '`info` or `warning`.', compute: ({ config }) => config.tone }))
 	.done()
 
 export const boardPlugins = [BoardPlugin, NoticePlugin] as const

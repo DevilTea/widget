@@ -16,8 +16,9 @@
 import type { WidgetContract, WidgetInterfaces } from '@deviltea/widget-core'
 import type { SurveyConfig, SurveyRawConfig } from '../config'
 import type { AnswerError, AnswerValue, QuestionType, SurveyResponse, SurveyText } from '../domain'
-import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
+import { createWidgetPlugin } from '@deviltea/widget-core'
 import { checkSurveyConfig, resolveSurveyConfig } from '../config'
+import { surveyConfigDocs, surveyRawConfigDocs, surveyResponseDocs, surveyTextDocs } from '../docs'
 import { isAnswerErrors, isAnswerValue, isQuestionType, isSurveyResponse, sameAnswerValues, surveyText } from '../domain'
 import { languageOf } from './reads'
 
@@ -31,45 +32,25 @@ export interface QuestionContract {
 	}
 }
 
-/**
- * The root of a survey. Holds the active language and the submitted snapshot, aggregates every question's
- * visible/required/value/errors into `response`, reports `canSubmit` (no question has errors) and `changedSinceSubmit`, and
- * `submit()` is blocked while any question has errors.
- */
 export interface SurveyInterfaces extends WidgetInterfaces {
-	/** The survey title per language and the survey languages (the first is the default; en and zh-TW are supported). */
 	config: { raw: SurveyRawConfig, resolved: SurveyConfig }
 	slots: {
-		/** The questions in display order: ShortAnswer, SingleChoice, MultipleChoice or Numeric. */
 		questions: WidgetContract<QuestionContract, QuestionType>
 	}
 	state: {
-		/** The active language: one of config `languages`. Starts at the first. */
 		language: string
-		/** The response `submit()` last stored; `null` before any. */
 		submitted: SurveyResponse | null
 	}
 	properties: {
-		/** The survey title and the survey's own messages in the active language. */
 		text: SurveyText
-		/** Every question's visible, required, value and errors, by question id: the one object a backend reads. */
 		response: SurveyResponse
-		/** Whether no question has errors. */
 		canSubmit: boolean
-		/** Whether an answer changed since the last submit. */
 		changedSinceSubmit: boolean
 	}
 	methods: {
-		/**
-		 * Stores the response in `submitted` and emits `submitted`. Refused (`answer-errors`, message in the survey language)
-		 * while any question has errors; it then writes and emits nothing.
-		 *
-		 * @returns The response.
-		 */
 		submit: () => SurveyResponse
 	}
 	events: {
-		/** An answer set with no errors was submitted. Carries the response: visible, required, value and errors per question. */
 		submitted: [response: SurveyResponse]
 	}
 }
@@ -82,10 +63,12 @@ function isBoolean(input: unknown): input is boolean {
 }
 
 export const SurveyPlugin = createWidgetPlugin('Survey')
-	.description(undocumented)
+	.description('The root of a survey. Holds the active language and the submitted snapshot, aggregates every question\'s visible/required/value/errors into `response`, reports `canSubmit` (no question has errors) and `changedSinceSubmit`, and `submit()` is blocked while any question has errors.')
 	.interfaces<SurveyInterfaces>()
 	.config({
-		description: undocumented,
+		description: 'The survey title per language and the survey languages (the first is the default; en and zh-TW are supported).',
+		raw: surveyRawConfigDocs,
+		resolved: surveyConfigDocs,
 		validate: (input, ctx): input is SurveyRawConfig => {
 			checkSurveyConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -94,7 +77,7 @@ export const SurveyPlugin = createWidgetPlugin('Survey')
 	})
 	.slots({
 		questions: {
-			description: undocumented,
+			description: 'The questions in display order: ShortAnswer, SingleChoice, MultipleChoice or Numeric.',
 			validateStructure: ({ children, addDiagnostic }) => {
 				children.forEach((child, index) => {
 					if (child.resolved && !isQuestionType(child.type))
@@ -109,23 +92,26 @@ export const SurveyPlugin = createWidgetPlugin('Survey')
 	})
 	.state(state => state
 		.language({
-			description: undocumented,
+			description: 'The active language: one of config `languages`. Starts at the first.',
 			validate: (input, ctx): input is string => typeof input === 'string' && ctx.config.languages.includes(input),
 			default: ({ config }) => config.languages[0] ?? 'en',
 		})
 		.submitted({
-			description: undocumented,
+			description: 'The response `submit()` last stored; `null` before any.',
+			ref: surveyResponseDocs,
 			validate: (input): input is SurveyResponse | null => input === null || isSurveyResponse(input),
 			default: () => null,
 		}))
 	.properties(properties => properties
 		.text({
-			description: undocumented,
+			description: 'The survey title and the survey\'s own messages in the active language.',
+			ref: surveyTextDocs,
 			registerDeps: ({ dep }) => dep.self.state.get('language'),
 			compute: ({ deps, config }) => surveyText(config, languageOf(deps())),
 		})
 		.response({
-			description: undocumented,
+			description: 'Every question\'s visible, required, value and errors, by question id: the one object a backend reads.',
+			ref: surveyResponseDocs,
 			registerDeps: ({ widget, blueprint, dep }) => ({
 				language: dep.self.state.get('language'),
 				// Only a child that is a question and whose id names exactly that child. A child that is not a
@@ -167,7 +153,7 @@ export const SurveyPlugin = createWidgetPlugin('Survey')
 			}),
 		})
 		.canSubmit({
-			description: undocumented,
+			description: 'Whether no question has errors.',
 			registerDeps: ({ dep }) => dep.self.properties.get('response'),
 			compute: ({ deps }) => {
 				const response = deps()
@@ -176,7 +162,7 @@ export const SurveyPlugin = createWidgetPlugin('Survey')
 			},
 		})
 		.changedSinceSubmit({
-			description: undocumented,
+			description: 'Whether an answer changed since the last submit.',
 			registerDeps: ({ dep }) => ({
 				submitted: dep.self.state.get('submitted'),
 				response: dep.self.properties.get('response'),
@@ -188,7 +174,8 @@ export const SurveyPlugin = createWidgetPlugin('Survey')
 			},
 		}))
 	.methods(methods => methods.submit({
-		description: undocumented,
+		description: 'Stores the response in `submitted` and emits `submitted`. Refused (`answer-errors`, message in the survey language) while any question has errors; it then writes and emits nothing.',
+		returns: { description: 'The response.', ref: surveyResponseDocs },
 		validateArgs: (args): args is [] => args.length === 0,
 		registerDeps: ({ dep }) => ({
 			response: dep.self.properties.get('response'),
@@ -212,5 +199,5 @@ export const SurveyPlugin = createWidgetPlugin('Survey')
 			return response.value
 		},
 	}))
-	.events({ submitted: undocumented })
+	.events({ submitted: { description: 'An answer set with no errors was submitted. Carries the response: visible, required, value and errors per question.', payload: [{ description: 'The submitted response.', ref: surveyResponseDocs }] } })
 	.done()

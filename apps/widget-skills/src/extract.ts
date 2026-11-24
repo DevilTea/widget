@@ -1,17 +1,19 @@
 /**
  * IR extraction: walks `typeof <system>` -> `WidgetSystem<[...plugins]>` -> each `WidgetPlugin<Type, Interfaces>`
- * with the TypeScript checker and reads the Interfaces members and their JSDoc (Core 0.3: the JSDoc is the only
- * documentation; Core carries no prose at run time).
+ * with the TypeScript checker and reads the shape of the Interfaces members. JSDoc is not read: the prose comes from
+ * `plugin.docs` (Core 0.4), which `applyRuntimeFacts` fills in from the runtime import (`prose.ts`).
  *
- * Slots are the 0.3 record `{ /** doc *\/ name: Expected }`, where `Expected` is a union of plugin types, a
- * `WidgetContract<Shape, Types>` or `WidgetChild`.
+ * Slots are the record `{ name: Expected }`, where `Expected` is a union of plugin types, a
+ * `WidgetContract<Shape, Types>` or `WidgetChild`. A string typed `WidgetRef<Types>` (Core's brand) is a string shape
+ * that names `Types`.
  */
 
-import type { Capability, ConstraintTag, Doc, EventIr, MemberIr, MethodIr, NamedType, PluginIr, ReasonIr, RuntimeFacts, Shape, ShapeProperty, SlotIr, StateIr, SystemIr } from './ir'
+import type { Capability, EventIr, MemberIr, MethodIr, NamedType, PluginIr, ReasonIr, RuntimeFacts, Shape, ShapeProperty, SlotIr, StateIr, SystemIr } from './ir'
 import { dirname, relative, resolve } from 'node:path'
 import process from 'node:process'
 import ts from 'typescript'
-import { CAPABILITIES, CONSTRAINT_TAGS, emptyDoc, PROSE_TAGS } from './ir'
+import { CAPABILITIES, emptyDoc } from './ir'
+import { applyPluginDocs } from './prose'
 
 export interface ExtractOptions {
 	/** The module that exports the System. */
@@ -118,31 +120,32 @@ export function extractIrFromProgram(program: ts.Program, options: ExtractOption
 
 	const textOf = (type: ts.Type): string => checker.typeToString(type, undefined, TYPE_FORMAT)
 
-	function docOf(symbol: ts.Symbol | undefined): Doc {
-		const doc = emptyDoc()
-		if (symbol === undefined)
-			return doc
-		doc.summary = ts.displayPartsToString(symbol.getDocumentationComment(checker))
-			.trim()
-		for (const tag of symbol.getJsDocTags(checker)) {
-			const text = ts.displayPartsToString(tag.text)
-				.trim()
-			if (tag.name === 'remarks')
-				doc.remarks = text
-			else if (tag.name === 'example')
-				(doc.example ??= []).push(text)
-			else if (tag.name === 'see')
-				(doc.see ??= []).push(text)
-			else if (tag.name === 'deprecated')
-				doc.deprecated = text
-			else if (tag.name === 'defaultValue')
-				doc.defaultValue = text
-			else if ((CONSTRAINT_TAGS as readonly string[]).includes(tag.name))
-				doc.tags[tag.name as ConstraintTag] = text
-			else if (!(PROSE_TAGS as readonly string[]).includes(tag.name))
-				doc.unknownTags.push(tag.name)
+	/**
+	 * The plugin types of a `WidgetRef<Types>` (Core: `string & { readonly [widgetRefTypes]?: Types }`), read the way
+	 * `WidgetRefTypesOf` reads them: the type of the brand property, without `undefined`. `null` for any other type, and
+	 * for a reference whose `Types` are not string literals (`WidgetRef<string>` names no type: a plain string).
+	 */
+	function widgetRefTypesOf(type: ts.Type): string[] | null {
+		if (!type.isIntersection() || !type.types.some(member => (member.flags & ts.TypeFlags.String) !== 0))
+			return null
+		for (const member of type.types) {
+			if (!(member.flags & ts.TypeFlags.Object))
+				continue
+			for (const property of checker.getPropertiesOfType(member)) {
+				const declaration = property.valueDeclaration ?? property.declarations?.[0]
+				if (declaration === undefined || !ts.isPropertySignature(declaration) || !ts.isComputedPropertyName(declaration.name))
+					continue
+				const expression = declaration.name.expression
+				if (!ts.isIdentifier(expression) || expression.text !== 'widgetRefTypes')
+					continue
+				const brand = checker.getTypeOfSymbol(property)
+				const names = (brand.isUnion() ? brand.types : [brand]).filter(name => !(name.flags & ts.TypeFlags.Undefined))
+				if (names.length === 0 || !names.every(name => (name.flags & ts.TypeFlags.StringLiteral) !== 0))
+					return null
+				return names.map(name => (name as ts.StringLiteralType).value)
+			}
 		}
-		return doc
+		return null
 	}
 
 	/** The user-declared interface or alias `type` is an instance of, when it has one and takes no type arguments. */
@@ -225,12 +228,49 @@ export function extractIrFromProgram(program: ts.Program, options: ExtractOption
 
 	function propertyOf(property: ts.Symbol, depth: number): ShapeProperty {
 		const type = checker.getTypeOfSymbol(property)
+		const shape = writtenShape(property, type, depth + 1) ?? shapeOf(type, depth + 1)
+		const declaration = property.valueDeclaration
+		if (declaration !== undefined && (ts.isPropertySignature(declaration) || ts.isPropertyDeclaration(declaration)) && declaration.type !== undefined)
+			orderWidgetRefs(shape, declaration.type)
 		return {
 			name: property.name,
 			optional: (property.flags & ts.SymbolFlags.Optional) !== 0,
-			shape: writtenShape(property, type, depth + 1) ?? shapeOf(type, depth + 1),
-			doc: docOf(property),
+			shape,
+			doc: emptyDoc(),
 		}
+	}
+
+	/**
+	 * Puts the types of the widget references in `shape` in the order they are written in `node` (`WidgetRef<'A' | 'B'>`):
+	 * the checker orders a union's members by when each literal type was first created, which is not the written order.
+	 */
+	function orderWidgetRefs(shape: Shape, node: ts.TypeNode): void {
+		const written: string[] = []
+		const collect = (child: ts.Node): void => {
+			if (ts.isTypeReferenceNode(child) && ts.isIdentifier(child.typeName) && child.typeName.text === 'WidgetRef') {
+				child.typeArguments?.forEach(function literals(argument: ts.Node): void {
+					if (ts.isLiteralTypeNode(argument) && ts.isStringLiteral(argument.literal))
+						written.push(argument.literal.text)
+					ts.forEachChild(argument, literals)
+				})
+			}
+			ts.forEachChild(child, collect)
+		}
+		collect(node)
+		if (written.length === 0)
+			return
+		const rank = (name: string): number => written.includes(name) ? written.indexOf(name) : written.length
+		const visit = (current: Shape): void => {
+			if (current.kind === 'string' && current.widgetRef !== undefined)
+				current.widgetRef.sort((a, b) => rank(a) - rank(b))
+			else if (current.kind === 'union')
+				current.members.forEach(visit)
+			else if (current.kind === 'array')
+				visit(current.items)
+			else if (current.kind === 'record')
+				visit(current.value)
+		}
+		visit(shape)
 	}
 
 	function withoutUndefined(type: ts.Type): ts.Type[] {
@@ -281,6 +321,10 @@ export function extractIrFromProgram(program: ts.Program, options: ExtractOption
 
 	/** The shape of `type`; a user-declared named type is registered in `types` and referenced by name. */
 	function shapeOf(type: ts.Type, depth = 0): Shape {
+		// A widget reference is a string, also behind an alias of its own: it never becomes a named type.
+		const widgetRef = widgetRefTypesOf(type)
+		if (widgetRef !== null)
+			return { kind: 'string', widgetRef }
 		const named = namedDeclarationOf(type)
 		if (named === null) {
 			// A recursive type without a name of its own (one from a dependency, such as Core's `JsonValue`) cannot be
@@ -307,7 +351,7 @@ export function extractIrFromProgram(program: ts.Program, options: ExtractOption
 			text: declarationText(named.declaration),
 			file: relative(cwd, named.declaration.getSourceFile().fileName),
 			shape: { kind: 'unknown' },
-			doc: docOf(named.symbol),
+			doc: emptyDoc(),
 		}
 		types[name] = entry
 		entry.shape = structuralShape(type, depth)
@@ -373,7 +417,7 @@ export function extractIrFromProgram(program: ts.Program, options: ExtractOption
 		const expectationText = declaration !== undefined && ts.isPropertySignature(declaration) && declaration.type !== undefined
 			? declaration.type.getText()
 			: textOf(type)
-		const slot: SlotIr = { name: symbol.name, doc: docOf(symbol), expected: null, contract: null, expectationText }
+		const slot: SlotIr = { name: symbol.name, doc: emptyDoc(), expected: null, contract: null, expectationText }
 		const names = literalNames(type)
 		if (names !== null) {
 			slot.expected = names
@@ -414,7 +458,7 @@ export function extractIrFromProgram(program: ts.Program, options: ExtractOption
 		const plugin: PluginIr = {
 			type,
 			interfacesName: interfacesSymbol === undefined || interfacesSymbol.name.startsWith('__') ? null : interfacesSymbol.name,
-			doc: docOf(interfacesSymbol),
+			doc: emptyDoc(),
 			capabilities: Object.fromEntries(CAPABILITIES.map(capability => [capability, hasCapability(interfaces, capability)])) as Record<Capability, boolean>,
 			config: null,
 			slots: [],
@@ -436,12 +480,13 @@ export function extractIrFromProgram(program: ts.Program, options: ExtractOption
 			const rawType = checker.getTypeOfSymbol(raw)
 			const resolvedType = checker.getTypeOfSymbol(resolved)
 			const { type: rawValue, hadNull } = nonNullable(rawType)
-			track(resolvedType)
+			const resolvedShape = track(resolvedType)
 			plugin.config = {
-				doc: docOf(configProperty),
+				doc: emptyDoc(),
 				rawText: textOf(rawType),
 				resolvedText: textOf(resolvedType),
 				rawShape: track(rawValue),
+				resolvedShape,
 				omittable: hadNull,
 			}
 		}
@@ -459,42 +504,21 @@ export function extractIrFromProgram(program: ts.Program, options: ExtractOption
 		}
 
 		plugin.state = (membersOf(interfaces, 'state') ?? []).map(({ symbol, type: memberType }): StateIr => {
-			return { name: symbol.name, typeText: textOf(memberType), shape: track(memberType), doc: docOf(symbol), authorWritable: null }
+			return { name: symbol.name, typeText: textOf(memberType), shape: track(memberType), doc: emptyDoc(), authorWritable: null }
 		})
 		plugin.properties = (membersOf(interfaces, 'properties') ?? []).map(({ symbol, type: memberType }): MemberIr => {
-			return { name: symbol.name, typeText: textOf(memberType), shape: track(memberType), doc: docOf(symbol) }
+			return { name: symbol.name, typeText: textOf(memberType), shape: track(memberType), doc: emptyDoc() }
 		})
 		plugin.methods = (membersOf(interfaces, 'methods') ?? []).map(({ symbol, type: memberType }): MethodIr => {
 			const signature = checker.getSignaturesOfType(memberType, ts.SignatureKind.Call)[0]
 			if (signature === undefined)
 				throw new Error(`${type}.methods.${symbol.name} is not callable.`)
-			const paramDocs = new Map<string, string>()
-			let returnsDoc = ''
-			for (const tag of symbol.getJsDocTags(checker)) {
-				const text = ts.displayPartsToString(tag.text)
-					.trim()
-				if (tag.name === 'param') {
-					// `name - text` (TSDoc) or `name text` (JSDoc).
-					const space = text.search(/\s/)
-					const name = space === -1 ? text : text.slice(0, space)
-					if (name !== '') {
-						paramDocs.set(name, space === -1
-							? ''
-							: text.slice(space)
-									.trim()
-									.replace(/^-\s*/, ''))
-					}
-				}
-				else if (tag.name === 'returns') {
-					returnsDoc = text
-				}
-			}
 			const params = signature.getParameters()
 				.map((parameter) => {
 					const parameterType = checker.getTypeOfSymbol(parameter)
 					const declaration = parameter.valueDeclaration
 					const optional = declaration !== undefined && ts.isParameter(declaration) && checker.isOptionalParameter(declaration)
-					return { name: parameter.name, typeText: textOf(parameterType), optional, doc: paramDocs.get(parameter.name) ?? '', shape: track(parameterType) }
+					return { name: parameter.name, typeText: textOf(parameterType), optional, doc: '', shape: track(parameterType) }
 				})
 			const returnType = signature.getReturnType()
 			const returnShape = track(returnType)
@@ -506,8 +530,8 @@ export function extractIrFromProgram(program: ts.Program, options: ExtractOption
 				params,
 				returnText,
 				returnShape,
-				returnsDoc,
-				doc: docOf(symbol),
+				returnsDoc: '',
+				doc: emptyDoc(),
 			}
 		})
 		plugin.events = (membersOf(interfaces, 'events') ?? []).map(({ symbol, type: memberType }): EventIr => {
@@ -517,16 +541,16 @@ export function extractIrFromProgram(program: ts.Program, options: ExtractOption
 				name: symbol.name,
 				payload: elements.map((element, index) => {
 					const label = labels?.[index]
-					return { label: label === undefined ? null : label.name.getText(), typeText: textOf(element), shape: track(element) }
+					return { label: label === undefined ? null : label.name.getText(), typeText: textOf(element), shape: track(element), doc: '' }
 				}),
-				doc: docOf(symbol),
+				doc: emptyDoc(),
 			}
 		})
 		const reasons = membersOf(interfaces, 'reasons')
 		if (reasons !== null) {
 			plugin.reasons = reasons.map(({ symbol, type: memberType }): ReasonIr => {
 				const payload = (memberType.flags & ts.TypeFlags.Void) !== 0 ? null : { typeText: textOf(memberType), shape: track(memberType) }
-				return { name: symbol.name, payload, doc: docOf(symbol) }
+				return { name: symbol.name, payload, doc: emptyDoc() }
 			})
 		}
 		plugin.typeNames = [...refs].sort()
@@ -546,13 +570,16 @@ export function extractIrFromProgram(program: ts.Program, options: ExtractOption
 		.map(extractPlugin)
 
 	const ir: SystemIr = {
-		irVersion: 2,
+		irVersion: 3,
 		system: options.exportName,
 		module: relative(cwd, modulePath),
 		plugins,
 		types: Object.fromEntries(Object.entries(types)
 			.sort(([a], [b]) => a.localeCompare(b))),
 		mismatches: [],
+		prose: false,
+		docsIssues: [],
+		docsCount: { descriptions: 0, documented: 0 },
 	}
 	if (options.runtime !== undefined)
 		applyRuntimeFacts(ir, options.runtime)
@@ -569,9 +596,11 @@ function compareNames(label: string, fromTypes: readonly string[], fromRuntime: 
 }
 
 /**
- * Fills the runtime-only fact (`authorWritable`) and records every difference between the types and the runtime in
- * `ir.mismatches`: capability presence (all six), and the names of slots, State, Properties and Events. Method
- * names are not compared: neither the catalog nor `inspectPlugin` has a Method inventory.
+ * Fills the runtime-only facts and records every difference between the types and the runtime in `ir.mismatches`:
+ * capability presence (all six), and the names of slots, State, Properties and Events. Method names are not compared
+ * here: neither the catalog nor `inspectPlugin` has a Method inventory (`plugin.docs` has one; `applyPluginDocs`
+ * compares it). The runtime-only facts are `authorWritable` and the prose, which `applyPluginDocs` reads from
+ * `plugin.docs`.
  */
 export function applyRuntimeFacts(ir: SystemIr, runtime: RuntimeFacts): void {
 	const mismatches = ir.mismatches
@@ -595,4 +624,5 @@ export function applyRuntimeFacts(ir: SystemIr, runtime: RuntimeFacts): void {
 		for (const member of plugin.state)
 			member.authorWritable = facts.state?.find(candidate => candidate.name === member.name)?.authorWritable ?? null
 	}
+	applyPluginDocs(ir, runtime)
 }

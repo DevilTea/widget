@@ -7,42 +7,33 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { InterestOptionRaw, InterestsConfig, InterestsRawConfig } from '../config'
 import type { I18nText } from '../domain'
-import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
+import { createWidgetPlugin } from '@deviltea/widget-core'
 import { checkInterestsConfig, resolveInterestsConfig } from '../config'
+import { interestOptionDocs, interestsConfigDocs, interestsRawConfigDocs } from '../docs'
 import { isStringArray } from '../domain'
 import { checkInsideOnboarding } from './structure'
 
-/**
- * Step 2 of the onboarding wizard: the interests the new member picks from the configured options (State `selected`: the
- * picked ids). Properties: `title`, `options`, `missing` (`interests:<n>` while `n` more must be picked to reach
- * `minimum`), `complete` and `answers` (the picked ids).
- */
 export interface InterestsInterfaces extends WidgetInterfaces {
-	/** The step title, the options (an id and a label per language), how many must be picked and which are picked at the start. */
 	config: { raw: InterestsRawConfig, resolved: InterestsConfig }
 	state: {
-		/** The picked option ids, in the order of the options. */
 		selected: readonly string[]
 	}
 	properties: {
-		/** The step title per language. */
 		title: I18nText
-		/** The configured options: an id and a label per language. */
 		options: readonly InterestOptionRaw[]
-		/** `interests:<n>` while `n` more must be picked to reach `minimum`. */
 		missing: readonly string[]
-		/** Whether at least `minimum` interests are picked. */
 		complete: boolean
-		/** The picked ids. */
 		answers: readonly string[]
 	}
 }
 
 export const InterestsStepPlugin = createWidgetPlugin('InterestsStep')
-	.description(undocumented)
+	.description('Step 2 of the onboarding wizard: the interests the new member picks from the configured options (State `selected`: the picked ids). Properties: `title`, `options`, `missing` (`interests:<n>` while `n` more must be picked to reach `minimum`), `complete` and `answers` (the picked ids).')
 	.interfaces<InterestsInterfaces>()
 	.config({
-		description: undocumented,
+		description: 'The step title, the options (an id and a label per language), how many must be picked and which are picked at the start.',
+		raw: interestsRawConfigDocs,
+		resolved: interestsConfigDocs,
 		validate: (input, ctx): input is InterestsRawConfig => {
 			checkInterestsConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -51,7 +42,7 @@ export const InterestsStepPlugin = createWidgetPlugin('InterestsStep')
 	})
 	.structure(ctx => checkInsideOnboarding(ctx, 'InterestsStep'))
 	.state(state => state.selected({
-		description: undocumented,
+		description: 'The picked option ids, in the order of the options.',
 		validate: (input, ctx): input is readonly string[] => {
 			if (!isStringArray(input))
 				return false
@@ -62,10 +53,10 @@ export const InterestsStepPlugin = createWidgetPlugin('InterestsStep')
 			.filter(id => config.preselected.includes(id)),
 	}))
 	.properties(properties => properties
-		.title({ description: undocumented, compute: ({ config }) => config.title })
-		.options({ description: undocumented, compute: ({ config }) => config.options })
+		.title({ description: 'The step title per language.', compute: ({ config }) => config.title })
+		.options({ description: 'The configured options: an id and a label per language.', items: { ref: interestOptionDocs }, compute: ({ config }) => config.options })
 		.missing({
-			description: undocumented,
+			description: '`interests:<n>` while `n` more must be picked to reach `minimum`.',
 			registerDeps: ({ dep }) => ({ selected: dep.self.state.get('selected') }),
 			compute: ({ deps, config }) => {
 				const selected = deps.selected()
@@ -74,7 +65,7 @@ export const InterestsStepPlugin = createWidgetPlugin('InterestsStep')
 			},
 		})
 		.complete({
-			description: undocumented,
+			description: 'Whether at least `minimum` interests are picked.',
 			registerDeps: ({ dep }) => ({ missing: dep.self.properties.get('missing') }),
 			compute: ({ deps }) => {
 				const missing = deps.missing()
@@ -82,7 +73,7 @@ export const InterestsStepPlugin = createWidgetPlugin('InterestsStep')
 			},
 		})
 		.answers({
-			description: undocumented,
+			description: 'The picked ids.',
 			registerDeps: ({ dep }) => ({ selected: dep.self.state.get('selected') }),
 			compute: ({ deps }) => {
 				const selected = deps.selected()

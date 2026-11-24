@@ -15,40 +15,31 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { PersonConfig, PersonRawConfig } from '../config'
 import type { LedgerEntry, PersonLedger, TripView } from '../domain'
-import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
+import { createWidgetPlugin } from '@deviltea/widget-core'
 import { checkPersonConfig, resolvePersonConfig } from '../config'
+import { personConfigDocs, personLedgerDocs, personRawConfigDocs, tripViewDocs } from '../docs'
 import { childIds, isBoolean, isNullableString, isNumber, isNumberRecord, isString, viewFrom, viewReads } from './reads'
 import { checkInsideTrip, checkPersonId } from './structure'
 
-/**
- * One member of the trip. Properties (all derived from the Expense widgets): `name`, `view`, `paid` (cents they paid),
- * `owed` (their share of the costs), `balance` (`paid - owed`: positive means they get money back) and `ledger` (one line
- * per expense; only evaluated when a viewer opens it).
- */
 export interface PersonInterfaces extends WidgetInterfaces {
-	/** The name shown for this person. */
 	config: { raw: PersonRawConfig, resolved: PersonConfig }
 	properties: {
-		/** The name shown for this person. */
 		name: string
-		/** The trip language and the base currency, derived from the root Trip and the Currency. */
 		view: TripView
-		/** The base-currency cents this person paid, over every counted expense. */
 		paid: number
-		/** Their share of every counted expense, in cents. */
 		owed: number
-		/** `paid - owed`: positive means they get money back, negative that they owe money. */
 		balance: number
-		/** A line per expense with what they paid and their share. Lazy: only evaluated when a viewer opens it. */
 		ledger: PersonLedger
 	}
 }
 
 export const PersonPlugin = createWidgetPlugin('Person')
-	.description(undocumented)
+	.description('One member of the trip. Properties (all derived from the Expense widgets): `name`, `view`, `paid` (cents they paid), `owed` (their share of the costs), `balance` (`paid - owed`: positive means they get money back) and `ledger` (one line per expense; only evaluated when a viewer opens it).')
 	.interfaces<PersonInterfaces>()
 	.config({
-		description: undocumented,
+		description: 'The name shown for this person.',
+		raw: personRawConfigDocs,
+		resolved: personConfigDocs,
 		validate: (input, ctx): input is PersonRawConfig => {
 			checkPersonConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -60,14 +51,15 @@ export const PersonPlugin = createWidgetPlugin('Person')
 		checkPersonId(ctx)
 	})
 	.properties(properties => properties
-		.name({ description: undocumented, compute: ({ config }) => config.name })
+		.name({ description: 'The name shown for this person.', compute: ({ config }) => config.name })
 		.view({
-			description: undocumented,
+			description: 'The trip language and the base currency, derived from the root Trip and the Currency.',
+			ref: tripViewDocs,
 			registerDeps: ({ dep, blueprint }) => viewReads(dep, blueprint),
 			compute: ({ deps }) => viewFrom(deps),
 		})
 		.paid({
-			description: undocumented,
+			description: 'The base-currency cents this person paid, over every counted expense.',
 			registerDeps: ({ dep, blueprint }) => ({
 				expenses: Object.fromEntries(childIds(blueprint, 'expenses', 'Expense')
 					.map((id) => {
@@ -97,7 +89,7 @@ export const PersonPlugin = createWidgetPlugin('Person')
 				}, 0),
 		})
 		.owed({
-			description: undocumented,
+			description: 'Their share of every counted expense, in cents.',
 			registerDeps: ({ dep, blueprint }) => ({
 				expenses: Object.fromEntries(childIds(blueprint, 'expenses', 'Expense')
 					.map((id) => {
@@ -115,7 +107,7 @@ export const PersonPlugin = createWidgetPlugin('Person')
 				}, 0),
 		})
 		.balance({
-			description: undocumented,
+			description: '`paid - owed`: positive means they get money back, negative that they owe money.',
 			registerDeps: ({ dep }) => ({
 				paid: dep.self.properties.get('paid'),
 				owed: dep.self.properties.get('owed'),
@@ -127,7 +119,8 @@ export const PersonPlugin = createWidgetPlugin('Person')
 			},
 		})
 		.ledger({
-			description: undocumented,
+			description: 'A line per expense with what they paid and their share. Lazy: only evaluated when a viewer opens it.',
+			ref: personLedgerDocs,
 			registerDeps: ({ dep, blueprint }) => ({
 				expenses: Object.fromEntries(childIds(blueprint, 'expenses', 'Expense')
 					.map((id) => {

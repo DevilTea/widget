@@ -23,9 +23,10 @@ describe('describeField', () => {
 	})
 
 	it('reads an enum from the schema options and keeps the description', () => {
+		// The generated schema states the shape only (0.4): "at least one language" is prose, not `minItems`.
 		const languages = describeField(survey, property(survey, 'languages'), ['en'])
 		expect(languages.field)
-			.toMatchObject({ kind: 'array', minItems: 1, known: true })
+			.toMatchObject({ kind: 'array', minItems: 0, known: true })
 		if (languages.field.kind !== 'array')
 			throw new Error('expected an array field')
 		const item = describeField(survey, languages.field.items, 'en')
@@ -94,7 +95,9 @@ describe('describeField', () => {
 		expect(objectFieldKeys(config.field, { label: { en: 'x' }, min: 0 }))
 			.toEqual({ present: ['label', 'min'], addable: ['help', 'required', 'visibleWhen', 'rules', 'max', 'integer'] })
 
-		const languages = describeField(survey, property(survey, 'languages'), ['en'])
+		// A hand-written schema with `minItems` (quote-rules' Valibot schemas have them; the generated ones state the shape only).
+		const listed: JsonSchema = { type: 'array', items: { type: 'string', enum: ['en', 'zh-TW'] }, minItems: 1 }
+		const languages = describeField(listed, listed, ['en'])
 		if (languages.field.kind !== 'array')
 			throw new Error('expected an array field')
 		expect(canRemoveItem(languages.field, 1))
@@ -102,6 +105,11 @@ describe('describeField', () => {
 		expect(canRemoveItem(languages.field, 2))
 			.toBe(true)
 		expect(canAddItem(languages.field, 2))
+			.toBe(true)
+		const generated = describeField(survey, property(survey, 'languages'), ['en'])
+		if (generated.field.kind !== 'array')
+			throw new Error('expected an array field')
+		expect(canRemoveItem(generated.field, 1))
 			.toBe(true)
 	})
 
@@ -120,14 +128,21 @@ describe('defaultValueFor', () => {
 	it('starts new values from the schema: required keys, minimums, first enum option, defaults', () => {
 		expect(defaultValueFor(numeric, property(numeric, 'integer')))
 			.toBe(false)
+		// The generated `maxLength` states no minimum (it is prose); a hand-written `minimum` still starts the value there.
 		expect(defaultValueFor(shortAnswer, property(shortAnswer, 'maxLength')))
+			.toBe(0)
+		const counted: JsonSchema = { type: 'integer', minimum: 1 }
+		expect(defaultValueFor(counted, counted))
 			.toBe(1)
 		const option = (property(multiple, 'options').items) as JsonSchema
 		expect(defaultValueFor(multiple, option))
 			.toEqual({ value: '', label: {} })
 		expect(defaultValueFor(multiple, property(multiple, 'required')))
 			.toBe(false)
+		// No `minItems` on the generated list: it starts empty (an enum item would start at its first option).
 		expect(defaultValueFor(survey, property(survey, 'languages')))
+			.toEqual([])
+		expect(defaultValueFor(survey, { ...property(survey, 'languages'), minItems: 1 }))
 			.toEqual(['en'])
 		expect(defaultValueFor(null, null))
 			.toBeNull()

@@ -1,62 +1,48 @@
 /**
  * The intermediate representation the extractor produces and every emitter consumes. It is plain JSON data:
  * no TypeScript compiler objects leak into it, so the emitters are pure functions of the IR.
+ *
+ * The shape comes from the TypeScript types; the prose comes from `plugin.docs`, the documentation written in the
+ * builder (Core 0.4), which the runtime import reads (`RuntimeFacts`).
  */
 
-/** The JSDoc tags that constrain a value. Anything outside these and `PROSE_TAGS` is reported by `--check`. */
-export const CONSTRAINT_TAGS = [
-	'format',
-	'pattern',
-	'minimum',
-	'maximum',
-	'exclusiveMinimum',
-	'exclusiveMaximum',
-	'multipleOf',
-	'minLength',
-	'maxLength',
-	'minItems',
-	'maxItems',
-	'uniqueItems',
-	'minProperties',
-	'maxProperties',
-	'propertyNames',
-	'integer',
-	'default',
-	'examples',
-	'widgetRef',
-] as const
-
-export type ConstraintTag = typeof CONSTRAINT_TAGS[number]
-
-/** Tags that carry prose or structure rather than a value constraint. */
-export const PROSE_TAGS = ['remarks', 'param', 'returns', 'see', 'example', 'deprecated', 'throws', 'defaultValue', 'typeParam', 'privateRemarks', 'internal', 'alpha', 'beta', 'public', 'experimental'] as const
-
+/** The prose of one member: its description, split at the first blank line. */
 export interface Doc {
-	/** The text before the first block tag. Empty when the member has no JSDoc. */
+	/** The first paragraph of the description. Empty when the member has none (not written, or `undocumented`). */
 	summary: string
+	/** The rest of the description after the first blank line; empty when there is none. */
 	remarks: string
-	/** Known constraint tags, by tag name without `@`; the value is the raw tag text. */
-	tags: Partial<Record<ConstraintTag, string>>
-	/** Tag names (without `@`) outside `CONSTRAINT_TAGS` and `PROSE_TAGS`. */
-	unknownTags: string[]
-	/** The `@example` blocks, in order. Absent when there is none. */
-	example?: string[]
-	/** The `@deprecated` text (empty when the tag has none). Absent when the member is not deprecated. */
-	deprecated?: string
-	/** The `@see` references, in order. Absent when there is none. */
-	see?: string[]
-	/** The `@defaultValue` text. Absent when there is none. */
-	defaultValue?: string
 }
 
 export type Shape
-	= | { kind: 'string' | 'number' | 'boolean' | 'null' | 'unknown' }
-		| { kind: 'literal', value: string | number | boolean }
-		| { kind: 'array', items: Shape }
-		| { kind: 'record', value: Shape }
-		| { kind: 'object', properties: ShapeProperty[], additional?: Shape }
-		| { kind: 'union', members: Shape[] }
-		| { kind: 'ref', name: string }
+	= | {
+		kind: 'string'
+		/** The plugin types a `WidgetRef<Types>` names: the string is the id of a widget of one of them. */
+		widgetRef?: string[]
+	}
+	| { kind: 'number' | 'boolean' | 'null' | 'unknown' }
+	| { kind: 'literal', value: string | number | boolean }
+	| {
+		kind: 'array'
+		items: Shape
+		/** The description of each item (`items` in the docs), when one is written and the item is not a named type. */
+		itemsDoc?: Doc
+	}
+	| {
+		kind: 'record'
+		value: Shape
+		/** The description of each value (`values` in the docs), when one is written and the value is not a named type. */
+		valuesDoc?: Doc
+	}
+	| {
+		kind: 'object'
+		properties: ShapeProperty[]
+		additional?: Shape
+		/** The description of the values of the other keys (`values` in the docs), likewise. */
+		additionalDoc?: Doc
+	}
+	| { kind: 'union', members: Shape[] }
+	| { kind: 'ref', name: string }
 
 export interface ShapeProperty {
 	name: string
@@ -68,18 +54,19 @@ export interface ShapeProperty {
 /** A named type (interface or alias) a member mentions; `{ kind: 'ref' }` shapes point here by name. */
 export interface NamedType {
 	name: string
-	/** The declaration as written, with its leading JSDoc. */
+	/** The declaration as written, with its leading comment when that is a `/** ... *\/` block. */
 	text: string
 	/** Where the declaration lives, relative to the working directory. */
 	file: string
 	shape: Shape
+	/** The type's own description: from its `defineTypeDocs`, or from a docs position that holds the type itself (`raw`, `items`, ...). */
 	doc: Doc
 }
 
 export interface MemberIr {
 	name: string
 	typeText: string
-	/** The value's shape, so `--check` can visit the fields of an inline object type. */
+	/** The value's shape, so the emitters can visit the fields of an inline object type. */
 	shape: Shape
 	doc: Doc
 }
@@ -102,7 +89,7 @@ export interface MethodIr {
 
 export interface EventIr {
 	name: string
-	payload: { label: string | null, typeText: string, shape: Shape }[]
+	payload: { label: string | null, typeText: string, shape: Shape, doc: string }[]
 	doc: Doc
 }
 
@@ -128,12 +115,14 @@ export interface ReasonIr {
 }
 
 export interface ConfigIr {
-	/** The JSDoc on the `config` member of the Interfaces. */
+	/** The `description` of `.config()`. */
 	doc: Doc
 	rawText: string
 	resolvedText: string
 	/** The raw config without `null`/`undefined`. */
 	rawShape: Shape
+	/** The resolved config, so its fields carry their docs. */
+	resolvedShape: Shape
 	/** Whether `raw` admits `null`, which is how a plugin says the config may be omitted. */
 	omittable: boolean
 }
@@ -162,14 +151,61 @@ export interface PluginIr {
 	typeNames: string[]
 }
 
+/** A documentation problem found while reading `plugin.docs` against the types (see `prose.ts`). */
+export interface DocsIssue {
+	/**
+	 * - `undocumented`: the author wrote `undocumented` (`null` in `plugin.docs`);
+	 * - `missing-doc`: the types declare a member, field or position the docs do not document;
+	 * - `name-mismatch`: the docs name a member, field or position the types do not have, or a `ref` names type docs
+	 *   whose name differs from the type's;
+	 * - `docs-conflict`: one named type is documented differently in two places (two type docs with one name, two
+	 *   inline docs of the same type, or a description beside a `ref` that differs from its type docs), so its single
+	 *   `$defs` entry cannot hold both;
+	 * - `unused-doc`: a description at a position that holds a type (`raw`, `resolved`, `items`, `values`, `details`) whose
+	 *   value is not one named type and is not kept as an items or values description, so no output could show it.
+	 */
+	kind: 'undocumented' | 'missing-doc' | 'name-mismatch' | 'docs-conflict' | 'unused-doc'
+	/** The plugin type and the path in its `plugin.docs`, for example `Survey: config.raw.fields.title`. */
+	where: string
+	message: string
+}
+
 export interface SystemIr {
-	irVersion: 2
+	irVersion: 3
 	system: string
 	module: string
 	plugins: PluginIr[]
 	types: Record<string, NamedType>
 	/** Differences between the types and the runtime (`system.catalog`, `inspectPlugin`). Empty when they agree. */
 	mismatches: string[]
+	/** Whether the prose was read from `plugin.docs` (the System was imported). Without it every text is empty. */
+	prose: boolean
+	/** Problems in `plugin.docs`, in plugin order. Empty when the prose was not read. */
+	docsIssues: DocsIssue[]
+	/** Descriptions in `plugin.docs` (each written once in the System), and how many of them are prose rather than `undocumented`. */
+	docsCount: { descriptions: number, documented: number }
+}
+
+/** The documentation of one value in `plugin.docs` (Core's `WidgetDocsNode`), as plain JSON. */
+export interface DocsNode {
+	description?: string | null
+	fields?: Record<string, DocsNode | null>
+	items?: DocsNode | null
+	values?: DocsNode | null
+	ref?: string
+}
+
+/** A plugin's `plugin.docs` (Core's `WidgetPluginDocs`), as plain JSON. */
+export interface PluginDocsData {
+	description: string | null
+	config: { description: string | null, raw?: DocsNode | null, resolved?: DocsNode | null } | null
+	slots: Record<string, { description: string | null }> | null
+	state: Record<string, DocsNode> | null
+	properties: Record<string, DocsNode> | null
+	methods: Record<string, { description: string | null, params?: (DocsNode | null)[], returns?: DocsNode | null }> | null
+	events: Record<string, { description: string | null, payload?: (DocsNode | null)[] }> | null
+	reasons: Record<string, { description: string | null, details?: DocsNode | null }> | null
+	types: Record<string, DocsNode>
 }
 
 /** What the runtime says, as plain data (see `runtime-facts.ts`). */
@@ -183,9 +219,24 @@ export interface RuntimeFacts {
 		state: { name: string, authorWritable: boolean }[] | null
 		properties: string[] | null
 		events: string[] | null
+		/** `plugin.docs`, as JSON; `null` when the plugin has none (a Core before 0.4). */
+		docs: PluginDocsData | null
 	}[]
 }
 
 export function emptyDoc(): Doc {
-	return { summary: '', remarks: '', tags: {}, unknownTags: [] }
+	return { summary: '', remarks: '' }
+}
+
+/** Splits a description into its first paragraph and the rest. */
+export function docOfDescription(description: string | null | undefined): Doc {
+	if (description === null || description === undefined)
+		return emptyDoc()
+	const text = description.trim()
+	const split = /\n[ \t]*\n/.exec(text)
+	return split === null
+		? { summary: text, remarks: '' }
+		: { summary: text.slice(0, split.index)
+				.trim(), remarks: text.slice(split.index + split[0].length)
+				.trim() }
 }

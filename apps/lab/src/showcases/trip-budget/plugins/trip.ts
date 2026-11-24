@@ -11,46 +11,36 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { TripConfig, TripRawConfig } from '../config'
 import type { TripView } from '../domain'
-import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
+import { createWidgetPlugin } from '@deviltea/widget-core'
 import { checkTripConfig, resolveTripConfig } from '../config'
+import { tripConfigDocs, tripRawConfigDocs, tripViewDocs } from '../docs'
 import { DEFAULT_TRIP_LANGUAGE, isTripLanguage, localize } from '../domain'
 import { baseRead, viewFrom } from './reads'
 
-/**
- * The root of a trip budget. Holds the trip language (State `language`: en or zh-TW) and lays out the Currency
- * (`settings`), the Persons (`people`), the Expenses (`expenses`) and the Settlement (`summary`). Properties: `title` (the
- * title in the trip language) and `view` (the language and the base currency).
- */
 export interface TripInterfaces extends WidgetInterfaces {
-	/** The trip title per language (`en` is required, other languages fall back to it). */
 	config: { raw: TripRawConfig, resolved: TripConfig }
 	slots: {
-		/** Exactly one Currency: the base currency, the rates and the transfer rounding. */
 		settings: 'Currency'
-		/** The people on the trip, in the order they are listed: Person widgets. */
 		people: 'Person'
-		/** The expense lines in display order: Expense widgets. */
 		expenses: 'Expense'
-		/** The settlement summary: at most one Settlement widget. */
 		summary: 'Settlement'
 	}
 	state: {
-		/** The trip language: `en` or `zh-TW`. */
 		language: string
 	}
 	properties: {
-		/** The authored title in the trip language. */
 		title: string
-		/** The trip language and the base currency; the renderers look the built-in texts up from the language. */
 		view: TripView
 	}
 }
 
 export const TripPlugin = createWidgetPlugin('Trip')
-	.description(undocumented)
+	.description('The root of a trip budget. Holds the trip language (State `language`: en or zh-TW) and lays out the Currency (`settings`), the Persons (`people`), the Expenses (`expenses`) and the Settlement (`summary`). Properties: `title` (the title in the trip language) and `view` (the language and the base currency).')
 	.interfaces<TripInterfaces>()
 	.config({
-		description: undocumented,
+		description: 'The trip title per language (`en` is required, other languages fall back to it).',
+		raw: tripRawConfigDocs,
+		resolved: tripConfigDocs,
 		validate: (input, ctx): input is TripRawConfig => {
 			checkTripConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -59,7 +49,7 @@ export const TripPlugin = createWidgetPlugin('Trip')
 	})
 	.slots({
 		settings: {
-			description: undocumented,
+			description: 'Exactly one Currency: the base currency, the rates and the transfer rounding.',
 			validateStructure: ({ children, addDiagnostic }) => {
 				if (children.length !== 1)
 					addDiagnostic({ message: `The settings slot needs exactly one Currency, found ${children.length}.`, reason: 'settings-needs-one-currency' })
@@ -70,7 +60,7 @@ export const TripPlugin = createWidgetPlugin('Trip')
 			},
 		},
 		people: {
-			description: undocumented,
+			description: 'The people on the trip, in the order they are listed: Person widgets.',
 			validateStructure: ({ children, addDiagnostic }) => {
 				children.forEach((child, index) => {
 					if (child.resolved && child.type !== 'Person')
@@ -79,7 +69,7 @@ export const TripPlugin = createWidgetPlugin('Trip')
 			},
 		},
 		expenses: {
-			description: undocumented,
+			description: 'The expense lines in display order: Expense widgets.',
 			validateStructure: ({ children, addDiagnostic }) => {
 				children.forEach((child, index) => {
 					if (child.resolved && child.type !== 'Expense')
@@ -88,7 +78,7 @@ export const TripPlugin = createWidgetPlugin('Trip')
 			},
 		},
 		summary: {
-			description: undocumented,
+			description: 'The settlement summary: at most one Settlement widget.',
 			validateStructure: ({ children, addDiagnostic }) => {
 				if (children.length > 1)
 					addDiagnostic({ message: `The summary slot takes at most one Settlement, found ${children.length}.`, index: 1, reason: 'too-many-settlements' })
@@ -104,13 +94,13 @@ export const TripPlugin = createWidgetPlugin('Trip')
 			addDiagnostic({ message: 'A Trip must be the root widget.', reason: 'trip-not-root' })
 	})
 	.state(state => state.language({
-		description: undocumented,
+		description: 'The trip language: `en` or `zh-TW`.',
 		validate: (input): input is string => isTripLanguage(input),
 		default: () => DEFAULT_TRIP_LANGUAGE,
 	}))
 	.properties(properties => properties
 		.title({
-			description: undocumented,
+			description: 'The authored title in the trip language.',
 			registerDeps: ({ dep }) => ({ language: dep.self.state.get('language') }),
 			compute: ({ deps, config }) => {
 				const language = deps.language()
@@ -118,7 +108,8 @@ export const TripPlugin = createWidgetPlugin('Trip')
 			},
 		})
 		.view({
-			description: undocumented,
+			description: 'The trip language and the base currency; the renderers look the built-in texts up from the language.',
+			ref: tripViewDocs,
 			registerDeps: ({ dep, blueprint }) => ({
 				language: dep.self.state.get('language'),
 				...baseRead(dep, blueprint),

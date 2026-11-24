@@ -1,6 +1,6 @@
 /**
- * The plugin documentation the Lab shows. Core 0.3 carries no prose at run time: a plugin's documentation is the JSDoc on its
- * `Interfaces` type, which `widgetDocs()` (`apps/widget-skills`, wired in `widget-docs.ts` at the app root) turns into one
+ * The plugin documentation the Lab shows. A plugin's prose is written in its builder and kept on `plugin.docs` (Core 0.4); the
+ * shape comes from its `Interfaces` type. `widgetDocs()` (`apps/widget-skills`, wired in `widget-docs.ts` at the app root) turns both into one
  * `WidgetDocs` object per showcase System, imported as `virtual:widget-docs/<showcase id>` by `showcases/registry.ts`.
  *
  * The readers here never throw for a type or member the documentation does not name: an undocumented one reads as `''`, and
@@ -25,14 +25,14 @@ export function pluginDocsOf(docs: WidgetDocs | undefined, type: string): Widget
 }
 
 /**
- * Joins the source line wraps of one JSDoc paragraph: the generated docs keep the comment's line breaks, and the views
+ * Joins the line wraps of one paragraph (a description may be written with hard wraps), and the views
  * render text with `white-space: pre-line`. Blank lines (paragraph breaks) and lines that start a list item stay.
  */
 function unwrapLines(text: string): string {
 	return text.replace(/(?<!\n)[ \t]*\n(?!\n|[ \t]*(?:[-*+]|\d+\.)[ \t])[ \t]*/g, ' ')
 }
 
-/** The prose of one documented member: its summary, then its `@remarks` after a blank line; `''` when it has none. */
+/** The prose of one documented member: its summary, then its remarks after a blank line; `''` when it has none. */
 export function docText(text: WidgetDocsText | null | undefined): string {
 	if (text === null || text === undefined)
 		return ''

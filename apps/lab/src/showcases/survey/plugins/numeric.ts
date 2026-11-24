@@ -9,48 +9,38 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { NumericConfig, NumericRawConfig } from '../config'
 import type { AnswerError, QuestionText } from '../domain'
-import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
+import { createWidgetPlugin } from '@deviltea/widget-core'
 import { checkNumericConfig, resolveNumericConfig } from '../config'
+import { answerErrorDocs, numericConfigDocs, numericRawConfigDocs, questionTextDocs } from '../docs'
 import { builtinError, questionText } from '../domain'
 import { checkQuestion } from './check-question'
 import { computeRequired, computeVisible, questionErrors, requiredReads, ruleReads, visibleReads } from './question-members'
 import { languageFrom, languageReads } from './reads'
 
-/**
- * A numeric question. The respondent's number is State `answer`. Properties: `text` (label and help in the survey
- * language), `visible`, `required`, `value` (the effective answer: null while hidden) and `errors` (empty while hidden).
- * Method `clear()` empties the answer.
- */
 export interface NumericInterfaces extends WidgetInterfaces {
-	/** Label and help text per language, required (true, false or a condition), visibleWhen, min, max, integer, and custom rules. */
 	config: { raw: NumericRawConfig, resolved: NumericConfig }
 	state: {
-		/** The respondent's number; `null` while unanswered. */
 		answer: number | null
 	}
 	properties: {
-		/** The label and help text in the survey language. */
 		text: QuestionText
-		/** `visibleWhen` evaluated against the other questions' effective answers; `true` without one. */
 		visible: boolean
-		/** Whether an answer is required (`required`, or its condition), whatever the visibility. */
 		required: boolean
-		/** The effective answer: `null` while hidden. */
 		value: number | null
-		/** The answer errors in the survey language: `required`, the built-in checks, then the custom rules. Empty while hidden. */
 		errors: readonly AnswerError[]
 	}
 	methods: {
-		/** Empties the answer. */
 		clear: () => void
 	}
 }
 
 export const NumericPlugin = createWidgetPlugin('Numeric')
-	.description(undocumented)
+	.description('A numeric question. The respondent\'s number is State `answer`. Properties: `text` (label and help in the survey language), `visible`, `required`, `value` (the effective answer: null while hidden) and `errors` (empty while hidden). Method `clear()` empties the answer.')
 	.interfaces<NumericInterfaces>()
 	.config({
-		description: undocumented,
+		description: 'Label and help text per language, required (true, false or a condition), visibleWhen, min, max, integer, and custom rules.',
+		raw: numericRawConfigDocs,
+		resolved: numericConfigDocs,
 		validate: (input, ctx): input is NumericRawConfig => {
 			checkNumericConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -59,28 +49,29 @@ export const NumericPlugin = createWidgetPlugin('Numeric')
 	})
 	.structure(ctx => checkQuestion(ctx, ctx.config))
 	.state(state => state.answer({
-		description: undocumented,
+		description: 'The respondent\'s number; `null` while unanswered.',
 		validate: (input): input is number | null => input === null || (typeof input === 'number' && Number.isFinite(input)),
 		default: () => null,
 	}))
 	.properties(properties => properties
 		.text({
-			description: undocumented,
+			description: 'The label and help text in the survey language.',
+			ref: questionTextDocs,
 			registerDeps: ({ dep, blueprint }) => languageReads(dep, blueprint),
 			compute: ({ deps, config }) => questionText(config, languageFrom(deps)),
 		})
 		.visible({
-			description: undocumented,
+			description: '`visibleWhen` evaluated against the other questions\' effective answers; `true` without one.',
 			registerDeps: ({ dep, config }) => visibleReads(dep, config),
 			compute: ({ deps, config }) => computeVisible(config, deps),
 		})
 		.required({
-			description: undocumented,
+			description: 'Whether an answer is required (`required`, or its condition), whatever the visibility.',
 			registerDeps: ({ dep, config }) => requiredReads(dep, config),
 			compute: ({ deps, config }) => computeRequired(config, deps),
 		})
 		.value({
-			description: undocumented,
+			description: 'The effective answer: `null` while hidden.',
 			registerDeps: ({ dep }) => ({
 				answer: dep.self.state.get('answer'),
 				visible: dep.self.properties.get('visible'),
@@ -92,7 +83,8 @@ export const NumericPlugin = createWidgetPlugin('Numeric')
 			},
 		})
 		.errors({
-			description: undocumented,
+			description: 'The answer errors in the survey language: `required`, the built-in checks, then the custom rules. Empty while hidden.',
+			items: { ref: answerErrorDocs },
 			registerDeps: ({ dep, config, widget, blueprint }) => ({
 				visible: dep.self.properties.get('visible'),
 				required: dep.self.properties.get('required'),
@@ -114,7 +106,7 @@ export const NumericPlugin = createWidgetPlugin('Numeric')
 			}, { selfId: widget.id }),
 		}))
 	.methods(methods => methods.clear({
-		description: undocumented,
+		description: 'Empties the answer.',
 		registerDeps: ({ dep }) => dep.self.state.set('answer'),
 		validateArgs: (args): args is [] => args.length === 0,
 		execute: ({ deps }) => {

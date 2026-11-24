@@ -1,5 +1,5 @@
 {
-	"irVersion": 2,
+	"irVersion": 3,
 	"system": "surveySystem",
 	"module": "apps/widget-skills/fixtures/survey-system.ts",
 	"plugins": [
@@ -8,9 +8,7 @@
 			"interfacesName": "SurveyInterfaces",
 			"doc": {
 				"summary": "A survey: a header, the questions in order, and a footer note.",
-				"remarks": "The root of a survey document. It counts the answered questions through the `questions` contract.",
-				"tags": {},
-				"unknownTags": []
+				"remarks": "The root of a survey document. It counts the answered questions through the `questions` contract."
 			},
 			"capabilities": {
 				"config": true,
@@ -23,15 +21,60 @@
 			"config": {
 				"doc": {
 					"summary": "How the survey is titled and where it is sent.",
-					"remarks": "",
-					"tags": {},
-					"unknownTags": []
+					"remarks": ""
 				},
 				"rawText": "SurveyRawConfig",
 				"resolvedText": "{ title: I18nText; maxQuestions: number; submitUrl: string | null; }",
 				"rawShape": {
 					"kind": "ref",
 					"name": "SurveyRawConfig"
+				},
+				"resolvedShape": {
+					"kind": "object",
+					"properties": [
+						{
+							"name": "title",
+							"optional": false,
+							"shape": {
+								"kind": "ref",
+								"name": "I18nText"
+							},
+							"doc": {
+								"summary": "The survey's title.",
+								"remarks": ""
+							}
+						},
+						{
+							"name": "maxQuestions",
+							"optional": false,
+							"shape": {
+								"kind": "number"
+							},
+							"doc": {
+								"summary": "The most questions the survey may hold.",
+								"remarks": ""
+							}
+						},
+						{
+							"name": "submitUrl",
+							"optional": false,
+							"shape": {
+								"kind": "union",
+								"members": [
+									{
+										"kind": "string"
+									},
+									{
+										"kind": "null"
+									}
+								]
+							},
+							"doc": {
+								"summary": "Where the answers are sent, or `null` when they are not sent anywhere.",
+								"remarks": ""
+							}
+						}
+					]
 				},
 				"omittable": false
 			},
@@ -40,9 +83,7 @@
 					"name": "header",
 					"doc": {
 						"summary": "Anything shown above the questions.",
-						"remarks": "",
-						"tags": {},
-						"unknownTags": []
+						"remarks": ""
 					},
 					"expected": null,
 					"contract": null,
@@ -52,9 +93,7 @@
 					"name": "questions",
 					"doc": {
 						"summary": "The questions, in order.",
-						"remarks": "Every question exposes whether it was answered.",
-						"tags": {},
-						"unknownTags": []
+						"remarks": "Every question exposes whether it was answered."
 					},
 					"expected": [
 						"Rating",
@@ -67,9 +106,7 @@
 					"name": "footer",
 					"doc": {
 						"summary": "Closing notes shown under the questions.",
-						"remarks": "",
-						"tags": {},
-						"unknownTags": []
+						"remarks": ""
 					},
 					"expected": [
 						"Note"
@@ -87,9 +124,7 @@
 					},
 					"doc": {
 						"summary": "Whether the survey was sent.",
-						"remarks": "",
-						"tags": {},
-						"unknownTags": []
+						"remarks": ""
 					},
 					"authorWritable": false
 				}
@@ -103,12 +138,7 @@
 					},
 					"doc": {
 						"summary": "The share of answered questions, from 0 to 1.",
-						"remarks": "",
-						"tags": {
-							"minimum": "0",
-							"maximum": "1"
-						},
-						"unknownTags": []
+						"remarks": ""
 					}
 				}
 			],
@@ -124,9 +154,7 @@
 					"returnsDoc": "Whether the survey was sent by this call.",
 					"doc": {
 						"summary": "Sends the survey.",
-						"remarks": "",
-						"tags": {},
-						"unknownTags": []
+						"remarks": ""
 					}
 				}
 			],
@@ -140,14 +168,13 @@
 							"shape": {
 								"kind": "ref",
 								"name": "SubmitSummary"
-							}
+							},
+							"doc": "How many questions were answered, of how many."
 						}
 					],
 					"doc": {
 						"summary": "The survey was sent.",
-						"remarks": "",
-						"tags": {},
-						"unknownTags": []
+						"remarks": ""
 					}
 				}
 			],
@@ -157,9 +184,7 @@
 					"payload": null,
 					"doc": {
 						"summary": "The title has no language.",
-						"remarks": "",
-						"tags": {},
-						"unknownTags": []
+						"remarks": ""
 					}
 				},
 				{
@@ -177,9 +202,7 @@
 									},
 									"doc": {
 										"summary": "The configured maximum.",
-										"remarks": "",
-										"tags": {},
-										"unknownTags": []
+										"remarks": ""
 									}
 								},
 								{
@@ -190,9 +213,7 @@
 									},
 									"doc": {
 										"summary": "How many questions the slot holds.",
-										"remarks": "",
-										"tags": {},
-										"unknownTags": []
+										"remarks": ""
 									}
 								}
 							]
@@ -200,9 +221,7 @@
 					},
 					"doc": {
 						"summary": "The `questions` slot holds more questions than `maxQuestions` allows.",
-						"remarks": "",
-						"tags": {},
-						"unknownTags": []
+						"remarks": ""
 					}
 				}
 			],
@@ -217,9 +236,7 @@
 			"interfacesName": "RatingInterfaces",
 			"doc": {
 				"summary": "A rating question: pick a number on a scale.",
-				"remarks": "",
-				"tags": {},
-				"unknownTags": []
+				"remarks": ""
 			},
 			"capabilities": {
 				"config": true,
@@ -232,9 +249,7 @@
 			"config": {
 				"doc": {
 					"summary": "The question and its scale.",
-					"remarks": "",
-					"tags": {},
-					"unknownTags": []
+					"remarks": ""
 				},
 				"rawText": "{ question: I18nText; scale?: number | undefined; }",
 				"resolvedText": "{ question: I18nText; scale: number; }",
@@ -250,9 +265,7 @@
 							},
 							"doc": {
 								"summary": "The question asked.",
-								"remarks": "",
-								"tags": {},
-								"unknownTags": []
+								"remarks": ""
 							}
 						},
 						{
@@ -262,14 +275,36 @@
 								"kind": "number"
 							},
 							"doc": {
+								"summary": "The highest value of the scale, from 3 to 10; the lowest is 1. 5 when left out.",
+								"remarks": ""
+							}
+						}
+					]
+				},
+				"resolvedShape": {
+					"kind": "object",
+					"properties": [
+						{
+							"name": "question",
+							"optional": false,
+							"shape": {
+								"kind": "ref",
+								"name": "I18nText"
+							},
+							"doc": {
+								"summary": "The question asked.",
+								"remarks": ""
+							}
+						},
+						{
+							"name": "scale",
+							"optional": false,
+							"shape": {
+								"kind": "number"
+							},
+							"doc": {
 								"summary": "The highest value of the scale; the lowest is 1.",
-								"remarks": "",
-								"tags": {
-									"minimum": "3",
-									"maximum": "10",
-									"default": "5"
-								},
-								"unknownTags": []
+								"remarks": ""
 							}
 						}
 					]
@@ -294,9 +329,7 @@
 					},
 					"doc": {
 						"summary": "The chosen value, or `null` while unanswered.",
-						"remarks": "An editor may preset it.",
-						"tags": {},
-						"unknownTags": []
+						"remarks": "An editor may preset it."
 					},
 					"authorWritable": true
 				}
@@ -310,9 +343,7 @@
 					},
 					"doc": {
 						"summary": "Whether a value was chosen.",
-						"remarks": "",
-						"tags": {},
-						"unknownTags": []
+						"remarks": ""
 					}
 				}
 			],
@@ -338,9 +369,7 @@
 					"returnsDoc": "The chosen value.",
 					"doc": {
 						"summary": "Chooses a value.",
-						"remarks": "",
-						"tags": {},
-						"unknownTags": []
+						"remarks": ""
 					}
 				}
 			],
@@ -353,14 +382,13 @@
 							"typeText": "number",
 							"shape": {
 								"kind": "number"
-							}
+							},
+							"doc": "The chosen value."
 						}
 					],
 					"doc": {
 						"summary": "A value was chosen.",
-						"remarks": "",
-						"tags": {},
-						"unknownTags": []
+						"remarks": ""
 					}
 				}
 			],
@@ -380,9 +408,7 @@
 									},
 									"doc": {
 										"summary": "The lowest allowed value.",
-										"remarks": "",
-										"tags": {},
-										"unknownTags": []
+										"remarks": ""
 									}
 								},
 								{
@@ -393,9 +419,7 @@
 									},
 									"doc": {
 										"summary": "The highest allowed value.",
-										"remarks": "",
-										"tags": {},
-										"unknownTags": []
+										"remarks": ""
 									}
 								},
 								{
@@ -406,9 +430,7 @@
 									},
 									"doc": {
 										"summary": "The value given.",
-										"remarks": "",
-										"tags": {},
-										"unknownTags": []
+										"remarks": ""
 									}
 								}
 							]
@@ -416,9 +438,7 @@
 					},
 					"doc": {
 						"summary": "The value is outside the scale.",
-						"remarks": "",
-						"tags": {},
-						"unknownTags": []
+						"remarks": ""
 					}
 				}
 			],
@@ -431,9 +451,7 @@
 			"interfacesName": "ChoiceInterfaces",
 			"doc": {
 				"summary": "A choice question: pick one or more options.",
-				"remarks": "",
-				"tags": {},
-				"unknownTags": []
+				"remarks": ""
 			},
 			"capabilities": {
 				"config": true,
@@ -446,11 +464,9 @@
 			"config": {
 				"doc": {
 					"summary": "The question and its options.",
-					"remarks": "",
-					"tags": {},
-					"unknownTags": []
+					"remarks": ""
 				},
-				"rawText": "{ question: I18nText; options: ChoiceOption[]; multiple?: boolean | undefined; followUp?: string | undefined; }",
+				"rawText": "{ question: I18nText; options: ChoiceOption[]; multiple?: boolean | undefined; followUp?: WidgetRef<\"Rating\" | \"Choice\"> | undefined; }",
 				"resolvedText": "{ question: I18nText; options: readonly ChoiceOption[]; multiple: boolean; followUp: string | null; }",
 				"rawShape": {
 					"kind": "object",
@@ -464,9 +480,65 @@
 							},
 							"doc": {
 								"summary": "The question asked.",
-								"remarks": "",
-								"tags": {},
-								"unknownTags": []
+								"remarks": ""
+							}
+						},
+						{
+							"name": "options",
+							"optional": false,
+							"shape": {
+								"kind": "array",
+								"items": {
+									"kind": "ref",
+									"name": "ChoiceOption"
+								}
+							},
+							"doc": {
+								"summary": "The options, in the order shown: at least two.",
+								"remarks": ""
+							}
+						},
+						{
+							"name": "multiple",
+							"optional": true,
+							"shape": {
+								"kind": "boolean"
+							},
+							"doc": {
+								"summary": "Whether more than one option may be chosen.",
+								"remarks": ""
+							}
+						},
+						{
+							"name": "followUp",
+							"optional": true,
+							"shape": {
+								"kind": "string",
+								"widgetRef": [
+									"Rating",
+									"Choice"
+								]
+							},
+							"doc": {
+								"summary": "A question shown once this one is answered.",
+								"remarks": ""
+							}
+						}
+					]
+				},
+				"resolvedShape": {
+					"kind": "object",
+					"properties": [
+						{
+							"name": "question",
+							"optional": false,
+							"shape": {
+								"kind": "ref",
+								"name": "I18nText"
+							},
+							"doc": {
+								"summary": "The question asked.",
+								"remarks": ""
 							}
 						},
 						{
@@ -481,39 +553,37 @@
 							},
 							"doc": {
 								"summary": "The options, in the order shown.",
-								"remarks": "",
-								"tags": {
-									"minItems": "2"
-								},
-								"unknownTags": []
+								"remarks": ""
 							}
 						},
 						{
 							"name": "multiple",
-							"optional": true,
+							"optional": false,
 							"shape": {
 								"kind": "boolean"
 							},
 							"doc": {
 								"summary": "Whether more than one option may be chosen.",
-								"remarks": "",
-								"tags": {},
-								"unknownTags": []
+								"remarks": ""
 							}
 						},
 						{
 							"name": "followUp",
-							"optional": true,
+							"optional": false,
 							"shape": {
-								"kind": "string"
+								"kind": "union",
+								"members": [
+									{
+										"kind": "string"
+									},
+									{
+										"kind": "null"
+									}
+								]
 							},
 							"doc": {
-								"summary": "A question shown once this one is answered.",
-								"remarks": "",
-								"tags": {
-									"widgetRef": "Rating | Choice"
-								},
-								"unknownTags": []
+								"summary": "The id of the question shown once this one is answered, or `null` for none.",
+								"remarks": ""
 							}
 						}
 					]
@@ -533,9 +603,7 @@
 					},
 					"doc": {
 						"summary": "The ids of the chosen options.",
-						"remarks": "",
-						"tags": {},
-						"unknownTags": []
+						"remarks": ""
 					},
 					"authorWritable": false
 				}
@@ -549,9 +617,7 @@
 					},
 					"doc": {
 						"summary": "Whether at least one option was chosen.",
-						"remarks": "",
-						"tags": {},
-						"unknownTags": []
+						"remarks": ""
 					}
 				}
 			],
@@ -580,9 +646,7 @@
 					"returnsDoc": "The ids now chosen.",
 					"doc": {
 						"summary": "Chooses an option, replacing the choice unless the question takes several.",
-						"remarks": "",
-						"tags": {},
-						"unknownTags": []
+						"remarks": ""
 					}
 				}
 			],
@@ -598,14 +662,13 @@
 								"items": {
 									"kind": "string"
 								}
-							}
+							},
+							"doc": "The ids now chosen."
 						}
 					],
 					"doc": {
 						"summary": "The choice changed.",
-						"remarks": "",
-						"tags": {},
-						"unknownTags": []
+						"remarks": ""
 					}
 				}
 			],
@@ -625,9 +688,7 @@
 									},
 									"doc": {
 										"summary": "The id given.",
-										"remarks": "",
-										"tags": {},
-										"unknownTags": []
+										"remarks": ""
 									}
 								}
 							]
@@ -635,9 +696,7 @@
 					},
 					"doc": {
 						"summary": "The id names no option of the question.",
-						"remarks": "",
-						"tags": {},
-						"unknownTags": []
+						"remarks": ""
 					}
 				}
 			],
@@ -651,9 +710,7 @@
 			"interfacesName": "NoteInterfaces",
 			"doc": {
 				"summary": "A short text.",
-				"remarks": "",
-				"tags": {},
-				"unknownTags": []
+				"remarks": ""
 			},
 			"capabilities": {
 				"config": true,
@@ -666,9 +723,7 @@
 			"config": {
 				"doc": {
 					"summary": "The text of the note.",
-					"remarks": "Leave the config out for an empty note.",
-					"tags": {},
-					"unknownTags": []
+					"remarks": "Leave the config out for an empty note."
 				},
 				"rawText": "{ text: I18nText; } | null",
 				"resolvedText": "{ text: I18nText; }",
@@ -684,9 +739,24 @@
 							},
 							"doc": {
 								"summary": "The text shown.",
-								"remarks": "",
-								"tags": {},
-								"unknownTags": []
+								"remarks": ""
+							}
+						}
+					]
+				},
+				"resolvedShape": {
+					"kind": "object",
+					"properties": [
+						{
+							"name": "text",
+							"optional": false,
+							"shape": {
+								"kind": "ref",
+								"name": "I18nText"
+							},
+							"doc": {
+								"summary": "The text shown; empty when the config was left out.",
+								"remarks": ""
 							}
 						}
 					]
@@ -707,7 +777,7 @@
 	"types": {
 		"ChoiceOption": {
 			"name": "ChoiceOption",
-			"text": "/** One option of a choice question. */\nexport interface ChoiceOption {\n\t/**\n\t * The option's identifier, unique within the question.\n\t * @pattern ^[a-z][a-z0-9-]*$\n\t */\n\tid: string\n\t/** The label shown for the option. */\n\tlabel: I18nText\n}",
+			"text": "export interface ChoiceOption {\n\tid: string\n\tlabel: I18nText\n}",
 			"file": "apps/widget-skills/fixtures/survey-system.ts",
 			"shape": {
 				"kind": "object",
@@ -719,12 +789,8 @@
 							"kind": "string"
 						},
 						"doc": {
-							"summary": "The option's identifier, unique within the question.",
-							"remarks": "",
-							"tags": {
-								"pattern": "^[a-z][a-z0-9-]*$"
-							},
-							"unknownTags": []
+							"summary": "The option's identifier, unique within the question: a lowercase letter, then lowercase letters, digits or hyphens (`^[a-z][a-z0-9-]*$`).",
+							"remarks": ""
 						}
 					},
 					{
@@ -736,23 +802,19 @@
 						},
 						"doc": {
 							"summary": "The label shown for the option.",
-							"remarks": "",
-							"tags": {},
-							"unknownTags": []
+							"remarks": ""
 						}
 					}
 				]
 			},
 			"doc": {
 				"summary": "One option of a choice question.",
-				"remarks": "",
-				"tags": {},
-				"unknownTags": []
+				"remarks": ""
 			}
 		},
 		"I18nText": {
 			"name": "I18nText",
-			"text": "/**\n * Text per language, keyed by language tag (`en`, `zh-TW`).\n * @remarks At least one language should be present; the renderer falls back to the first one.\n */\nexport type I18nText = Record<string, string>",
+			"text": "export type I18nText = Record<string, string>",
 			"file": "apps/widget-skills/fixtures/survey-system.ts",
 			"shape": {
 				"kind": "record",
@@ -762,14 +824,12 @@
 			},
 			"doc": {
 				"summary": "Text per language, keyed by language tag (`en`, `zh-TW`).",
-				"remarks": "At least one language should be present; the renderer falls back to the first one.",
-				"tags": {},
-				"unknownTags": []
+				"remarks": "At least one language should be present; the renderer falls back to the first one."
 			}
 		},
 		"SubmitSummary": {
 			"name": "SubmitSummary",
-			"text": "/** What `Survey.submit()` reports when the survey is sent. */\nexport interface SubmitSummary {\n\t/** How many questions were answered. */\n\tanswered: number\n\t/** How many questions the survey has. */\n\ttotal: number\n}",
+			"text": "export interface SubmitSummary {\n\tanswered: number\n\ttotal: number\n}",
 			"file": "apps/widget-skills/fixtures/survey-system.ts",
 			"shape": {
 				"kind": "object",
@@ -782,9 +842,7 @@
 						},
 						"doc": {
 							"summary": "How many questions were answered.",
-							"remarks": "",
-							"tags": {},
-							"unknownTags": []
+							"remarks": ""
 						}
 					},
 					{
@@ -795,23 +853,19 @@
 						},
 						"doc": {
 							"summary": "How many questions the survey has.",
-							"remarks": "",
-							"tags": {},
-							"unknownTags": []
+							"remarks": ""
 						}
 					}
 				]
 			},
 			"doc": {
 				"summary": "What `Survey.submit()` reports when the survey is sent.",
-				"remarks": "",
-				"tags": {},
-				"unknownTags": []
+				"remarks": ""
 			}
 		},
 		"SurveyRawConfig": {
 			"name": "SurveyRawConfig",
-			"text": "/** The raw config of a survey. */\nexport interface SurveyRawConfig {\n\t/** The survey's title. */\n\ttitle: I18nText\n\t/**\n\t * The most questions the survey may hold.\n\t * @minimum 1\n\t * @maximum 20\n\t * @default 10\n\t */\n\tmaxQuestions?: number\n\t/**\n\t * Where the answers are sent.\n\t * @format uri\n\t */\n\tsubmitUrl?: string\n}",
+			"text": "export interface SurveyRawConfig {\n\ttitle: I18nText\n\tmaxQuestions?: number\n\tsubmitUrl?: string\n}",
 			"file": "apps/widget-skills/fixtures/survey-system.ts",
 			"shape": {
 				"kind": "object",
@@ -825,9 +879,7 @@
 						},
 						"doc": {
 							"summary": "The survey's title.",
-							"remarks": "",
-							"tags": {},
-							"unknownTags": []
+							"remarks": ""
 						}
 					},
 					{
@@ -837,14 +889,8 @@
 							"kind": "number"
 						},
 						"doc": {
-							"summary": "The most questions the survey may hold.",
-							"remarks": "",
-							"tags": {
-								"minimum": "1",
-								"maximum": "20",
-								"default": "10"
-							},
-							"unknownTags": []
+							"summary": "The most questions the survey may hold: from 1 to 20; 10 when left out.",
+							"remarks": ""
 						}
 					},
 					{
@@ -854,23 +900,23 @@
 							"kind": "string"
 						},
 						"doc": {
-							"summary": "Where the answers are sent.",
-							"remarks": "",
-							"tags": {
-								"format": "uri"
-							},
-							"unknownTags": []
+							"summary": "Where the answers are sent: a URI.",
+							"remarks": ""
 						}
 					}
 				]
 			},
 			"doc": {
 				"summary": "The raw config of a survey.",
-				"remarks": "",
-				"tags": {},
-				"unknownTags": []
+				"remarks": ""
 			}
 		}
 	},
-	"mismatches": []
+	"mismatches": [],
+	"prose": true,
+	"docsIssues": [],
+	"docsCount": {
+		"descriptions": 69,
+		"documented": 69
+	}
 }

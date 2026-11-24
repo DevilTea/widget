@@ -17,60 +17,37 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { CurrencyConfig, CurrencyRawConfig } from '../config'
 import type { TripView } from '../domain'
-import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
+import { createWidgetPlugin } from '@deviltea/widget-core'
 import { checkCurrencyConfig, resolveCurrencyConfig } from '../config'
+import { currencyConfigDocs, currencyRawConfigDocs, tripViewDocs } from '../docs'
 import { isRoundStep, roundToStep, toBaseCents } from '../domain'
 import { languageReads, viewFrom } from './reads'
 import { checkInsideTrip } from './structure'
 
-/**
- * The trip's money settings. Config: the base currency and the rates of the others. State `roundStep` (1, 100 or 500 minor
- * units) is how finely payments are rounded. Properties: `base`, `rates`, `codes` and `view`. Read-only Methods:
- * `convert(amount, currency)` (an amount in minor units of the base currency; fails for a currency without a rate) and
- * `roundTransfer(cents)` (rounded to `roundStep`). Other widgets' Properties call both.
- */
 export interface CurrencyInterfaces extends WidgetInterfaces {
-	/** The base currency, the rates of other currencies (base units per one unit) and the starting rounding step. */
 	config: { raw: CurrencyRawConfig, resolved: CurrencyConfig }
 	state: {
-		/** How finely payments are rounded, in minor units: 1, 100 or 500. */
 		roundStep: number
 	}
 	properties: {
-		/** The base currency code. */
 		base: string
-		/** The rate of each other currency: base units per one unit. */
 		rates: Readonly<Record<string, number>>
-		/** Every currency code the trip supports: the base first, then the rated ones. */
 		codes: readonly string[]
-		/** The trip language and the base currency, derived from the root Trip and the Currency. */
 		view: TripView
 	}
 	methods: {
-		/**
-		 * Converts an amount into minor units of the base currency. Read-only. Fails (`unknown-currency`) for a currency
-		 * without a rate.
-		 *
-		 * @param amount - The amount in minor units of `currency`.
-		 * @param currency - A currency code the trip lists.
-		 * @returns The amount in minor units of the base currency.
-		 */
 		convert: (amount: number, currency: string) => number
-		/**
-		 * Rounds a payment to the current `roundStep`. Read-only.
-		 *
-		 * @param cents - The exact payment in minor units of the base currency.
-		 * @returns The rounded payment.
-		 */
 		roundTransfer: (cents: number) => number
 	}
 }
 
 export const CurrencyPlugin = createWidgetPlugin('Currency')
-	.description(undocumented)
+	.description('The trip\'s money settings. Config: the base currency and the rates of the others. State `roundStep` (1, 100 or 500 minor units) is how finely payments are rounded. Properties: `base`, `rates`, `codes` and `view`. Read-only Methods: `convert(amount, currency)` (an amount in minor units of the base currency; fails for a currency without a rate) and `roundTransfer(cents)` (rounded to `roundStep`). Other widgets\' Properties call both.')
 	.interfaces<CurrencyInterfaces>()
 	.config({
-		description: undocumented,
+		description: 'The base currency, the rates of other currencies (base units per one unit) and the starting rounding step.',
+		raw: currencyRawConfigDocs,
+		resolved: currencyConfigDocs,
 		validate: (input, ctx): input is CurrencyRawConfig => {
 			checkCurrencyConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -79,22 +56,25 @@ export const CurrencyPlugin = createWidgetPlugin('Currency')
 	})
 	.structure(ctx => checkInsideTrip(ctx, 'Currency'))
 	.state(state => state.roundStep({
-		description: undocumented,
+		description: 'How finely payments are rounded, in minor units: 1, 100 or 500.',
 		validate: (input): input is number => isRoundStep(input),
 		default: ({ config }) => config.roundStep,
 	}))
 	.properties(properties => properties
-		.base({ description: undocumented, compute: ({ config }) => config.base })
-		.rates({ description: undocumented, compute: ({ config }) => config.rates })
-		.codes({ description: undocumented, compute: ({ config }) => config.codes })
+		.base({ description: 'The base currency code.', compute: ({ config }) => config.base })
+		.rates({ description: 'The rate of each other currency: base units per one unit.', compute: ({ config }) => config.rates })
+		.codes({ description: 'Every currency code the trip supports: the base first, then the rated ones.', compute: ({ config }) => config.codes })
 		.view({
-			description: undocumented,
+			description: 'The trip language and the base currency, derived from the root Trip and the Currency.',
+			ref: tripViewDocs,
 			registerDeps: ({ dep, blueprint }) => languageReads(dep, blueprint),
 			compute: ({ deps, config }) => ({ ...viewFrom(deps), base: config.base }),
 		}))
 	.methods(methods => methods
 		.convert({
-			description: undocumented,
+			description: 'Converts an amount into minor units of the base currency. Read-only. Fails (`unknown-currency`) for a currency without a rate.',
+			params: [{ description: 'The amount in minor units of `currency`.' }, { description: 'A currency code the trip lists.' }],
+			returns: { description: 'The amount in minor units of the base currency.' },
 			validateArgs: (args): args is [number, string] => args.length === 2 && typeof args[0] === 'number' && Number.isFinite(args[0]) && typeof args[1] === 'string',
 			execute: ({ args: [amount, currency], config, addDiagnostic }) => {
 				if (currency === config.base)
@@ -108,7 +88,9 @@ export const CurrencyPlugin = createWidgetPlugin('Currency')
 			},
 		})
 		.roundTransfer({
-			description: undocumented,
+			description: 'Rounds a payment to the current `roundStep`. Read-only.',
+			params: [{ description: 'The exact payment in minor units of the base currency.' }],
+			returns: { description: 'The rounded payment.' },
 			validateArgs: (args): args is [number] => args.length === 1 && typeof args[0] === 'number' && Number.isFinite(args[0]),
 			registerDeps: ({ dep }) => ({ step: dep.self.state.get('roundStep') }),
 			execute: ({ args: [cents], deps }) => {

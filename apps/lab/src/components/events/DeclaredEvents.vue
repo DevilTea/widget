@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * The Events a plugin declares: name and description, rendered verbatim (the description is the plugin's JSDoc on the Event,
+ * The Events a plugin declares: name and description, rendered verbatim (the description is the one written in the plugin's `.events()`,
  * from the showcase's generated documentation, and never passes through the Lab's i18n; an undocumented Event shows its name
  * only). Core publishes nothing else about an Event, in particular no payload schema, so the list says no more; what an
  * Event carries is whatever its description says and what the live Events log shows.

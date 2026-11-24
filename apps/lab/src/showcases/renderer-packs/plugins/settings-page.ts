@@ -10,8 +10,9 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { SettingsPageConfig, SettingsPageRawConfig } from '../config'
 import type { Density, I18nText, Mode } from '../domain'
-import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
+import { createWidgetPlugin } from '@deviltea/widget-core'
 import { checkSettingsPageConfig, resolveSettingsPageConfig } from '../config'
+import { pageAppearanceDocs, settingsPageConfigDocs, settingsPageRawConfigDocs } from '../docs'
 import { isDensity, isMode } from '../domain'
 import { isProviderType, rootAppearanceId } from './structure'
 
@@ -20,33 +21,25 @@ export interface PageAppearance {
 	readonly density: Density
 }
 
-/**
- * The root of the workspace settings page. Slot `providers`: the capability widgets (Appearance, Notifier). Slot `sections`:
- * Sections of fields. Property `title` is its config; `appearance` is the colour `mode` and `density` of the first Appearance
- * in `providers` (`auto` / `comfortable` when there is none).
- */
 export interface SettingsPageInterfaces extends WidgetInterfaces {
-	/** The title of the page per language. */
 	config: { raw: SettingsPageRawConfig, resolved: SettingsPageConfig }
 	slots: {
-		/** The capability widgets: Appearance and Notifier. */
 		providers: 'Appearance' | 'Notifier'
-		/** The Sections of the page, in order. */
 		sections: 'Section'
 	}
 	properties: {
-		/** The title of the page per language. */
 		title: I18nText
-		/** The colour `mode` and `density` of the first Appearance in `providers`; `auto` / `comfortable` when there is none. */
 		appearance: PageAppearance
 	}
 }
 
 export const SettingsPagePlugin = createWidgetPlugin('SettingsPage')
-	.description(undocumented)
+	.description('The root of the workspace settings page. Slot `providers`: the capability widgets (Appearance, Notifier). Slot `sections`: Sections of fields. Property `title` is its config; `appearance` is the colour `mode` and `density` of the first Appearance in `providers` (`auto` / `comfortable` when there is none).')
 	.interfaces<SettingsPageInterfaces>()
 	.config({
-		description: undocumented,
+		description: 'The title of the page per language.',
+		raw: settingsPageRawConfigDocs,
+		resolved: settingsPageConfigDocs,
 		validate: (input, ctx): input is SettingsPageRawConfig => {
 			checkSettingsPageConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -55,7 +48,7 @@ export const SettingsPagePlugin = createWidgetPlugin('SettingsPage')
 	})
 	.slots({
 		providers: {
-			description: undocumented,
+			description: 'The capability widgets: Appearance and Notifier.',
 			validateStructure: ({ children, addDiagnostic }) => {
 				children.forEach((child, index) => {
 					if (child.resolved && !isProviderType(child.type))
@@ -64,7 +57,7 @@ export const SettingsPagePlugin = createWidgetPlugin('SettingsPage')
 			},
 		},
 		sections: {
-			description: undocumented,
+			description: 'The Sections of the page, in order.',
 			validateStructure: ({ children, addDiagnostic }) => {
 				children.forEach((child, index) => {
 					if (child.resolved && child.type !== 'Section')
@@ -78,9 +71,10 @@ export const SettingsPagePlugin = createWidgetPlugin('SettingsPage')
 			addDiagnostic({ message: 'A SettingsPage must be the root widget.', reason: 'settings-page-not-root' })
 	})
 	.properties(properties => properties
-		.title({ description: undocumented, compute: ({ config }) => config.title })
+		.title({ description: 'The title of the page per language.', compute: ({ config }) => config.title })
 		.appearance({
-			description: undocumented,
+			description: 'The colour `mode` and `density` of the first Appearance in `providers`; `auto` / `comfortable` when there is none.',
+			ref: pageAppearanceDocs,
 			registerDeps: ({ dep, blueprint }) => {
 				const id = rootAppearanceId(blueprint)
 				return {

@@ -8,8 +8,8 @@
  * pipeline." Deliberately minimal: no routing, no persistence — just an `{ id, label, system,
  * presets }` lookup table consumed by `use-lab-store.ts`'s `switchShowcase`.
  *
- * Each entry also carries what Core 0.3 no longer publishes: the plugin documentation generated from the System's
- * `Interfaces` JSDoc (`virtual:widget-docs/<id>`, served by `widgetDocs({ slim: true })`, see `../../widget-docs.ts`) and the
+ * Each entry also carries what the catalog does not publish: the plugin documentation generated from the System's types and
+ * the plugins' builder docs (`virtual:widget-docs/<id>`, served by `widgetDocs({ slim: true })`, see `../../widget-docs.ts`) and the
  * config JSON Schemas (`configSchemas`, by plugin type), which are the generated ones (`docs.plugins[type].config.schema`)
  * unless the entry overrides them.
  *
@@ -75,7 +75,7 @@ export interface ShowcaseEntry {
 	 * source text or Shiki into the eager/shared chunk graph.
 	 */
 	readonly sources: SourcesRegistry
-	/** The documentation generated from the plugins' `Interfaces` JSDoc (`virtual:widget-docs/<id>`). */
+	/** The documentation generated from the plugins' types and builder docs (`virtual:widget-docs/<id>`). */
 	readonly docs: WidgetDocs
 	/**
 	 * The config JSON Schema of each plugin that has one, by plugin type (Core 0.3 carries no config schema): the schemas

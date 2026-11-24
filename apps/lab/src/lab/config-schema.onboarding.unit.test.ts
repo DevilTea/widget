@@ -26,8 +26,9 @@ describe('the Structure editor over the onboarding plugins\' config JSON Schemas
 
 		const interests = { title: { en: 'A' }, options: [{ id: 'a', label: { en: 'A' } }] }
 		const options = describeField(interestsConfigSchema, propertiesOf(interestsConfigSchema, interests).options!, interests.options)
+		// The schema states the shape only (0.4): "at least one" is prose, so the editor allows an empty list and Core reports it.
 		expect(options.field)
-			.toMatchObject({ kind: 'array', known: true, minItems: 1 })
+			.toMatchObject({ kind: 'array', known: true, minItems: 0 })
 
 		const safety = { title: { en: 'A' }, rules: [{ id: 'a', text: { en: 'A' } }] }
 		expect(describeField(safetyConfigSchema, propertiesOf(safetyConfigSchema, safety).rules!, safety.rules).field)

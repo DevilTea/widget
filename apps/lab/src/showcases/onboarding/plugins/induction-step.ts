@@ -23,98 +23,51 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { InductionConfig, InductionRawConfig } from '../config'
 import type { BookingOutcome, BookingStatus, I18nText, InductionAnswers, Slot, SlotCancelled, SlotConfirmation, SlotDeclined, SlotRequest } from '../domain'
-import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
+import { createWidgetPlugin } from '@deviltea/widget-core'
 import { checkInductionConfig, resolveInductionConfig } from '../config'
+import { bookingOutcomeDocs, inductionAnswersDocs, inductionConfigDocs, inductionRawConfigDocs, slotCancelledDocs, slotConfirmationDocs, slotDeclinedDocs, slotDocs, slotRequestDocs } from '../docs'
 import { describeValue, isBookingOutcome, isBookingStatus, isBoolean, isIsoDate, isNullableSlot, isNumber, isTime } from '../domain'
 import { checkInsideOnboarding } from './structure'
 
-/**
- * Step 4 of the onboarding wizard: booking an induction slot, with the work kept at the host. Methods:
- * `requestSlot(date, time)` (validated against the config; writes the request into State and emits `slotRequested` with a
- * ticket), `settleBooking(ticket, outcome)` (the host's answer; applied only if the ticket is still the newest, otherwise
- * ignored) and `cancelBooking()` (emits `slotCancelled`); `requestSlot` and `cancelBooking` are refused once the wizard is
- * finished. Events: `slotRequested`, `slotConfirmed`, `slotDeclined`, `slotCancelled`. State: `status`, `ticket`, `slot`,
- * `reference`, `reason`.
- */
 export interface InductionInterfaces extends WidgetInterfaces {
-	/**
-	 * The step title and the days and start times offered. Whether the booking office still has room is not known here: the
-	 * host asks it.
-	 */
 	config: { raw: InductionRawConfig, resolved: InductionConfig }
 	state: {
-		/** Where the booking is: `idle`, `requesting`, `confirmed` or `declined`. */
 		status: BookingStatus
-		/** The ticket of the newest request; 0 before any. */
 		ticket: number
-		/** The requested or booked slot; `null` before any request. */
 		slot: Slot | null
-		/** The booking reference the office gave; `null` unless confirmed. */
 		reference: string | null
-		/** Why the office declined; `null` unless declined. */
 		reason: string | null
 	}
 	properties: {
-		/** The step title per language. */
 		title: I18nText
-		/** The days and start times the config offers. */
 		offered: {
-			/** The days an induction can be booked, `YYYY-MM-DD`. */
 			readonly days: readonly string[]
-			/** The start times offered on each day, `HH:MM`. */
 			readonly times: readonly string[]
 		}
-		/** `booking-pending` while a request waits, `booking` while no slot is confirmed, empty once one is. */
 		missing: readonly string[]
-		/** Whether a slot is confirmed. */
 		complete: boolean
-		/** The booked slot and its reference. */
 		answers: InductionAnswers
 	}
 	methods: {
-		/**
-		 * Asks for a slot: writes `status: 'requesting'` with a new ticket and emits `slotRequested`. Refused for a day or time
-		 * the config does not offer, and once the wizard is finished.
-		 *
-		 * @param date - The day, YYYY-MM-DD, one of the offered days.
-		 * @param time - The start time, HH:MM, one of the offered times.
-		 * @returns The ticket of the new request.
-		 */
 		requestSlot: (date: string, time: string) => number
-		/**
-		 * The host's answer to a request. Applied only while the State says `requesting` and `ticket` is the newest; emits
-		 * `slotConfirmed` or `slotDeclined`.
-		 *
-		 * @param ticket - The ticket `slotRequested` carried.
-		 * @param outcome - What the booking office said.
-		 * @returns Whether the answer was applied (`false` for a stale one).
-		 */
 		settleBooking: (ticket: number, outcome: BookingOutcome) => boolean
-		/**
-		 * Gives the request or the booking up and emits `slotCancelled`. Refused when nothing waits or is booked, and once the
-		 * wizard is finished.
-		 *
-		 * @returns The ticket of the newest request.
-		 */
 		cancelBooking: () => number
 	}
 	events: {
-		/** The visitor asked for an induction slot. Carries the request, with the ticket the host must hand back with its answer. */
 		slotRequested: [request: SlotRequest]
-		/** The booking office confirmed the slot of the newest request. Carries the request and the booking reference. */
 		slotConfirmed: [confirmation: SlotConfirmation]
-		/** The booking office declined the slot of the newest request. Carries the request and the reason. */
 		slotDeclined: [declined: SlotDeclined]
-		/** The visitor cancelled a request that was waiting, or a booking that was confirmed. Carries the request and whether it had been confirmed. */
 		slotCancelled: [cancelled: SlotCancelled]
 	}
 }
 
 export const InductionStepPlugin = createWidgetPlugin('InductionStep')
-	.description(undocumented)
+	.description('Step 4 of the onboarding wizard: booking an induction slot, with the work kept at the host. Methods: `requestSlot(date, time)` (validated against the config; writes the request into State and emits `slotRequested` with a ticket), `settleBooking(ticket, outcome)` (the host\'s answer; applied only if the ticket is still the newest, otherwise ignored) and `cancelBooking()` (emits `slotCancelled`); `requestSlot` and `cancelBooking` are refused once the wizard is finished. Events: `slotRequested`, `slotConfirmed`, `slotDeclined`, `slotCancelled`. State: `status`, `ticket`, `slot`, `reference`, `reason`.')
 	.interfaces<InductionInterfaces>()
 	.config({
-		description: undocumented,
+		description: 'The step title and the days and start times offered. Whether the booking office still has room is not known here: the host asks it.',
+		raw: inductionRawConfigDocs,
+		resolved: inductionConfigDocs,
 		validate: (input, ctx): input is InductionRawConfig => {
 			checkInductionConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -133,35 +86,43 @@ export const InductionStepPlugin = createWidgetPlugin('InductionStep')
 	})
 	.state(state => state
 		.status({
-			description: undocumented,
+			description: 'Where the booking is: `idle`, `requesting`, `confirmed` or `declined`.',
 			validate: (input): input is BookingStatus => isBookingStatus(input),
 			default: () => 'idle',
 		})
 		.ticket({
-			description: undocumented,
+			description: 'The ticket of the newest request; 0 before any.',
 			validate: (input): input is number => isNumber(input) && Number.isInteger(input) && input >= 0,
 			default: () => 0,
 		})
 		.slot({
-			description: undocumented,
+			description: 'The requested or booked slot; `null` before any request.',
+			ref: slotDocs,
 			validate: (input): input is Slot | null => isNullableSlot(input),
 			default: () => null,
 		})
 		.reference({
-			description: undocumented,
+			description: 'The booking reference the office gave; `null` unless confirmed.',
 			validate: (input): input is string | null => input === null || typeof input === 'string',
 			default: () => null,
 		})
 		.reason({
-			description: undocumented,
+			description: 'Why the office declined; `null` unless declined.',
 			validate: (input): input is string | null => input === null || typeof input === 'string',
 			default: () => null,
 		}))
 	.properties(properties => properties
-		.title({ description: undocumented, compute: ({ config }) => config.title })
-		.offered({ description: undocumented, compute: ({ config }) => ({ days: config.days, times: config.times }) })
+		.title({ description: 'The step title per language.', compute: ({ config }) => config.title })
+		.offered({
+			description: 'The days and start times the config offers.',
+			fields: {
+				days: { description: 'The days an induction can be booked, `YYYY-MM-DD`.' },
+				times: { description: 'The start times offered on each day, `HH:MM`.' },
+			},
+			compute: ({ config }) => ({ days: config.days, times: config.times }),
+		})
 		.missing({
-			description: undocumented,
+			description: '`booking-pending` while a request waits, `booking` while no slot is confirmed, empty once one is.',
 			registerDeps: ({ dep }) => ({ status: dep.self.state.get('status') }),
 			compute: ({ deps }) => {
 				const status = deps.status()
@@ -171,7 +132,7 @@ export const InductionStepPlugin = createWidgetPlugin('InductionStep')
 			},
 		})
 		.complete({
-			description: undocumented,
+			description: 'Whether a slot is confirmed.',
 			registerDeps: ({ dep }) => ({ status: dep.self.state.get('status') }),
 			compute: ({ deps }) => {
 				const status = deps.status()
@@ -179,7 +140,8 @@ export const InductionStepPlugin = createWidgetPlugin('InductionStep')
 			},
 		})
 		.answers({
-			description: undocumented,
+			description: 'The booked slot and its reference.',
+			ref: inductionAnswersDocs,
 			registerDeps: ({ dep }) => ({
 				status: dep.self.state.get('status'),
 				slot: dep.self.state.get('slot'),
@@ -195,7 +157,9 @@ export const InductionStepPlugin = createWidgetPlugin('InductionStep')
 		}))
 	.methods(methods => methods
 		.requestSlot({
-			description: undocumented,
+			description: 'Asks for a slot: writes `status: \'requesting\'` with a new ticket and emits `slotRequested`. Refused for a day or time the config does not offer, and once the wizard is finished.',
+			params: [{ description: 'The day, YYYY-MM-DD, one of the offered days.' }, { description: 'The start time, HH:MM, one of the offered times.' }],
+			returns: { description: 'The ticket of the new request.' },
 			validateArgs: (args, { config, addDiagnostic, hasAnyDiagnostic }): args is [string, string] => {
 				if (args.length !== 2) {
 					addDiagnostic({ message: `requestSlot(date, time) takes exactly two arguments, got ${args.length}.`, reason: 'wrong-arity' })
@@ -254,7 +218,9 @@ export const InductionStepPlugin = createWidgetPlugin('InductionStep')
 			},
 		})
 		.settleBooking({
-			description: undocumented,
+			description: 'The host\'s answer to a request. Applied only while the State says `requesting` and `ticket` is the newest; emits `slotConfirmed` or `slotDeclined`.',
+			params: [{ description: 'The ticket `slotRequested` carried.' }, { description: 'What the booking office said.', ref: bookingOutcomeDocs }],
+			returns: { description: 'Whether the answer was applied (`false` for a stale one).' },
 			validateArgs: (args, { addDiagnostic, hasAnyDiagnostic }): args is [number, BookingOutcome] => {
 				if (args.length !== 2) {
 					addDiagnostic({ message: `settleBooking(ticket, outcome) takes exactly two arguments, got ${args.length}.`, reason: 'wrong-arity' })
@@ -301,7 +267,8 @@ export const InductionStepPlugin = createWidgetPlugin('InductionStep')
 			},
 		})
 		.cancelBooking({
-			description: undocumented,
+			description: 'Gives the request or the booking up and emits `slotCancelled`. Refused when nothing waits or is booked, and once the wizard is finished.',
+			returns: { description: 'The ticket of the newest request.' },
 			validateArgs: (args): args is [] => args.length === 0,
 			registerDeps: ({ dep }) => ({
 				status: dep.self.state.get('status'),
@@ -339,5 +306,10 @@ export const InductionStepPlugin = createWidgetPlugin('InductionStep')
 				return ticket.value ?? 0
 			},
 		}))
-	.events({ slotRequested: undocumented, slotConfirmed: undocumented, slotDeclined: undocumented, slotCancelled: undocumented })
+	.events({
+		slotRequested: { description: 'The visitor asked for an induction slot. Carries the request, with the ticket the host must hand back with its answer.', payload: [{ description: 'The slot asked for, with its ticket.', ref: slotRequestDocs }] },
+		slotConfirmed: { description: 'The booking office confirmed the slot of the newest request. Carries the request and the booking reference.', payload: [{ description: 'The confirmed request and its booking reference.', ref: slotConfirmationDocs }] },
+		slotDeclined: { description: 'The booking office declined the slot of the newest request. Carries the request and the reason.', payload: [{ description: 'The declined request and the reason.', ref: slotDeclinedDocs }] },
+		slotCancelled: { description: 'The visitor cancelled a request that was waiting, or a booking that was confirmed. Carries the request and whether it had been confirmed.', payload: [{ description: 'The cancelled request, and whether it had been confirmed.', ref: slotCancelledDocs }] },
+	})
 	.done()

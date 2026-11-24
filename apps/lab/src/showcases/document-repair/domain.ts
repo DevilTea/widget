@@ -18,7 +18,6 @@ import { isJsonValue } from '@deviltea/widget-core'
 // Text
 // -------------------------------------------------------------------------------------------------
 
-/** Text per language, `{ "en": "...", "zh-TW": "..." }`. `en` is required; a missing language falls back to it. */
 export interface I18nText { readonly [language: string]: string }
 
 /** The text in `language`, or the English text when that language is missing. */
@@ -129,14 +128,12 @@ export function formatPointer(path: readonly PathSegment[]): string {
 export interface FindingDiagnostic {
 	readonly code: string
 	readonly message: string
-	/** Where the diagnostic's node sits in the source (`blueprint.getSourcePath`), or the diagnostic's own path for a source-level one. */
 	readonly sourcePath: readonly PathSegment[] | null
 	readonly reason?: string
 }
 
 export interface FindingSlot {
 	readonly name: string
-	/** `raw-slot`: the source has a slot key the plugin does not declare. Its children are still recovered, and still invalid until moved. */
 	readonly placement: 'slot' | 'raw-slot'
 	readonly children: number
 }
@@ -144,7 +141,6 @@ export interface FindingSlot {
 export interface FindingNode {
 	readonly sourcePath: readonly PathSegment[]
 	readonly resolved: boolean
-	/** The authored `id`/`type` when they are strings (an unresolved node still carries these hints). */
 	readonly id: string | null
 	readonly type: string | null
 	readonly slots: readonly FindingSlot[]
@@ -164,9 +160,7 @@ export interface Findings {
 export interface RepairStep {
 	readonly id: string
 	readonly title: I18nText
-	/** Why the application repairs it this way. */
 	readonly why: I18nText
-	/** The patch to send. Its first operations are `test` guards for the precondition the step was planned against. */
 	readonly patch: SourcePatch
 }
 

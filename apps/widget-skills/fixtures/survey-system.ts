@@ -1,133 +1,128 @@
 /**
- * The 0.3 fixture System of the generator. It is small and fully documented, and it exercises every feature the
- * generator reads:
+ * The fixture System of the generator. It is small and fully documented in the builder (Core 0.4: the prose lives
+ * on `plugin.docs`), and it exercises every feature the generator reads:
  *
- * - config `raw` with JSDoc constraint tags, a named dictionary type, an omittable config (`Note`) and a
- *   `@widgetRef`;
+ * - config `raw` with field docs whose prose states the constraints, a named dictionary type and a named object type
+ *   documented once with `defineTypeDocs`, an omittable config (`Note`) and a `WidgetRef`;
  * - record slots in all three forms: a plain union of plugin types (`Survey.footer`), a
  *   `WidgetContract<Shape, Types>` (`Survey.questions`) and `WidgetChild` (`Survey.header`);
- * - `reasons` with a `void` reason and reasons with payloads;
- * - State (with `authorWritable`), Properties, Methods with parameters and Events with labelled payloads.
+ * - `reasons` with a `void` reason and reasons with payloads (`details` docs);
+ * - State (with `authorWritable`), Properties, Methods with parameters and Events with labelled payloads;
+ * - descriptions with a second paragraph (the remarks).
  */
 
-import type { WidgetChild, WidgetContract } from '@deviltea/widget-core'
-import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
+import type { WidgetChild, WidgetContract, WidgetRef } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, defineTypeDocs } from '@deviltea/widget-core'
 
-/**
- * Text per language, keyed by language tag (`en`, `zh-TW`).
- * @remarks At least one language should be present; the renderer falls back to the first one.
- */
 export type I18nText = Record<string, string>
 
-/** One option of a choice question. */
+export const i18nTextDocs = defineTypeDocs<I18nText>('I18nText', {
+	description: 'Text per language, keyed by language tag (`en`, `zh-TW`).\n\nAt least one language should be present; the renderer falls back to the first one.',
+})
+
 export interface ChoiceOption {
-	/**
-	 * The option's identifier, unique within the question.
-	 * @pattern ^[a-z][a-z0-9-]*$
-	 */
 	id: string
-	/** The label shown for the option. */
 	label: I18nText
 }
 
-/** What `Survey.submit()` reports when the survey is sent. */
+export const choiceOptionDocs = defineTypeDocs<ChoiceOption>('ChoiceOption', {
+	description: 'One option of a choice question.',
+	fields: {
+		id: { description: 'The option\'s identifier, unique within the question: a lowercase letter, then lowercase letters, digits or hyphens (`^[a-z][a-z0-9-]*$`).' },
+		label: { description: 'The label shown for the option.', ref: i18nTextDocs },
+	},
+})
+
 export interface SubmitSummary {
-	/** How many questions were answered. */
 	answered: number
-	/** How many questions the survey has. */
 	total: number
 }
+
+export const submitSummaryDocs = defineTypeDocs<SubmitSummary>('SubmitSummary', {
+	description: 'What `Survey.submit()` reports when the survey is sent.',
+	fields: {
+		answered: { description: 'How many questions were answered.' },
+		total: { description: 'How many questions the survey has.' },
+	},
+})
 
 const isObject = (input: unknown): input is Record<string, unknown> => typeof input === 'object' && input !== null && !Array.isArray(input)
 function isI18nText(input: unknown): input is I18nText {
 	return isObject(input) && Object.values(input)
 		.every(value => typeof value === 'string')
 }
+const isNumberFrom = (input: unknown, min: number, max: number): boolean => typeof input === 'number' && input >= min && input <= max
+function isUri(input: unknown): boolean {
+	if (typeof input !== 'string')
+		return false
+	try {
+		void new URL(input)
+		return true
+	}
+	catch {
+		return false
+	}
+}
+const OPTION_ID = /^[a-z][a-z0-9-]*$/
 
 // -------------------------------------------------------------------------------------------------
 // Survey (root)
 // -------------------------------------------------------------------------------------------------
 
-/** The raw config of a survey. */
 export interface SurveyRawConfig {
-	/** The survey's title. */
 	title: I18nText
-	/**
-	 * The most questions the survey may hold.
-	 * @minimum 1
-	 * @maximum 20
-	 * @default 10
-	 */
 	maxQuestions?: number
-	/**
-	 * Where the answers are sent.
-	 * @format uri
-	 */
 	submitUrl?: string
 }
 
-/**
- * A survey: a header, the questions in order, and a footer note.
- * @remarks The root of a survey document. It counts the answered questions through the `questions` contract.
- */
 export interface SurveyInterfaces {
-	/** How the survey is titled and where it is sent. */
 	config: {
 		raw: SurveyRawConfig
 		resolved: { title: I18nText, maxQuestions: number, submitUrl: string | null }
 	}
 	slots: {
-		/** Anything shown above the questions. */
 		header: WidgetChild
-		/**
-		 * The questions, in order.
-		 * @remarks Every question exposes whether it was answered.
-		 */
 		questions: WidgetContract<{ properties: { answered: boolean } }, 'Rating' | 'Choice'>
-		/** Closing notes shown under the questions. */
 		footer: 'Note'
 	}
 	state: {
-		/** Whether the survey was sent. */
 		submitted: boolean
 	}
 	properties: {
-		/**
-		 * The share of answered questions, from 0 to 1.
-		 * @minimum 0
-		 * @maximum 1
-		 */
 		progress: number
 	}
 	methods: {
-		/**
-		 * Sends the survey.
-		 * @returns Whether the survey was sent by this call.
-		 */
 		submit: () => boolean
 	}
 	events: {
-		/** The survey was sent. */
 		submitted: [summary: SubmitSummary]
 	}
 	reasons: {
-		/** The title has no language. */
 		'empty-title': void
-		/** The `questions` slot holds more questions than `maxQuestions` allows. */
-		'too-many-questions': {
-			/** The configured maximum. */
-			max: number
-			/** How many questions the slot holds. */
-			count: number
-		}
+		'too-many-questions': { max: number, count: number }
 	}
 }
 
 export const SurveyPlugin = createWidgetPlugin('Survey')
-	.description(undocumented)
+	.description('A survey: a header, the questions in order, and a footer note.\n\nThe root of a survey document. It counts the answered questions through the `questions` contract.')
 	.interfaces<SurveyInterfaces>()
 	.config({
-		description: undocumented,
+		description: 'How the survey is titled and where it is sent.',
+		raw: {
+			description: 'The raw config of a survey.',
+			fields: {
+				title: { description: 'The survey\'s title.', ref: i18nTextDocs },
+				maxQuestions: { description: 'The most questions the survey may hold: from 1 to 20; 10 when left out.' },
+				submitUrl: { description: 'Where the answers are sent: a URI.' },
+			},
+		},
+		resolved: {
+			fields: {
+				title: { description: 'The survey\'s title.', ref: i18nTextDocs },
+				maxQuestions: { description: 'The most questions the survey may hold.' },
+				submitUrl: { description: 'Where the answers are sent, or `null` when they are not sent anywhere.' },
+			},
+		},
 		validate: (input, ctx): input is SurveyRawConfig => {
 			if (!isObject(input) || !isI18nText(input.title)) {
 				ctx.addDiagnostic({ message: 'The survey needs a title per language.', path: ['title'] })
@@ -137,25 +132,30 @@ export const SurveyPlugin = createWidgetPlugin('Survey')
 				ctx.addDiagnostic({ message: 'The title has no language.', path: ['title'], reason: 'empty-title' })
 				return false
 			}
-			return true
+			// What the field docs state, enforced here: the schema has the shape only.
+			if (input.maxQuestions !== undefined && !isNumberFrom(input.maxQuestions, 1, 20))
+				ctx.addDiagnostic({ message: 'maxQuestions must be a number from 1 to 20.', path: ['maxQuestions'] })
+			if (input.submitUrl !== undefined && !isUri(input.submitUrl))
+				ctx.addDiagnostic({ message: 'submitUrl must be a URI.', path: ['submitUrl'] })
+			return !ctx.hasAnyDiagnostic()
 		},
 		resolve: raw => ({ title: raw?.title ?? {}, maxQuestions: raw?.maxQuestions ?? 10, submitUrl: raw?.submitUrl ?? null }),
 	})
 	.slots({
-		header: { description: undocumented },
+		header: { description: 'Anything shown above the questions.' },
 		questions: {
-			description: undocumented,
+			description: 'The questions, in order.\n\nEvery question exposes whether it was answered.',
 			validateStructure: ({ children, config, addDiagnostic }) => {
 				const max = config?.maxQuestions ?? 10
 				if (children.length > max)
 					addDiagnostic({ message: `At most ${max} questions.`, index: max, reason: 'too-many-questions', details: { max, count: children.length } })
 			},
 		},
-		footer: { description: undocumented },
+		footer: { description: 'Closing notes shown under the questions.' },
 	})
-	.state(state => state.submitted({ description: undocumented, validate: (input): input is boolean => typeof input === 'boolean', default: () => false }))
+	.state(state => state.submitted({ description: 'Whether the survey was sent.', validate: (input): input is boolean => typeof input === 'boolean', default: () => false }))
 	.properties(properties => properties.progress({
-		description: undocumented,
+		description: 'The share of answered questions, from 0 to 1.',
 		registerDeps: ({ slot }) => slot('questions')
 			.map(question => question.properties.get('answered')),
 		compute: ({ deps }) => deps.length === 0
@@ -166,7 +166,8 @@ export const SurveyPlugin = createWidgetPlugin('Survey')
 			}).length / deps.length,
 	}))
 	.methods(methods => methods.submit({
-		description: undocumented,
+		description: 'Sends the survey.',
+		returns: { description: 'Whether the survey was sent by this call.' },
 		validateArgs: (args): args is [] => args.length === 0,
 		registerDeps: ({ slot, dep }) => ({
 			answered: slot('questions')
@@ -188,75 +189,74 @@ export const SurveyPlugin = createWidgetPlugin('Survey')
 			return true
 		},
 	}))
-	.events({ submitted: undocumented })
-	.reasons({ 'empty-title': undocumented, 'too-many-questions': undocumented })
+	.events({ submitted: { description: 'The survey was sent.', payload: [{ description: 'How many questions were answered, of how many.', ref: submitSummaryDocs }] } })
+	.reasons({
+		'empty-title': { description: 'The title has no language.' },
+		'too-many-questions': {
+			description: 'The `questions` slot holds more questions than `maxQuestions` allows.',
+			details: {
+				fields: {
+					max: { description: 'The configured maximum.' },
+					count: { description: 'How many questions the slot holds.' },
+				},
+			},
+		},
+	})
 	.done()
 
 // -------------------------------------------------------------------------------------------------
 // Rating
 // -------------------------------------------------------------------------------------------------
 
-/** A rating question: pick a number on a scale. */
 export interface RatingInterfaces {
-	/** The question and its scale. */
 	config: {
 		raw: {
-			/** The question asked. */
 			question: I18nText
-			/**
-			 * The highest value of the scale; the lowest is 1.
-			 * @minimum 3
-			 * @maximum 10
-			 * @default 5
-			 */
 			scale?: number
 		}
 		resolved: { question: I18nText, scale: number }
 	}
 	state: {
-		/**
-		 * The chosen value, or `null` while unanswered.
-		 * @remarks An editor may preset it.
-		 */
 		value: number | null
 	}
 	properties: {
-		/** Whether a value was chosen. */
 		answered: boolean
 	}
 	methods: {
-		/**
-		 * Chooses a value.
-		 * @param value - The value, from 1 to the scale.
-		 * @returns The chosen value.
-		 */
 		rate: (value: number) => number
 	}
 	events: {
-		/** A value was chosen. */
 		rated: [value: number]
 	}
 	reasons: {
-		/** The value is outside the scale. */
-		'out-of-range': {
-			/** The lowest allowed value. */
-			min: number
-			/** The highest allowed value. */
-			max: number
-			/** The value given. */
-			received: number
-		}
+		'out-of-range': { min: number, max: number, received: number }
 	}
 }
 
 export const RatingPlugin = createWidgetPlugin('Rating')
-	.description(undocumented)
+	.description('A rating question: pick a number on a scale.')
 	.interfaces<RatingInterfaces>()
 	.config({
-		description: undocumented,
+		description: 'The question and its scale.',
+		raw: {
+			fields: {
+				question: { description: 'The question asked.', ref: i18nTextDocs },
+				scale: { description: 'The highest value of the scale, from 3 to 10; the lowest is 1. 5 when left out.' },
+			},
+		},
+		resolved: {
+			fields: {
+				question: { description: 'The question asked.', ref: i18nTextDocs },
+				scale: { description: 'The highest value of the scale; the lowest is 1.' },
+			},
+		},
 		validate: (input, ctx): input is RatingInterfaces['config']['raw'] => {
 			if (!isObject(input) || !isI18nText(input.question)) {
 				ctx.addDiagnostic({ message: 'A rating needs a question per language.', path: ['question'] })
+				return false
+			}
+			if (input.scale !== undefined && !isNumberFrom(input.scale, 3, 10)) {
+				ctx.addDiagnostic({ message: 'scale must be a number from 3 to 10.', path: ['scale'] })
 				return false
 			}
 			return true
@@ -264,13 +264,13 @@ export const RatingPlugin = createWidgetPlugin('Rating')
 		resolve: raw => ({ question: raw?.question ?? {}, scale: raw?.scale ?? 5 }),
 	})
 	.state(state => state.value({
-		description: undocumented,
+		description: 'The chosen value, or `null` while unanswered.\n\nAn editor may preset it.',
 		validate: (input): input is number | null => input === null || typeof input === 'number',
 		default: () => null,
 		authorWritable: true,
 	}))
 	.properties(properties => properties.answered({
-		description: undocumented,
+		description: 'Whether a value was chosen.',
 		registerDeps: ({ dep }) => ({ value: dep.self.state.get('value') }),
 		compute: ({ deps }) => {
 			const value = deps.value()
@@ -278,7 +278,9 @@ export const RatingPlugin = createWidgetPlugin('Rating')
 		},
 	}))
 	.methods(methods => methods.rate({
-		description: undocumented,
+		description: 'Chooses a value.',
+		params: [{ description: 'The value, from 1 to the scale.' }],
+		returns: { description: 'The chosen value.' },
 		validateArgs: (args, ctx): args is [number] => {
 			if (args.length !== 1 || typeof args[0] !== 'number') {
 				ctx.addDiagnostic({ message: 'rate() takes one number.' })
@@ -298,86 +300,102 @@ export const RatingPlugin = createWidgetPlugin('Rating')
 			return value
 		},
 	}))
-	.events({ rated: undocumented })
-	.reasons({ 'out-of-range': undocumented })
+	.events({ rated: { description: 'A value was chosen.', payload: [{ description: 'The chosen value.' }] } })
+	.reasons({
+		'out-of-range': {
+			description: 'The value is outside the scale.',
+			details: {
+				fields: {
+					min: { description: 'The lowest allowed value.' },
+					max: { description: 'The highest allowed value.' },
+					received: { description: 'The value given.' },
+				},
+			},
+		},
+	})
 	.done()
 
 // -------------------------------------------------------------------------------------------------
 // Choice
 // -------------------------------------------------------------------------------------------------
 
-/** A choice question: pick one or more options. */
 export interface ChoiceInterfaces {
-	/** The question and its options. */
 	config: {
 		raw: {
-			/** The question asked. */
 			question: I18nText
-			/**
-			 * The options, in the order shown.
-			 * @minItems 2
-			 */
 			options: ChoiceOption[]
-			/** Whether more than one option may be chosen. */
 			multiple?: boolean
-			/**
-			 * A question shown once this one is answered.
-			 * @widgetRef Rating | Choice
-			 */
-			followUp?: string
+			followUp?: WidgetRef<'Rating' | 'Choice'>
 		}
 		resolved: { question: I18nText, options: readonly ChoiceOption[], multiple: boolean, followUp: string | null }
 	}
 	state: {
-		/** The ids of the chosen options. */
 		selected: readonly string[]
 	}
 	properties: {
-		/** Whether at least one option was chosen. */
 		answered: boolean
 	}
 	methods: {
-		/**
-		 * Chooses an option, replacing the choice unless the question takes several.
-		 * @param id - The id of the option.
-		 * @returns The ids now chosen.
-		 */
 		select: (id: string) => readonly string[]
 	}
 	events: {
-		/** The choice changed. */
 		changed: [selected: readonly string[]]
 	}
 	reasons: {
-		/** The id names no option of the question. */
-		'unknown-option': {
-			/** The id given. */
-			id: string
-		}
+		'unknown-option': { id: string }
 	}
 }
 
 export const ChoicePlugin = createWidgetPlugin('Choice')
-	.description(undocumented)
+	.description('A choice question: pick one or more options.')
 	.interfaces<ChoiceInterfaces>()
 	.config({
-		description: undocumented,
+		description: 'The question and its options.',
+		raw: {
+			fields: {
+				question: { description: 'The question asked.', ref: i18nTextDocs },
+				options: { description: 'The options, in the order shown: at least two.', items: { ref: choiceOptionDocs } },
+				multiple: { description: 'Whether more than one option may be chosen.' },
+				followUp: { description: 'A question shown once this one is answered.' },
+			},
+		},
+		resolved: {
+			fields: {
+				question: { description: 'The question asked.', ref: i18nTextDocs },
+				options: { description: 'The options, in the order shown.', items: { ref: choiceOptionDocs } },
+				multiple: { description: 'Whether more than one option may be chosen.' },
+				followUp: { description: 'The id of the question shown once this one is answered, or `null` for none.' },
+			},
+		},
 		validate: (input, ctx): input is ChoiceInterfaces['config']['raw'] => {
 			if (!isObject(input) || !isI18nText(input.question) || !Array.isArray(input.options)) {
 				ctx.addDiagnostic({ message: 'A choice needs a question and a list of options.' })
 				return false
 			}
-			return true
+			if (input.options.length < 2)
+				ctx.addDiagnostic({ message: 'A choice needs at least two options.', path: ['options'] })
+			const ids = new Set<unknown>()
+			input.options.forEach((option: unknown, index: number) => {
+				const id = isObject(option) ? option.id : undefined
+				if (typeof id !== 'string' || !OPTION_ID.test(id))
+					ctx.addDiagnostic({ message: 'An option id is a lowercase letter, then lowercase letters, digits or hyphens.', path: ['options', index, 'id'] })
+				else if (ids.has(id))
+					ctx.addDiagnostic({ message: `The option id "${id}" is used twice.`, path: ['options', index, 'id'] })
+				ids.add(id)
+				if (!isObject(option) || !isI18nText(option.label))
+					ctx.addDiagnostic({ message: 'An option needs a label per language.', path: ['options', index, 'label'] })
+			})
+			return !ctx.hasAnyDiagnostic()
 		},
 		resolve: raw => ({ question: raw?.question ?? {}, options: raw?.options ?? [], multiple: raw?.multiple ?? false, followUp: raw?.followUp ?? null }),
 	})
 	.state(state => state.selected({
-		description: undocumented,
+		description: 'The ids of the chosen options.',
 		validate: (input): input is readonly string[] => Array.isArray(input) && input.every(item => typeof item === 'string'),
 		default: () => [],
 	}))
 	.properties(properties => properties.answered({
-		description: undocumented,
+		description: 'Whether at least one option was chosen.',
 		registerDeps: ({ dep }) => ({ selected: dep.self.state.get('selected') }),
 		compute: ({ deps }) => {
 			const selected = deps.selected()
@@ -385,7 +403,9 @@ export const ChoicePlugin = createWidgetPlugin('Choice')
 		},
 	}))
 	.methods(methods => methods.select({
-		description: undocumented,
+		description: 'Chooses an option, replacing the choice unless the question takes several.',
+		params: [{ description: 'The id of the option.' }],
+		returns: { description: 'The ids now chosen.' },
 		validateArgs: (args): args is [string] => args.length === 1 && typeof args[0] === 'string',
 		registerDeps: ({ dep }) => ({ selected: dep.self.state.get('selected'), setSelected: dep.self.state.set('selected') }),
 		emits: ['changed'],
@@ -402,23 +422,17 @@ export const ChoicePlugin = createWidgetPlugin('Choice')
 			return next
 		},
 	}))
-	.events({ changed: undocumented })
-	.reasons({ 'unknown-option': undocumented })
+	.events({ changed: { description: 'The choice changed.', payload: [{ description: 'The ids now chosen.' }] } })
+	.reasons({ 'unknown-option': { description: 'The id names no option of the question.', details: { fields: { id: { description: 'The id given.' } } } } })
 	.done()
 
 // -------------------------------------------------------------------------------------------------
 // Note
 // -------------------------------------------------------------------------------------------------
 
-/** A short text. */
 export interface NoteInterfaces {
-	/**
-	 * The text of the note.
-	 * @remarks Leave the config out for an empty note.
-	 */
 	config: {
 		raw: {
-			/** The text shown. */
 			text: I18nText
 		} | null
 		resolved: { text: I18nText }
@@ -426,10 +440,12 @@ export interface NoteInterfaces {
 }
 
 export const NotePlugin = createWidgetPlugin('Note')
-	.description(undocumented)
+	.description('A short text.')
 	.interfaces<NoteInterfaces>()
 	.config({
-		description: undocumented,
+		description: 'The text of the note.\n\nLeave the config out for an empty note.',
+		raw: { fields: { text: { description: 'The text shown.', ref: i18nTextDocs } } },
+		resolved: { fields: { text: { description: 'The text shown; empty when the config was left out.', ref: i18nTextDocs } } },
 		validate: (input): input is NoteInterfaces['config']['raw'] => input === null || (isObject(input) && isI18nText(input.text)),
 		resolve: raw => ({ text: raw?.text ?? {} }),
 	})

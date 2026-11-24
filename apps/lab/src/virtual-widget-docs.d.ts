@@ -5,7 +5,7 @@
 // from its configs.
 
 declare module 'virtual:widget-docs/*' {
-	/** The slim documentation of the System this module is named after, generated from its types and JSDoc. */
+	/** The slim documentation of the System this module is named after, generated from its types and its plugins' docs. */
 	const docs: import('../../widget-skills/src/docs-types').WidgetDocsSlim
 	export default docs
 }

@@ -21,8 +21,8 @@ export default defineConfig({
 		// Self-hosts `modern-monaco`'s editor engine (issue #30 Scope A) — see the plugin's own
 		// file-level comment for the full mechanism.
 		vendorModernMonacoEditorCore(),
-		// `virtual:widget-docs/<showcase id>`: each showcase's plugin documentation, generated from its Interfaces JSDoc
-		// (Core 0.3 carries no descriptions at run time). See `widget-docs.ts`.
+		// `virtual:widget-docs/<showcase id>`: each showcase's plugin documentation, generated from its types and builder docs
+		// (`plugin.docs`, Core 0.4). See `widget-docs.ts`.
 		labWidgetDocs(),
 	],
 	// The persistent ELK layout Worker (`src/graph/layout.worker.ts`, issue #13 Phase 5 "Dependency
