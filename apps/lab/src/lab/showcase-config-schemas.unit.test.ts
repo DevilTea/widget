@@ -1,8 +1,9 @@
 /**
  * The config JSON Schemas the Lab hands to the Structure editor and the Catalog are generated from each plugin's `Interfaces`
- * (`widgetDocs()`, `ShowcaseEntry.configSchemas`). These tests hold the generated schemas to the showcases' own code: the
- * properties are exactly the keys the config checkers accept, the constraints the checkers enforce and the JSDoc tags carry
- * are there as keywords, and every config of each showcase's default preset conforms. They live with the Lab's code because
+ * (`widgetDocs()`, `ShowcaseEntry.configSchemas`), with every description taken from the plugins' builder docs. These tests hold the
+ * generated schemas to the showcases' own code: the properties are exactly the keys the config checkers accept, a constraint
+ * the checkers enforce is prose in the description (the schema states the shape only), and every config of each showcase's default
+ * preset conforms. They live with the Lab's code because
  * a showcase test may not import the Lab (the registry, the virtual docs modules).
  */
 
@@ -184,8 +185,8 @@ describe('the generated config schemas require what the checkers require, close 
 			expect(objectsOf(schema).length, `${id} ${type}`)
 				.toBeGreaterThan(0)
 			for (const [path, object] of objectsOf(schema)) {
-				// The text per language declares its required `en` and takes any other language as a string.
-				const expected = path.endsWith('/type_I18nText') ? { type: 'string' } : false
+				// The text per language declares its required `en` and takes any other language as a string (described by its `values` docs).
+				const expected = path.endsWith('/type_I18nText') ? { type: 'string', description: expect.any(String) } : false
 				expect(object.additionalProperties, `${id} ${type} ${path}`)
 					.toEqual(expected)
 			}
@@ -204,75 +205,88 @@ describe('the generated config schemas require what the checkers require, close 
 	})
 })
 
-describe('the generated config schemas carry the constraints of the JSDoc tags', () => {
-	it('survey: the languages, the texts per language, whole numbers, non-empty condition lists', () => {
+describe('the generated config schemas state the shape only: a constraint is prose in the description', () => {
+	// Discussion #12, "Descriptions live in the plugin builder" (0.4): the schema has the shape only; a constraint is stated
+	// in the description and enforced by the plugin's `validate`.
+	const CONSTRAINT_KEYWORDS = ['minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum', 'multipleOf', 'minLength', 'maxLength', 'minItems', 'maxItems', 'uniqueItems', 'minProperties', 'maxProperties', 'propertyNames', 'pattern', 'format', 'default', 'examples']
+
+	it.each(GENERATED)('%s: no constraint keyword, and no `integer` type', (id) => {
+		const keywords = new Set<string>()
+		const types = new Set<unknown>()
+		const visit = (node: unknown): void => {
+			if (typeof node !== 'object' || node === null)
+				return
+			for (const [key, value] of Object.entries(node)) {
+				keywords.add(key)
+				if (key === 'type')
+					types.add(value)
+				// The keys of `properties` and `$defs` are names, not keywords.
+				if ((key === 'properties' || key === '$defs') && typeof value === 'object' && value !== null) {
+					Object.values(value)
+						.forEach(visit)
+				}
+				else {
+					visit(value)
+				}
+			}
+		}
+		Object.values(getShowcase(id)!.configSchemas)
+			.forEach(visit)
+		expect(CONSTRAINT_KEYWORDS.filter(keyword => keywords.has(keyword)))
+			.toEqual([])
+		expect(types.has('integer'))
+			.toBe(false)
+	})
+
+	it('survey: the languages, the texts per language, whole numbers and non-empty condition lists are prose', () => {
 		const surveySchema = schemaOf('survey', 'Survey')
 		const properties = propertiesOf(surveySchema)
 		expect(properties.languages)
-			.toMatchObject({ type: 'array', minItems: 1, uniqueItems: true })
+			.toMatchObject({ type: 'array', description: expect.stringContaining('each once (at least one)') })
 		expect(resolved(surveySchema, properties.languages!.items))
 			.toMatchObject({ enum: [...SUPPORTED_LANGUAGES] })
-		expect(resolved(surveySchema, properties.title))
-			.toMatchObject({ type: 'object', minProperties: 1, additionalProperties: { type: 'string', minLength: 1 } })
+		expect(resolved(surveySchema, { $ref: '#/$defs/type_I18nText' }))
+			.toMatchObject({ type: 'object', additionalProperties: { type: 'string' }, description: expect.stringContaining('at least one entry, each text at least one character') })
 		const multiple = propertiesOf(schemaOf('survey', 'MultipleChoice'))
 		expect([multiple.minSelected, multiple.maxSelected])
-			.toMatchObject([{ type: 'integer', minimum: 0 }, { type: 'integer', minimum: 1 }])
-		expect(propertiesOf(schemaOf('survey', 'ShortAnswer')).maxLength)
-			.toMatchObject({ type: 'integer', minimum: 1 })
+			.toMatchObject([{ type: 'number', description: expect.stringContaining('a whole number of at least 0') }, { type: 'number', description: expect.stringContaining('a whole number of at least 1') }])
 		const numeric = schemaOf('survey', 'Numeric')
 		const condition = resolved(numeric, { $ref: '#/$defs/type_Condition' }).anyOf as Json[]
 		expect(propertiesOf(numeric, condition[4]).all)
-			.toMatchObject({ type: 'array', minItems: 1 })
-		expect(propertiesOf(numeric, condition[0]).question)
-			.toMatchObject({ type: 'string', minLength: 1 })
+			.toMatchObject({ type: 'array', description: expect.stringContaining('At least one.') })
 	})
 
-	it('trip-budget: currency codes and person ids by pattern, rates above 0, percentages from 0 to 100, unique sharers, the rounding steps', () => {
+	it('trip-budget and onboarding: patterns, ranges and unique lists are prose', () => {
 		const currency = propertiesOf(schemaOf('trip-budget', 'Currency'))
-		expect(currency.base)
-			.toMatchObject({ type: 'string', pattern: CURRENCY_CODE_PATTERN.source })
-		expect(currency.rates)
-			.toMatchObject({ type: 'object', propertyNames: { pattern: CURRENCY_CODE_PATTERN.source }, additionalProperties: { type: 'number', exclusiveMinimum: 0 } })
+		expect(currency.base!.description)
+			.toContain(CURRENCY_CODE_PATTERN.source)
 		expect(resolved(schemaOf('trip-budget', 'Currency'), currency.roundTransfersTo))
 			.toMatchObject({ enum: [...ROUND_STEPS] })
 		const expense = schemaOf('trip-budget', 'Expense')
-		const properties = propertiesOf(expense)
-		expect([properties.currency, properties.paidBy])
-			.toMatchObject([{ pattern: CURRENCY_CODE_PATTERN.source }, { pattern: PERSON_ID_PATTERN.source }])
-		const [equal, percent] = (properties.split!.anyOf as Json[]).map(branch => propertiesOf(expense, branch))
-		expect(equal!.among)
-			.toMatchObject({ type: 'array', minItems: 1, uniqueItems: true, items: { type: 'string', pattern: PERSON_ID_PATTERN.source } })
-		expect(percent!.percents)
-			.toMatchObject({ propertyNames: { pattern: PERSON_ID_PATTERN.source }, additionalProperties: { type: 'number', minimum: 0, maximum: 100 } })
-		expect(resolved(expense, properties.title))
-			.toMatchObject({ type: 'object', required: ['en'], additionalProperties: { type: 'string' } })
-	})
-
-	it('onboarding: ids, days and times by pattern, unique picks, non-empty lists, whole numbers', () => {
+		const [equal, percent] = (propertiesOf(expense).split!.anyOf as Json[]).map(branch => propertiesOf(expense, branch))
+		expect(equal!.among!.description)
+			.toContain(`At least one, each once, each a person id (\`${PERSON_ID_PATTERN.source}\`)`)
+		expect(percent!.percents!.description)
+			.toContain('each percentage is from 0 to 100')
 		const induction = propertiesOf(schemaOf('onboarding', 'InductionStep'))
-		expect(induction.days)
-			.toMatchObject({ type: 'array', minItems: 1, uniqueItems: true, items: { type: 'string', pattern: ISO_DATE_PATTERN.source } })
-		expect(induction.times)
-			.toMatchObject({ type: 'array', minItems: 1, uniqueItems: true, items: { type: 'string', pattern: TIME_PATTERN.source } })
+		expect([induction.days!.description, induction.times!.description])
+			.toEqual([expect.stringContaining(ISO_DATE_PATTERN.source), expect.stringContaining(TIME_PATTERN.source)])
 		const interests = schemaOf('onboarding', 'InterestsStep')
-		const properties = propertiesOf(interests)
-		expect(properties.options)
-			.toMatchObject({ type: 'array', minItems: 1 })
-		expect(propertiesOf(interests, properties.options!.items).id)
-			.toMatchObject({ type: 'string', pattern: OPTION_ID_PATTERN.source })
-		expect(properties.preselected)
-			.toMatchObject({ uniqueItems: true, items: { pattern: OPTION_ID_PATTERN.source } })
-		expect(properties.minimum)
-			.toMatchObject({ type: 'integer', minimum: 0 })
-		expect(propertiesOf(schemaOf('onboarding', 'Onboarding')).startStep)
-			.toMatchObject({ type: 'integer', minimum: 0 })
+		expect(propertiesOf(interests, propertiesOf(interests).options!.items).id!.description)
+			.toContain(OPTION_ID_PATTERN.source)
 	})
 
-	it('renderer-packs: whole-number limits', () => {
-		expect(propertiesOf(schemaOf('renderer-packs', 'Notifier')).limit)
-			.toMatchObject({ type: 'integer', minimum: 1, maximum: 10 })
-		expect(propertiesOf(schemaOf('renderer-packs', 'TextField')).maxLength)
-			.toMatchObject({ type: 'integer', minimum: 1 })
+	it('marks a widget reference with the types it names (`x-widgetRef`) beside the sentence', () => {
+		const expense = propertiesOf(schemaOf('trip-budget', 'Expense'))
+		expect(expense.paidBy)
+			.toMatchObject({ 'type': 'string', 'x-widgetRef': ['Person'], 'description': expect.stringContaining('Must be the id of a widget of type Person in the same document.') })
+		expect(propertiesOf(schemaOf('renderer-packs', 'TextField')).appearance)
+			.toMatchObject({ 'x-widgetRef': ['Appearance'] })
+		const numeric = schemaOf('survey', 'Numeric')
+		const condition = resolved(numeric, { $ref: '#/$defs/type_Condition' }).anyOf as Json[]
+		expect(condition.slice(0, 4)
+			.map(leaf => propertiesOf(numeric, leaf).question!['x-widgetRef']))
+			.toEqual([['SingleChoice', 'MultipleChoice', 'Numeric', 'ShortAnswer'], ['SingleChoice', 'MultipleChoice', 'Numeric', 'ShortAnswer'], ['Numeric'], ['MultipleChoice']])
 	})
 })
 
@@ -281,7 +295,7 @@ describe('the generated config schemas carry the constraints of the JSDoc tags',
 // test-only (the Lab has no JSON Schema validator) and returns the failing keyword with its instance path.
 // -------------------------------------------------------------------------------------------------
 
-const KEYWORDS = new Set(['$schema', '$defs', '$ref', 'title', 'description', 'default', 'examples', 'format', 'type', 'required', 'properties', 'items', 'additionalProperties', 'propertyNames', 'enum', 'const', 'anyOf', 'pattern', 'minItems', 'maxItems', 'uniqueItems', 'minProperties', 'maxProperties', 'minLength', 'maxLength', 'minimum', 'maximum', 'exclusiveMinimum'])
+const KEYWORDS = new Set(['x-widgetRef', '$schema', '$defs', '$ref', 'title', 'description', 'default', 'examples', 'format', 'type', 'required', 'properties', 'items', 'additionalProperties', 'propertyNames', 'enum', 'const', 'anyOf', 'pattern', 'minItems', 'maxItems', 'uniqueItems', 'minProperties', 'maxProperties', 'minLength', 'maxLength', 'minimum', 'maximum', 'exclusiveMinimum'])
 
 function jsonTypeOf(value: unknown): string {
 	if (value === null)
@@ -386,22 +400,35 @@ describe('the survey schemas reject what the config checkers reject', () => {
 	const cases: readonly (readonly [string, Json, unknown, string])[] = [
 		['an unknown key', numeric, { ...base, visibleIf: { question: 'a', op: 'answered' } }, '/visibleIf additionalProperties'],
 		['a missing label', numeric, {}, '/label required'],
-		['an empty text per language', numeric, { label: {} }, '/label minProperties'],
-		['an empty translation', numeric, { label: { en: '' } }, '/label/en minLength'],
 		['a wrong type', numeric, { ...base, min: '1' }, '/min type'],
-		['a maxLength that is not a whole number', schemaOf('survey', 'ShortAnswer'), { ...base, maxLength: 1.5 }, '/maxLength type'],
-		['a maxLength below the minimum', schemaOf('survey', 'ShortAnswer'), { ...base, maxLength: 0 }, '/maxLength minimum'],
 		['an operator no branch has', numeric, { ...base, visibleWhen: { question: 'a', op: 'near', value: 1 } }, '/visibleWhen anyOf'],
 		['a leaf with the wrong value type', numeric, { ...base, visibleWhen: { question: 'a', op: 'greaterThan', value: '1' } }, '/visibleWhen anyOf'],
-		['a nested empty all', numeric, { ...base, visibleWhen: { not: { all: [] } } }, '/visibleWhen anyOf'],
 		['required that is neither boolean nor condition', numeric, { ...base, required: 'yes' }, '/required anyOf'],
-		['a repeated language', schemaOf('survey', 'Survey'), { title: { en: 'T' }, languages: ['en', 'en'] }, '/languages uniqueItems'],
 		['an unsupported language', schemaOf('survey', 'Survey'), { title: { en: 'T' }, languages: ['fr'] }, '/languages/0 enum'],
-		['no languages', schemaOf('survey', 'Survey'), { title: { en: 'T' }, languages: [] }, '/languages minItems'],
 	]
 	it.each(cases)('%s', (_name, schema, config, expected) => {
 		expect(conforms(schema, config))
 			.toContain(expected)
+	})
+
+	// A constraint is prose in the description (0.4: the schema states the shape only): the schema accepts these, and the
+	// config checker, which `validate` runs, rejects them.
+	const constraintCases: readonly (readonly [string, Json, survey.ConfigChecker, unknown])[] = [
+		['an empty text per language', numeric, survey.checkNumericConfig, { label: {} }],
+		['an empty translation', numeric, survey.checkNumericConfig, { label: { en: '' } }],
+		['a maxLength that is not a whole number', schemaOf('survey', 'ShortAnswer'), survey.checkShortAnswerConfig, { ...base, maxLength: 1.5 }],
+		['a maxLength below the minimum', schemaOf('survey', 'ShortAnswer'), survey.checkShortAnswerConfig, { ...base, maxLength: 0 }],
+		['a nested empty all', numeric, survey.checkNumericConfig, { ...base, visibleWhen: { not: { all: [] } } }],
+		['a repeated language', schemaOf('survey', 'Survey'), survey.checkSurveyConfig, { title: { en: 'T' }, languages: ['en', 'en'] }],
+		['no languages', schemaOf('survey', 'Survey'), survey.checkSurveyConfig, { title: { en: 'T' }, languages: [] }],
+	]
+	it.each(constraintCases)('%s: the schema accepts it, the checker rejects it', (_name, schema, checker, config) => {
+		expect(conforms(schema, config))
+			.toEqual([])
+		const reported: unknown[] = []
+		checker(config, diagnostic => reported.push(diagnostic))
+		expect(reported.length)
+			.toBeGreaterThan(0)
 	})
 
 	it('accepts a number or a string for equals, and a nested condition', () => {
@@ -409,12 +436,16 @@ describe('the survey schemas reject what the config checkers reject', () => {
 			.toEqual([])
 	})
 
-	it('survey-ai-draft: the mode config fails on minItems, and the other configs with a schema still conform', () => {
+	it('survey-ai-draft: the mode config fits the shape but fails its checker (no options), and the other configs with a schema conform', () => {
 		const draft = getShowcase('survey')!.presets.find(preset => preset.id === 'survey-ai-draft')!
 		const widgets = widgetsOf(JSON.parse(draft.sourceText) as PresetWidget)
 		const mode = widgets.find(widget => widget.id === 'mode')!
 		expect(conforms(schemaOf('survey', mode.type), mode.config))
-			.toEqual(['/options minItems'])
+			.toEqual([])
+		const reported: { readonly path?: readonly (string | number)[] }[] = []
+		;(mode.type === 'SingleChoice' ? survey.checkSingleChoiceConfig : survey.checkMultipleChoiceConfig)(mode.config, diagnostic => reported.push(diagnostic))
+		expect(reported.map(diagnostic => diagnostic.path))
+			.toContainEqual(['options'])
 		// `phone` has a type mismatch the schema cannot see (shape only), and a type the survey does not register has no schema.
 		const others = widgets.filter(widget => widget.id !== 'mode' && Object.hasOwn(getShowcase('survey')!.configSchemas, widget.type))
 		expect(others.map(widget => widget.id))

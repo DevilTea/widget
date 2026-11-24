@@ -24,10 +24,11 @@ describe('docText', () => {
 			.toBe('')
 	})
 
-	it('shows the real generated Survey summary without the comment\'s line wraps', () => {
+	it('shows the real generated Survey summary on one line', () => {
+		// The prose is written in the builder (0.4), without the hard wraps a JSDoc comment had.
 		const docs = getShowcase('survey')!.docs
-		expect(docs.plugins.Survey!.summary)
-			.toContain('\n')
+		expect(docText(docs.plugins.Survey))
+			.toBe(docs.plugins.Survey!.summary)
 		expect(docText(docs.plugins.Survey))
 			.not
 			.toMatch(/(?<!\n)\n(?!\n)/)

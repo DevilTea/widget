@@ -149,7 +149,7 @@ describe('buildWhySentences — Trip budget splitter', () => {
 			.toEqual({
 				name: 'paidBy',
 				path: ['paidBy'],
-				description: 'The id of the Person who paid at the start. It must exist in the same trip. Must be the id of a widget of type Person in the same document.',
+				description: 'The id of the Person who paid at the start (a person id, `^[a-z][a-z0-9-]*$`). It must exist in the same trip. Must be the id of a widget of type Person in the same document.',
 			})
 	})
 
