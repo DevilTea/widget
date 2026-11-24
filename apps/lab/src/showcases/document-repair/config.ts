@@ -85,27 +85,13 @@ export function checkText(input: unknown, path: ConfigPath, report: Report): voi
 // Raw and resolved configs of the repair desk
 // -------------------------------------------------------------------------------------------------
 
-/** The authored config of a RepairDesk. */
 export interface RepairDeskRawConfig {
-	/**
-	 * The notice-board app version that opens the drafts, such as `3.0`. It writes format 3.x.
-	 *
-	 * @pattern ^\d+\.\d+$
-	 */
 	readonly appVersion: string
 }
 
-/** The authored config of a SavedDraft: the stored document, kept exactly as saved. */
 export interface SavedDraftRawConfig {
-	/**
-	 * What the draft is called in the app's draft list.
-	 *
-	 * @minLength 1
-	 */
 	readonly title: string
-	/** The format version of the app that saved the draft. The migration plan is chosen by it; Core does not know it. */
 	readonly savedWith: SavedWith
-	/** The stored legacy document: any JSON value, kept exactly as saved. The widget compiles it with the notice board system and never changes it. */
 	readonly source: JsonValue
 }
 

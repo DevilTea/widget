@@ -1,7 +1,7 @@
 /**
  * Survey-form showcase ("Maker Space open day sign-up") domain model: the pure, framework-free helpers
  * that the plugins (`./plugins/`), the config checkers (`./config.ts`) and the evaluation function share.
- * Nothing here touches Core; every function is a plain function of plain JSON values, so it can be
+ * Nothing here calls Core (it imports only the `WidgetRef` type); every function is a plain function of plain JSON values, so it can be
  * tested without a Runtime.
  *
  * The semantic rules a host (a Vue renderer or a backend) must agree on live in the plugins, never in
@@ -17,6 +17,8 @@
  * A hidden question has no value: its effective answer is `null`, which every operator treats as
  * "unanswered" (see `evaluateCondition`).
  */
+
+import type { WidgetRef } from '@deviltea/widget-core'
 
 // -------------------------------------------------------------------------------------------------
 // Languages and question types
@@ -54,132 +56,50 @@ export function isSupportedLanguage(input: unknown): input is SupportedLanguage 
 // has optional properties; it is only ever used as a property type inside a raw config, where Core
 // handles optional keys itself.
 
-/**
- * Text per language: `{ "en": "...", "zh-TW": "..." }`. Must contain every language of the survey.
- *
- * @minProperties 1
- * @minLength 1
- */
 export interface I18nText { readonly [language: string]: string }
 
-/** A condition on one question's effective answer. A hidden question has no value: every condition reads it as unanswered. */
 export type LeafCondition
 	= | {
-		/**
-		 * The id of another question in the same survey (its widget id), whose effective answer the condition reads. It must exist,
-		 * and conditions must not form a loop (`property-evaluation-cycle`). A question's `visibleWhen` and option conditions must not read
-		 * the question itself, but its `required` and `rules` may.
-		 *
-		 * @minLength 1
-		 * @widgetRef SingleChoice | MultipleChoice | Numeric | ShortAnswer
-		 */
-		readonly question: string
-		/** `answered` holds when the question has an effective answer, `unanswered` when it has none (or is hidden). */
+		readonly question: WidgetRef<'SingleChoice' | 'MultipleChoice' | 'Numeric' | 'ShortAnswer'>
 		readonly op: 'answered' | 'unanswered'
 	}
 	| {
-		/**
-		 * The id of another question in the same survey (its widget id), whose effective answer the condition reads. It must exist,
-		 * and conditions must not form a loop (`property-evaluation-cycle`). A question's `visibleWhen` and option conditions must not read
-		 * the question itself, but its `required` and `rules` may.
-		 *
-		 * @minLength 1
-		 * @widgetRef SingleChoice | MultipleChoice | Numeric | ShortAnswer
-		 */
-		readonly question: string
-		/** `equals` is true only for an identical answer; `notEquals` is also true for an unanswered or hidden question. */
+		readonly question: WidgetRef<'SingleChoice' | 'MultipleChoice' | 'Numeric' | 'ShortAnswer'>
 		readonly op: 'equals' | 'notEquals'
-		/** A choice option value or short text, or a number for a numeric answer. */
 		readonly value: string | number
 	}
 	| {
-		/**
-		 * The id of another question in the same survey (its widget id), whose effective answer the condition reads. It must exist,
-		 * and conditions must not form a loop (`property-evaluation-cycle`). A question's `visibleWhen` and option conditions must not read
-		 * the question itself, but its `required` and `rules` may.
-		 *
-		 * @minLength 1
-		 * @widgetRef Numeric
-		 */
-		readonly question: string
-		/**
-		 * Compares a numeric answer: only a Numeric question can satisfy `greaterThan` or `lessThan`; false for a hidden or
-		 * unanswered question.
-		 */
+		readonly question: WidgetRef<'Numeric'>
 		readonly op: 'greaterThan' | 'lessThan'
-		/** The number the answer is compared with. */
 		readonly value: number
 	}
 	| {
-		/**
-		 * The id of another question in the same survey (its widget id), whose effective answer the condition reads. It must exist,
-		 * and conditions must not form a loop (`property-evaluation-cycle`). A question's `visibleWhen` and option conditions must not read
-		 * the question itself, but its `required` and `rules` may.
-		 *
-		 * @minLength 1
-		 * @widgetRef MultipleChoice
-		 */
-		readonly question: string
-		/** Whether a MultipleChoice answer contains `value`; `excludes` is also true for an unanswered or hidden question. */
+		readonly question: WidgetRef<'MultipleChoice'>
 		readonly op: 'includes' | 'excludes'
-		/** One of that question's option values. */
 		readonly value: string
 	}
 
-/**
- * A condition on other questions' answers: a leaf `{ question, op, value? }` or a combinator `{ all }` (every one holds),
- * `{ any }` (at least one holds) or `{ not }`. A hidden question has no value: every condition reads it as unanswered.
- */
 export type Condition
 	= | LeafCondition
 		| {
-			/**
-			 * Holds when every listed condition holds.
-			 *
-			 * @minItems 1
-			 */
 			readonly all: readonly Condition[]
 		}
 		| {
-			/**
-			 * Holds when at least one listed condition holds.
-			 *
-			 * @minItems 1
-			 */
 			readonly any: readonly Condition[]
 		}
 		| {
-			/** Holds when the inner condition does not hold. */
 			readonly not: Condition
 		}
 
-/** A custom answer error: when `when` holds on a visible question, `message` is one of its `errors`. */
 export interface Rule {
-	/** While the question is visible and this holds, the question's errors include `{ code: "rule", message }`. */
 	readonly when: Condition
-	/** The error message, in every survey language. */
 	readonly message: I18nText
 }
 
-/** An option of a choice question. Options are config, not widgets. */
 export interface OptionConfig {
-	/**
-	 * The stored answer for this option. Unique within the question.
-	 *
-	 * @minLength 1
-	 */
 	readonly value: string
-	/** The option text, in every survey language. */
 	readonly label: I18nText
-	/**
-	 * Show the option only while this holds. A selected option that becomes hidden is dropped from the effective answer and
-	 * reported as an invalid-option error.
-	 */
 	readonly visibleWhen?: Condition
-	/**
-	 * Allow choosing the option only while this holds (it is shown disabled otherwise). A selected option that becomes
-	 * disabled is dropped from the effective answer and reported as an invalid-option error.
-	 */
 	readonly enabledWhen?: Condition
 }
 
@@ -201,12 +121,10 @@ export type ConditionOp = typeof ANSWER_OPS[number] | typeof EQUALITY_OPS[number
 /** A question's effective answer: `null` while hidden or unanswered. */
 export type AnswerValue = string | number | readonly string[] | null
 
-/** One answer error. `rule` is the index of the custom rule that produced it, for `code: 'rule'`. */
 export interface AnswerError { readonly code: string, readonly message: string, readonly rule?: number }
 
 export interface OptionText { readonly value: string, readonly label: string }
 
-/** A question's label, help and option labels in the active language. `options` is empty for non-choices. */
 export interface QuestionText {
 	readonly label: string
 	readonly help: string | null
@@ -215,7 +133,6 @@ export interface QuestionText {
 
 export interface OptionState { readonly value: string, readonly visible: boolean, readonly enabled: boolean }
 
-/** What a host reads per question: the four fixed members. */
 export interface QuestionOutcome {
 	readonly visible: boolean
 	readonly required: boolean
@@ -230,14 +147,12 @@ export interface SurveyResponse {
 
 export interface LanguageName { readonly code: string, readonly name: string }
 
-/** The survey's own chrome text in the active language, so the form never mixes languages. */
 export interface SurveyText {
 	readonly title: string
 	readonly submit: string
 	readonly submitted: string
 	readonly changedSinceSubmit: string
 	readonly blocked: string
-	/** The survey's languages with their endonyms, for a language switch. */
 	readonly languages: readonly LanguageName[]
 }
 

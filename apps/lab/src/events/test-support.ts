@@ -98,7 +98,7 @@ function docText(summary: string) {
 
 /**
  * A stand-in showcase for the fixture plugins, for views that read the documentation of the current showcase
- * (`getShowcase(showcaseId).docs`): its `docs` is what `widgetDocs({ slim: true })` would generate from the JSDoc above. A
+ * (`getShowcase(showcaseId).docs`): its `docs` is what `widgetDocs({ slim: true })` would generate for documented plugins of this shape. A
  * test swaps it in with `vi.mock('…/showcases/registry')` and selects it by `id`.
  */
 export const eventsFixtureShowcase = {

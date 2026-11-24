@@ -25,66 +25,43 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { ExpenseConfig, ExpenseRawConfig } from '../config'
 import type { ExpenseBreakdown, ExpenseProblem, ExpenseProblemCode, RosterEntry, TripView } from '../domain'
-import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
+import { createWidgetPlugin } from '@deviltea/widget-core'
 import { checkExpenseConfig, resolveExpenseConfig } from '../config'
+import { expenseBreakdownDocs, expenseConfigDocs, expenseProblemDocs, expenseRawConfigDocs, rosterEntryDocs, tripViewDocs } from '../docs'
 import { CURRENCY_CODE_PATTERN, equalLeftover, expenseProblemCode, expenseProblemText, isPersonId, localize, percentLeftover, splitByPercent, splitEqually, tripText } from '../domain'
 import { childIds, codesRead, currencyIdOf, isNumber, isNumberRecord, isString, languageFrom, languageReads, viewFrom, viewReads } from './reads'
 import { checkInsideTrip, isPersonIn } from './structure'
 
-/**
- * One expense line. State: `amount`, `currency`, `paidBy` and (equal split) `among`, each starting at the authored value.
- * Properties: `title`, `view`, `roster` (the people), `currencies` (the codes the Currency supports), `participants`,
- * `problem`/`counted`/`errors` (whether the input can be counted), `amountBase` (cents in the base currency, converted by
- * the Currency's read-only Method `convert`), `shares` (each person's cents) and `breakdown` (the conversion and split in
- * detail; only evaluated when a viewer opens it).
- */
 export interface ExpenseInterfaces extends WidgetInterfaces {
-	/**
-	 * The title per language, the starting amount and currency, who paid, and how it is split: equally among some people or
-	 * by percentages that add up to 100.
-	 */
 	config: { raw: ExpenseRawConfig, resolved: ExpenseConfig }
 	state: {
-		/** The amount in minor units of `currency`; `null` while missing. A negative amount is stored and reported, never refused. */
 		amount: number | null
-		/** The currency of the amount. */
 		currency: string
-		/** The id of the Person who paid; `null` while nobody is chosen. */
 		paidBy: string | null
-		/** The ids of the Persons who share the expense (equal split). */
 		among: readonly string[]
 	}
 	properties: {
-		/** The title in the trip language. */
 		title: string
-		/** The trip language and the base currency, derived from the root Trip and the Currency. */
 		view: TripView
-		/** The people of the trip. */
 		roster: readonly RosterEntry[]
-		/** The currency codes the Currency supports. */
 		currencies: readonly string[]
-		/** The ids of the Persons who share the expense. */
 		participants: readonly string[]
-		/** Why the input cannot be counted; `null` when it can. */
 		problem: ExpenseProblemCode | null
-		/** Whether the input can be counted. Depends on nothing that can fail. */
 		counted: boolean
-		/** The input problems, in the trip language. */
 		errors: readonly ExpenseProblem[]
-		/** The amount in minor units of the base currency, converted by the Currency's `convert`. */
 		amountBase: number
-		/** Each participant's share in cents, by Person id; they add up to `amountBase`. */
 		shares: Readonly<Record<string, number>>
-		/** How the amount was converted and split, line by line. Lazy: only evaluated when a viewer opens it. */
 		breakdown: ExpenseBreakdown
 	}
 }
 
 export const ExpensePlugin = createWidgetPlugin('Expense')
-	.description(undocumented)
+	.description('One expense line. State: `amount`, `currency`, `paidBy` and (equal split) `among`, each starting at the authored value. Properties: `title`, `view`, `roster` (the people), `currencies` (the codes the Currency supports), `participants`, `problem`/`counted`/`errors` (whether the input can be counted), `amountBase` (cents in the base currency, converted by the Currency\'s read-only Method `convert`), `shares` (each person\'s cents) and `breakdown` (the conversion and split in detail; only evaluated when a viewer opens it).')
 	.interfaces<ExpenseInterfaces>()
 	.config({
-		description: undocumented,
+		description: 'The title per language, the starting amount and currency, who paid, and how it is split: equally among some people or by percentages that add up to 100.',
+		raw: expenseRawConfigDocs,
+		resolved: expenseConfigDocs,
 		validate: (input, ctx): input is ExpenseRawConfig => {
 			checkExpenseConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -107,38 +84,40 @@ export const ExpensePlugin = createWidgetPlugin('Expense')
 	})
 	.state(state => state
 		.amount({
-			description: undocumented,
+			description: 'The amount in minor units of `currency`; `null` while missing. A negative amount is stored and reported, never refused.',
 			validate: (input): input is number | null => input === null || (typeof input === 'number' && Number.isFinite(input)),
 			default: ({ config }) => config.recovered ? null : config.amount,
 		})
 		.currency({
-			description: undocumented,
+			description: 'The currency of the amount.',
 			validate: (input): input is string => typeof input === 'string' && CURRENCY_CODE_PATTERN.test(input),
 			default: ({ config }) => config.currency,
 		})
 		.paidBy({
-			description: undocumented,
+			description: 'The id of the Person who paid; `null` while nobody is chosen.',
 			validate: (input): input is string | null => input === null || isPersonId(input),
 			default: ({ config }) => config.paidBy === '' ? null : config.paidBy,
 		})
 		.among({
-			description: undocumented,
+			description: 'The ids of the Persons who share the expense (equal split).',
 			validate: (input): input is readonly string[] => Array.isArray(input) && input.every(isPersonId) && new Set(input).size === input.length,
 			default: ({ config }) => config.split.mode === 'equal' ? config.split.among : [],
 		}))
 	.properties(properties => properties
 		.title({
-			description: undocumented,
+			description: 'The title in the trip language.',
 			registerDeps: ({ dep, blueprint }) => languageReads(dep, blueprint),
 			compute: ({ deps, config }) => localize(config.title, languageFrom(deps)),
 		})
 		.view({
-			description: undocumented,
+			description: 'The trip language and the base currency, derived from the root Trip and the Currency.',
+			ref: tripViewDocs,
 			registerDeps: ({ dep, blueprint }) => viewReads(dep, blueprint),
 			compute: ({ deps }) => viewFrom(deps),
 		})
 		.roster({
-			description: undocumented,
+			description: 'The people of the trip.',
+			items: { ref: rosterEntryDocs },
 			registerDeps: ({ dep, blueprint }) => ({
 				people: Object.fromEntries(childIds(blueprint, 'people', 'Person')
 					.map(id => [id, dep.widget(id)
@@ -153,7 +132,7 @@ export const ExpensePlugin = createWidgetPlugin('Expense')
 				}),
 		})
 		.currencies({
-			description: undocumented,
+			description: 'The currency codes the Currency supports.',
 			registerDeps: ({ dep, blueprint }) => codesRead(dep, blueprint),
 			compute: ({ deps }) => {
 				const codes = deps.codes?.()
@@ -161,7 +140,7 @@ export const ExpensePlugin = createWidgetPlugin('Expense')
 			},
 		})
 		.participants({
-			description: undocumented,
+			description: 'The ids of the Persons who share the expense.',
 			// Only an equal split reads State `among` and the roster; a percent split names its people in the config.
 			registerDeps: ({ dep, config }) => ({
 				...(config.split.mode === 'equal' ? { among: dep.self.state.get('among'), roster: dep.self.properties.get('roster') } : {}),
@@ -179,7 +158,7 @@ export const ExpensePlugin = createWidgetPlugin('Expense')
 			},
 		})
 		.problem({
-			description: undocumented,
+			description: 'Why the input cannot be counted; `null` when it can.',
 			registerDeps: ({ dep }) => ({
 				amount: dep.self.state.get('amount'),
 				paidBy: dep.self.state.get('paidBy'),
@@ -197,7 +176,7 @@ export const ExpensePlugin = createWidgetPlugin('Expense')
 			},
 		})
 		.counted({
-			description: undocumented,
+			description: 'Whether the input can be counted. Depends on nothing that can fail.',
 			registerDeps: ({ dep }) => ({ problem: dep.self.properties.get('problem') }),
 			compute: ({ deps }) => {
 				const problem = deps.problem()
@@ -205,7 +184,8 @@ export const ExpensePlugin = createWidgetPlugin('Expense')
 			},
 		})
 		.errors({
-			description: undocumented,
+			description: 'The input problems, in the trip language.',
+			items: { ref: expenseProblemDocs },
 			registerDeps: ({ dep, blueprint }) => ({
 				problem: dep.self.properties.get('problem'),
 				...languageReads(dep, blueprint),
@@ -218,7 +198,7 @@ export const ExpensePlugin = createWidgetPlugin('Expense')
 			},
 		})
 		.amountBase({
-			description: undocumented,
+			description: 'The amount in minor units of the base currency, converted by the Currency\'s `convert`.',
 			registerDeps: ({ dep, blueprint }) => {
 				const currency = currencyIdOf(blueprint)
 				return {
@@ -246,7 +226,7 @@ export const ExpensePlugin = createWidgetPlugin('Expense')
 			},
 		})
 		.shares({
-			description: undocumented,
+			description: 'Each participant\'s share in cents, by Person id; they add up to `amountBase`.',
 			registerDeps: ({ dep, config }) => ({
 				counted: dep.self.properties.get('counted'),
 				total: dep.self.properties.get('amountBase'),
@@ -269,7 +249,8 @@ export const ExpensePlugin = createWidgetPlugin('Expense')
 			},
 		})
 		.breakdown({
-			description: undocumented,
+			description: 'How the amount was converted and split, line by line. Lazy: only evaluated when a viewer opens it.',
+			ref: expenseBreakdownDocs,
 			registerDeps: ({ dep, blueprint }) => {
 				const currency = currencyIdOf(blueprint)
 				return {

@@ -8,9 +8,7 @@
 // Text
 // -------------------------------------------------------------------------------------------------
 
-/** Text per language, `{ "en": "...", "zh-TW": "..." }`. `en` is required; a missing language falls back to it. */
 export interface I18nText {
-	/** The English text, which a missing language falls back to. */
 	readonly en: string
 	readonly [language: string]: string
 }
@@ -140,15 +138,8 @@ export function announcementsOf(items: readonly NotifierItem[]): Announcements {
 // Fields
 // -------------------------------------------------------------------------------------------------
 
-/** One option of a Choice. */
 export interface ChoiceOption {
-	/**
-	 * The value the State holds when this option is chosen. Unique within the list.
-	 *
-	 * @minLength 1
-	 */
 	readonly value: string
-	/** What the option is called. */
 	readonly label: I18nText
 }
 

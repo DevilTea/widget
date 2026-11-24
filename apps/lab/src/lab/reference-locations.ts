@@ -1,6 +1,6 @@
 /**
  * Where a widget reference is written in a widget's authored config, read from public facts only: the config value itself and
- * the plugin's generated config JSON Schema, in which `widgetDocs()` marks a value tagged `@widgetRef` with a fixed sentence.
+ * the plugin's generated config JSON Schema, in which `widgetDocs()` marks a value typed `WidgetRef<Types>` with a fixed sentence.
  *
  * Core reports a dependency diagnostic (`missing-dependency-target`, ...) at the widget or the member that declared the
  * dependency, with the dependency's target (`dependency.target.widgetId`), but not the config path the id came from: a plugin
@@ -9,14 +9,14 @@
  * 1. in the owner widget's config, every value the schema marks as a widget reference and that equals the target id (for
  *    `missing-dependency-capability` / `-member`, only where the target's type is not one the reference allows);
  * 2. with at least one match, the problem is at those paths (several matches are several locations, all wrong);
- * 3. with none (no `@widgetRef` tag, an id that does not come from config, a `self`, `root` or `parent` target, a code the
+ * 3. with none (no `WidgetRef` type, an id that does not come from config, a `self`, `root` or `parent` target, a code the
  *    rule does not apply to), `null`: the caller keeps the widget-level placement.
  * The text is never searched. Only a string value whose own schema carries the mark is matched: an id written as an object key
  * (trip-budget's `percents`), or as a `string[]` item or a dictionary value (whose mark the generator writes on the list or the
  * dictionary, not on the value), is not found and the problem stays at the widget; nothing is located wrongly.
  *
  * Pure and framework-free (no Vue, no Lab store, no i18n), so another inspector tool can take it as it is; the only import is
- * `config-schema.ts`, which is pure too. `explain/why.ts` reads the `@widgetRef` mark through the same helpers.
+ * `config-schema.ts`, which is pure too. `explain/why.ts` reads the widget-reference mark through the same helpers.
  */
 import type { BlueprintDependencyReference } from '@deviltea/widget-core'
 import type { ConfigPath, FieldModel, JsonSchema } from './config-schema'
@@ -28,7 +28,7 @@ import { describeField } from './config-schema'
  *   nothing; it is located at that value.
  * - `missing-dependency-capability`, `missing-dependency-member`: the widget with the target id exists, and its plugin lacks
  *   the capability or the member the dependency's operation needs. It is located at the value only when that widget's type
- *   (Core's `related` location of the target) is not one of the types the schema allows there (`@widgetRef A | B`): the value
+ *   (Core's `related` location of the target) is not one of the types the schema allows there (`WidgetRef<'A' | 'B'>`): the value
  *   names a widget the plugin's own contract rules out. When the type is allowed, the value keeps the contract, the fault is in
  *   what the plugin reads, and the problem stays at the widget.
  * Left out:
@@ -61,7 +61,7 @@ export interface ReferenceDiagnosticFacts {
 export type WidgetRefAccessor = (path: ConfigPath) => readonly string[] | null
 
 /**
- * The sentence `widgetDocs()` appends to the description of a config value tagged `@widgetRef A | B` (`apps/widget-skills/src/schema.ts`):
+ * The sentence `widgetDocs()` appends to the description of a config value typed `WidgetRef<'A' | 'B'>` (`apps/widget-skills/src/schema.ts`):
  * "Must be the id of a widget of type A | B in the same document." Group 1 is the type list.
  */
 const WIDGET_REF_SENTENCE = /Must be the id of a widget of type (.+?) in the same document\./
@@ -105,7 +105,7 @@ export function fieldModelAt(schema: JsonSchema, rawConfig: unknown, path: Confi
 	return model
 }
 
-/** The `@widgetRef` reading of `schema` over `rawConfig`; a `null` schema marks nothing. */
+/** The widget-reference reading of `schema` over `rawConfig`; a `null` schema marks nothing. */
 export function schemaWidgetRefs(schema: JsonSchema | null, rawConfig: unknown): WidgetRefAccessor {
 	return (path) => {
 		if (schema === null)

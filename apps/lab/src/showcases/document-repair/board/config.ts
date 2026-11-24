@@ -6,32 +6,18 @@
 
 import type { Report } from '../config'
 import type { I18nText, Tone } from '../domain'
+import { defineFieldDocs } from '@deviltea/widget-core'
 import { checkObject, checkString, checkText, formatConfigPath } from '../config'
 import { describeValue, isIsoDate, isTone, TONES } from '../domain'
 
-/** The authored config of a Board. */
 export interface BoardRawConfig {
-	/** The title of the board per language, such as { "en": "Notices", "zh-TW": "公告" }. "en" is required. */
 	readonly title: I18nText
 }
 
-/** The authored config of a Notice. */
 export interface NoticeRawConfig {
-	/**
-	 * The headline of the notice.
-	 *
-	 * @minLength 1
-	 */
 	readonly title: string
-	/** The text of the notice. */
 	readonly body: string
-	/**
-	 * The last day the notice is shown, written `YYYY-MM-DD`.
-	 *
-	 * @pattern ^\d{4}-\d{2}-\d{2}$
-	 */
 	readonly until: string
-	/** How the notice is drawn. */
 	readonly tone: Tone
 }
 
@@ -43,6 +29,37 @@ export interface BoardConfig {
 export interface NoticeConfig extends NoticeRawConfig {
 	readonly recovered: boolean
 }
+
+// -------------------------------------------------------------------------------------------------
+// Documentation (passed to each plugin's `.config()`)
+// -------------------------------------------------------------------------------------------------
+
+const noticeFields = {
+	title: { description: 'The headline of the notice: at least one character.' },
+	body: { description: 'The text of the notice.' },
+	until: { description: 'The last day the notice is shown, written `YYYY-MM-DD` (`^\\d{4}-\\d{2}-\\d{2}$`).' },
+	tone: { description: 'How the notice is drawn: `info` or `warning`.' },
+} as const
+
+export const boardRawConfigDocs = defineFieldDocs<BoardRawConfig>()({
+	description: 'The authored config of a Board.',
+	fields: { title: { description: 'The title of the board per language, such as { "en": "Notices", "zh-TW": "公告" }. "en" is required.' } },
+})
+export const boardConfigDocs = defineFieldDocs<BoardConfig>()({
+	description: 'The resolved config of a Board.',
+	fields: {
+		title: { description: 'The title of the board per language.' },
+		recovered: { description: 'Whether this is the fallback of a config that failed validation.' },
+	},
+})
+export const noticeRawConfigDocs = defineFieldDocs<NoticeRawConfig>()({
+	description: 'The authored config of a Notice.',
+	fields: noticeFields,
+})
+export const noticeConfigDocs = defineFieldDocs<NoticeConfig>()({
+	description: 'The resolved config of a Notice.',
+	fields: { ...noticeFields, recovered: { description: 'Whether this is the fallback of a config that failed validation.' } },
+})
 
 export const BOARD_CONFIG_KEYS = ['title'] as const
 export const NOTICE_CONFIG_KEYS = ['title', 'body', 'until', 'tone'] as const

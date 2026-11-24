@@ -34,9 +34,7 @@ export function isTripLanguage(input: unknown): input is TripLanguage {
 	return typeof input === 'string' && (TRIP_LANGUAGES as readonly string[]).includes(input)
 }
 
-/** Text per language, `{ "en": "...", "zh-TW": "..." }`. `en` is required; a missing language falls back to it. */
 export interface I18nText {
-	/** The English text, which a missing language falls back to. */
 	readonly en: string
 	readonly [language: string]: string
 }
@@ -368,11 +366,6 @@ export function expenseProblemText(code: ExpenseProblemCode, text: TripText): st
 // Property value shapes
 // -------------------------------------------------------------------------------------------------
 
-/**
- * What every widget's `view` Property says: the trip language and the base currency. The built-in texts
- * (`tripText(language)`) are a plain lookup the renderers do themselves, so the Runtime panel shows two small
- * values instead of the whole text table.
- */
 export interface TripView {
 	readonly language: string
 	readonly base: string
@@ -380,25 +373,20 @@ export interface TripView {
 
 export interface RosterEntry { readonly id: string, readonly name: string }
 
-/** One line of an expense's breakdown: a person's share and where it came from. */
 export interface BreakdownLine {
 	readonly id: string
 	readonly name: string
 	readonly cents: number
-	/** The authored percentage, or `null` for an equal split. */
 	readonly percent: number | null
 }
 
 export interface ExpenseBreakdown {
-	/** The conversion, or `null` when the expense is already in the base currency. */
 	readonly conversion: { readonly amount: number, readonly currency: string, readonly rate: number, readonly baseCents: number } | null
 	readonly totalCents: number
 	readonly lines: readonly BreakdownLine[]
-	/** Leftover cents handed out one by one so the shares add up to the total. */
 	readonly remainderCents: number
 }
 
-/** One person's line in the ledger: what they paid and their share, for one expense. */
 export interface LedgerEntry {
 	readonly expense: string
 	readonly title: string
@@ -417,15 +405,11 @@ export interface SettlementTransfer {
 	readonly fromName: string
 	readonly to: string
 	readonly toName: string
-	/** The exact amount the balances ask for. */
 	readonly exactCents: number
-	/** The amount after rounding to the chosen step. */
 	readonly cents: number
 }
 
-/** What the Settlement Property computes: the transfers and how they compare with the exact balances. */
 export interface SettlementOutcome {
 	readonly transfers: readonly SettlementTransfer[]
-	/** Exact amount to move minus the rounded amount actually moved, in minor units (can be negative). */
 	readonly roundingGapCents: number
 }

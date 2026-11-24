@@ -8,38 +8,36 @@ import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { SalesTaxConfig } from '../config'
 import type { Adjustment } from '../domain'
 import type { SalesTaxRawConfig } from '../raw-config'
-import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
+import { createWidgetPlugin } from '@deviltea/widget-core'
 import { resolveSalesTaxConfig } from '../config'
+import { adjustmentDocs, salesTaxConfigDocs, salesTaxRawConfigDocs } from '../docs'
 import { percentOf } from '../domain'
 import { salesTaxConfigSchema } from '../schemas'
 import { guard } from '../standard-schema'
 import { taxableReads, valueOr } from './reads'
 import { checkInsideQuote } from './structure'
 
-/**
- * A percentage of the taxable amount (the subtotal plus every other rule). Config: `label` and `percent`. Property
- * `adjustment`: the tax.
- */
 export interface SalesTaxInterfaces extends WidgetInterfaces {
-	/** The label and the tax rate (counted to two decimals). Validated by a Valibot schema through Standard Schema. */
 	config: { raw: SalesTaxRawConfig, resolved: SalesTaxConfig }
 	properties: {
-		/** The tax on `Quote.taxableCents`, in minor units. */
 		adjustment: Adjustment
 	}
 }
 
 export const SalesTaxPlugin = createWidgetPlugin('SalesTax')
-	.description(undocumented)
+	.description('A percentage of the taxable amount (the subtotal plus every other rule). Config: `label` and `percent`. Property `adjustment`: the tax.')
 	.interfaces<SalesTaxInterfaces>()
 	.config({
-		description: undocumented,
+		description: 'The label and the tax rate (counted to two decimals). Validated by a Valibot schema through Standard Schema.',
+		raw: salesTaxRawConfigDocs,
+		resolved: salesTaxConfigDocs,
 		validate: guard(salesTaxConfigSchema),
 		resolve: resolveSalesTaxConfig,
 	})
 	.structure(ctx => checkInsideQuote(ctx, 'SalesTax'))
 	.properties(properties => properties.adjustment({
-		description: undocumented,
+		description: 'The tax on `Quote.taxableCents`, in minor units.',
+		ref: adjustmentDocs,
 		registerDeps: ({ dep, blueprint }) => taxableReads(dep, blueprint),
 		compute: ({ deps, config }): Adjustment => ({
 			type: 'SalesTax',

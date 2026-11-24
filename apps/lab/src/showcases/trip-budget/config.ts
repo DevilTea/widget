@@ -14,107 +14,46 @@
  * `recovered: true` so cross-widget checks can skip it instead of piling more diagnostics on top.
  */
 
+import type { WidgetRef } from '@deviltea/widget-core'
 import type { I18nText, RoundStep } from './domain'
 import { CURRENCY_CODE_PATTERN, DEFAULT_ROUND_STEP, isRoundStep, PERSON_ID_PATTERN, ROUND_STEPS } from './domain'
 
 // -------------------------------------------------------------------------------------------------
-// Raw config (what the author writes) and resolved config (what the plugin reads)
+// Raw config (what the author writes) and resolved config (what the plugin reads). Their documentation is in
+// `docs.ts`, passed to each plugin's `.config()`.
 // -------------------------------------------------------------------------------------------------
 
-/** The authored config of a Trip. */
 export interface TripRawConfig {
-	/** The trip title. "en" is required; "zh-TW" is optional. */
 	readonly title: I18nText
 }
 
-/** The authored config of a Currency. */
 export interface CurrencyRawConfig {
-	/**
-	 * The currency the settlement is computed and shown in, a three-letter capital code such as `"EUR"`. It is always worth 1
-	 * and must not appear in `rates`.
-	 *
-	 * @pattern ^[A-Z]{3}$
-	 */
 	readonly base: string
-	/**
-	 * How many base-currency units one unit of each other currency is worth, such as `{ "USD": 0.92 }`. An expense in a
-	 * currency that is neither the base nor listed here cannot be converted: the conversion Method fails and the settlement
-	 * fails with it.
-	 *
-	 * @propertyNames ^[A-Z]{3}$
-	 * @exclusiveMinimum 0
-	 */
 	readonly rates: { readonly [code: string]: number }
-	/**
-	 * The starting "round transfers to" step in minor units: 1 = the cent, 100 = a whole unit, 500 = the nearest 5 units. A
-	 * viewer can change it; Start over restores this value. Defaults to 1.
-	 */
 	readonly roundTransfersTo?: RoundStep
 }
 
-/** The authored config of a Person. */
 export interface PersonRawConfig {
-	/**
-	 * The name shown for this person. The widget id (not the name) is what expenses refer to.
-	 *
-	 * @minLength 1
-	 */
 	readonly name: string
 }
 
-/** An equal split: the people in `among` share the amount equally (the leftover cents go to the first people listed). */
+// An equal split: the people in `among` share the amount equally (the leftover cents go to the first people listed).
 export interface EqualSplitRaw {
-	/** `equal`. */
 	readonly mode: 'equal'
-	/**
-	 * The ids of the Persons sharing the expense at the start (a viewer can tick and untick them).
-	 *
-	 * @minItems 1
-	 * @uniqueItems
-	 * @pattern ^[a-z][a-z0-9-]*$
-	 */
 	readonly among: readonly string[]
 }
 
-/** A percent split: each person in `percents` pays that percentage. */
+// A percent split: each person in `percents` pays that percentage.
 export interface PercentSplitRaw {
-	/** `percent`. */
 	readonly mode: 'percent'
-	/**
-	 * Person id -> percentage. The percentages must add up to 100 (the compiler reports a located diagnostic otherwise).
-	 *
-	 * @propertyNames ^[a-z][a-z0-9-]*$
-	 * @minimum 0
-	 * @maximum 100
-	 */
 	readonly percents: { readonly [personId: string]: number }
 }
 
-/** The authored config of an Expense. */
 export interface ExpenseRawConfig {
-	/** What the money was spent on. */
 	readonly title: I18nText
-	/**
-	 * The starting amount, in `currency`. A viewer can change the amount, the payer and (for an equal split) who shares;
-	 * "Reset this expense" restores these starting values.
-	 *
-	 * @minimum 0
-	 */
 	readonly amount: number
-	/**
-	 * The currency of the amount: the Currency widget's base or one of its rates.
-	 *
-	 * @pattern ^[A-Z]{3}$
-	 */
 	readonly currency: string
-	/**
-	 * The id of the Person who paid at the start. It must exist in the same trip.
-	 *
-	 * @pattern ^[a-z][a-z0-9-]*$
-	 * @widgetRef Person
-	 */
-	readonly paidBy: string
-	/** How the amount is shared: equally among some people, or by percentages that add up to 100. */
+	readonly paidBy: WidgetRef<'Person'>
 	readonly split: EqualSplitRaw | PercentSplitRaw
 }
 
@@ -125,9 +64,7 @@ export interface TripConfig {
 
 export interface CurrencyConfig {
 	readonly base: string
-	/** The other currencies' rates (the base is not in it). */
 	readonly rates: Readonly<Record<string, number>>
-	/** The base first, then every other code in the order written. */
 	readonly codes: readonly string[]
 	readonly roundStep: RoundStep
 	readonly recovered: boolean
@@ -146,7 +83,6 @@ export interface ExpenseConfig {
 	readonly split:
 		| { readonly mode: 'equal', readonly among: readonly string[] }
 		| { readonly mode: 'percent', readonly percents: Readonly<Record<string, number>> }
-	/** The people this expense names as sharing it: `among`, or the keys of `percents`. */
 	readonly participants: readonly string[]
 	readonly recovered: boolean
 }

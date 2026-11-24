@@ -10,57 +10,49 @@ import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { ItemConfig } from '../config'
 import type { ItemLine } from '../domain'
 import type { ItemRawConfig } from '../raw-config'
-import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
+import { createWidgetPlugin } from '@deviltea/widget-core'
 import { resolveItemConfig } from '../config'
+import { itemConfigDocs, itemLineDocs, itemRawConfigDocs } from '../docs'
 import { itemConfigSchema, paperSchema, quantitySchema } from '../schemas'
 import { guard } from '../standard-schema'
 import { checkInsideQuote } from './structure'
 
-/**
- * One printed product of the quote. Config: title, `unitCents`, the `papers` on offer and the starting `quantity` and
- * `paper`. State: `quantity` and `paper`, what the customer chooses. Property `line`: the quantity, the paper and the line
- * price in minor units (it fails with `unknown-paper` when State `paper` is not one of the papers).
- */
 export interface ItemInterfaces extends WidgetInterfaces {
-	/**
-	 * The product, its unit price, the papers on offer and the starting quantity and paper. Validated by a Valibot schema
-	 * through Standard Schema.
-	 */
 	config: { raw: ItemRawConfig, resolved: ItemConfig }
 	state: {
-		/** How many pieces the customer orders: a whole number from 1. */
 		quantity: number
-		/** The code of the paper the customer chose, one of the configured papers. */
 		paper: string
 	}
 	properties: {
-		/** The quantity, the paper and the line price in minor units. Fails with `unknown-paper` when `paper` is not on offer. */
 		line: ItemLine
 	}
 }
 
 export const ItemPlugin = createWidgetPlugin('Item')
-	.description(undocumented)
+	.description('One printed product of the quote. Config: title, `unitCents`, the `papers` on offer and the starting `quantity` and `paper`. State: `quantity` and `paper`, what the customer chooses. Property `line`: the quantity, the paper and the line price in minor units (it fails with `unknown-paper` when State `paper` is not one of the papers).')
 	.interfaces<ItemInterfaces>()
 	.config({
-		description: undocumented,
+		description: 'The product, its unit price, the papers on offer and the starting quantity and paper. Validated by a Valibot schema through Standard Schema.',
+		raw: itemRawConfigDocs,
+		resolved: itemConfigDocs,
 		validate: guard(itemConfigSchema),
 		resolve: resolveItemConfig,
 	})
 	.structure(ctx => checkInsideQuote(ctx, 'Item'))
 	.state(state => state
 		.quantity({
-			description: undocumented,
+			description: 'How many pieces the customer orders: a whole number from 1.',
 			validate: guard(quantitySchema),
 			default: ({ config }) => config.quantity,
 		})
 		.paper({
-			description: undocumented,
+			description: 'The code of the paper the customer chose, one of the configured papers.',
 			validate: guard(paperSchema),
 			default: ({ config }) => config.paper,
 		}))
 	.properties(properties => properties.line({
-		description: undocumented,
+		description: 'The quantity, the paper and the line price in minor units. Fails with `unknown-paper` when `paper` is not on offer.',
+		ref: itemLineDocs,
 		registerDeps: ({ dep }) => ({
 			quantity: dep.self.state.get('quantity'),
 			paper: dep.self.state.get('paper'),

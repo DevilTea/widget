@@ -837,50 +837,61 @@ types, and nothing else of the Lab. Declare colour tokens on the renderer root k
 in `showcases/registry.ts` and its renderer loader in `preview-frame-renderers.ts`. Test renderers with a plain-ref `ShowcaseHost` (`survey/renderers/test-harness.ts` shows how), and run
 `pnpm exec vitest run src/styles` to check the isolation guard.
 
-## Plugin documentation and config schemas (Core 0.3)
+## Plugin documentation and config schemas (Core 0.4)
 
-Core 0.3 makes a plugin's `Interfaces` type, with its JSDoc, the single source of its documentation: there is no
-`.description()`, no `description` on a config, slot or Event, no `config.schema`, and the catalog, `inspectPlugin` and the
-Inspector snapshot (protocol 1.0) carry names and capabilities only (`docs/site/migration/0.3.md`). So:
+A plugin's `Interfaces` type is the single source of its shape, and its prose is written in the builder, beside each
+definition (Discussion #12, "Descriptions live in the plugin builder; JSON Schema is inferred from the types (0.4.0)"). Core
+keeps the prose as plain data on `plugin.docs`; the catalog, `inspectPlugin` and the Inspector snapshot (protocol 1.0) carry
+names and capabilities only. JSDoc on the Interfaces is an ordinary comment that no tool reads. So:
 
-- **Write documentation as JSDoc on the Interfaces.** Every showcase and sandbox plugin documents its `Interfaces` type (the
-  plugin), its `config` member, every slot, State member, Property, Method (with `@param`/`@returns`) and Event, and its
-  authored config types (`*RawConfig`), with the tags of `apps/widget-skills/tsdoc.json` (`@minimum`, `@pattern`, `@widgetRef`,
-  ...). A slot's expectation is the most precise one its `validateStructure` upholds: a plugin-type union, or a
-  `WidgetContract<Shape, Types>` where the parent reads its children's members (`Onboarding.steps`, `Survey.questions`, the
-  two `Quote` slots), so `createWidgetSystem` checks each child plugin against that shape; the reads themselves stay on
-  `dep.widget(id)` with the existing `.validate()` refinements. `registry.unit.test.ts` fails when a plugin, config, slot or
-  Event of a showcase has no documentation. `widget-skills --check` (see `apps/widget-skills/README.md`) reports 0 errors for
-  every showcase (`quote-rules` also 0 warnings). `quote-rules` writes its raw config types by hand in `raw-config.ts`, with the
-  field prose of its Valibot schemas' `v.description()` repeated and the schema constraints as tags; `schemas.ts`
-  (`RawConfigsMatchSchemas`) asserts that each is exactly the schema's `InferInput`, so a shape drift fails `vue-tsc` (the prose
-  and the tags are not checked: change both sides together).
+- **Write documentation in the builder.** Every showcase and sandbox plugin (and the notice board's `Board` and `Notice`)
+  writes `.description()`, its config `description` with the field docs of `raw` and `resolved`, and the description of every
+  slot, State member, Property, Method (`params` by position and `returns`) and Event (`payload` by position); the compiler
+  requires the field docs of every object value, down to its inner fields. Each showcase keeps the config and value-type docs
+  in its `docs.ts`: `defineTypeDocs` for a named type several members use (the text per language, conditions, view and
+  result types), referred to with `ref`, and `defineFieldDocs` for each raw and resolved config. A type docs name is the
+  type's own name (its one `$defs` entry). A constraint (a range, a pattern, "at least one") is prose in the description, and
+  the config checker that `validate` runs enforces it: the generated schema states the shape only. A config field that holds
+  another widget's id is typed `WidgetRef<'A' | 'B'>` (the survey condition's `question`, trip-budget's `paidBy`, the
+  renderer-packs `appearance` and `notifier`, the sandbox's `counterId`). Only test plugins (unit tests, e2e fixtures,
+  benchmarks) write `undocumented`. A slot's expectation is the most precise one its `validateStructure` upholds: a
+  plugin-type union, or a `WidgetContract<Shape, Types>` where the parent reads its children's members (`Onboarding.steps`,
+  `Survey.questions`, the two `Quote` slots), so `createWidgetSystem` checks each child plugin against that shape; the reads
+  themselves stay on `dep.widget(id)` with the existing `.validate()` refinements. `registry.unit.test.ts` fails when a
+  plugin, config, slot or Event of a showcase has no documentation. `widget-skills --check` (see `apps/widget-skills/README.md`)
+  reports 0 problems for every showcase. `quote-rules` writes its raw config types by hand in `raw-config.ts`, and the field
+  prose in `docs.ts` repeats its Valibot schemas' `v.description()` and states the schema constraints in words; `schemas.ts`
+  (`RawConfigsMatchSchemas`) asserts that each type is exactly the schema's `InferInput`, so a shape drift fails `vue-tsc` (the
+  prose is not checked: change both sides together).
 - **The docs reach the Lab through `widgetDocs()`.** `widget-docs.ts` (`labWidgetDocs()`) configures the widget-skills Vite
   plugin for the seven showcase Systems with `tsconfig.app.json`; `vite.config.ts`, `vitest.config.ts` and the root
   `vitest.config.ts` (project `lab`) all load it, importing the plugin by relative path (`../widget-skills/src/vite`): Vite hands
   a bare `@deviltea/widget-skills/vite` to Node, which cannot load its TypeScript sources. `virtual:widget-docs/<showcase id>`
   is that showcase's docs, imported by `showcases/registry.ts` as `ShowcaseEntry.docs`. The Lab loads them with `slim: true`
-  (`WidgetDocsSlim`: the summary and `@remarks` of each plugin, its config, slots and Events, and the config schema; no `types`
+  (`WidgetDocsSlim`: the summary and remarks of each plugin, its config, slots and Events, and the config schema; no `types`
   section, printed types or tags), because they sit in the eager shell chunk (`tutorial-theme-*.js`: 877 KB, gzip 200 KB with the
   full docs and the hand-written schema maps; 615 KB, gzip 176 KB with the slim docs, measured with `pnpm build`). `src/virtual-widget-docs.d.ts`
   declares the modules as `WidgetDocsSlim` (the Lab has no dependency on the private package; `author/widget-docs.ts` takes the types from the
   virtual module, because importing the generator's `docs-types.ts` from a Lab source is TS6307 in this composite project).
-  Generating imports each System module in a worker thread; the result is cached in `node_modules/.cache/widget-docs/` of
-  this app (delete it to clear it). Documentation gaps are Vite warnings, a name mismatch between types and runtime fails the
-  load. A showcase file never imports a virtual module (`showcase-isolation.unit.test.ts`); the Lab side reads `docs` through
-  `author/widget-docs.ts` (`pluginDocsOf`, `docText`, `memberDocText`), which read an undocumented member as `''`.
+  Generating imports each System module in a worker thread (that import is also where the prose comes from); the result is
+  cached in `node_modules/.cache/widget-docs/` of this app (delete it to clear it). Documentation problems are Vite warnings, a
+  name mismatch between types and runtime fails the load. A showcase file never imports a virtual module
+  (`showcase-isolation.unit.test.ts`); the Lab side reads `docs` through `author/widget-docs.ts` (`pluginDocsOf`, `docText`,
+  `memberDocText`), which read an undocumented member as `''`.
 - **The config schemas are generated too.** `ShowcaseEntry.configSchemas` maps each plugin type with a config to its Draft
   2020-12 config JSON Schema: `generatedConfigSchemas(docs)` (`showcases/registry.ts`) takes `docs.plugins[type].config.schema`,
   the full-profile schema `widgetDocs()` generates from the `config.raw` type (a `$ref` root with `$defs`, object unions as
-  `anyOf`, an `anyOf` with `null` when the config may be left out). A constraint the type cannot say is a JSDoc tag on the raw
-  config type (`@pattern`, `@minItems`, `@uniqueItems`, `@propertyNames`, `@integer`, ...; a string or number tag on an array or
-  a dictionary applies to its items or values), and one the validator already enforces may narrow the type itself (survey
-  `languages: SupportedLanguage[]`, trip-budget `roundTransfersTo: RoundStep`, the `I18nText` with a required `en`). quote-rules
+  `anyOf`, an `anyOf` with `null` when the config may be left out). It states the shape only: no `minimum`, `pattern`,
+  `minItems`, `integer` or `default`, so the Structure editor offers what the shape allows and Core's diagnostics report a
+  value outside a constraint. A constraint the validator enforces may narrow the type itself (survey
+  `languages: SupportedLanguage[]`, trip-budget `roundTransfersTo: RoundStep`, the `I18nText` with a required `en`). A widget
+  reference carries `x-widgetRef` (the types it names) beside the sentence the Lab reads today. quote-rules
   overrides the map with the JSON Schemas of its Valibot validators (`quoteConfigSchemas`; its files, which the Web Worker
-  bundles, use their own structurally equal type); the sandbox has none. `lab/showcase-config-schemas.unit.test.ts` holds the
-  generated schemas to the showcases' code: their properties are exactly the config checkers' key lists (`*_CONFIG_KEYS`), the
-  tagged constraints are there as keywords, and every config of each default preset conforms. The Structure editor and the
-  Catalog read the map; Core never sees it.
+  bundles, use their own structurally equal type), which keep their constraint keywords; the sandbox has none.
+  `lab/showcase-config-schemas.unit.test.ts` holds the generated schemas to the showcases' code: their properties are exactly
+  the config checkers' key lists (`*_CONFIG_KEYS`), no constraint keyword appears (the checkers reject what the prose
+  describes), and every config of each default preset conforms. The Structure editor and the Catalog read the map; Core never
+  sees it.
 
 ## Package boundaries
 
@@ -1608,18 +1619,18 @@ this; the owner agreed). The Lab derives the location from public facts only, in
 (`referenceConfigPaths()`, pure and framework-free: no Vue, no store, no i18n; its only import is the pure `config-schema.ts`, so a later
 shared inspector-tools package can take it as it is):
 1. in the owner widget's authored config (`node.source.config` of the committed Document), every value the plugin's generated config
-   schema marks as a widget reference (the sentence `widgetDocs()` writes for `@widgetRef`, `widgetRefTypesOf()`, read along the value
+   schema marks as a widget reference (the sentence `widgetDocs()` writes for a `WidgetRef<…>` value, `widgetRefTypesOf()`, read along the value
    the way the Structure editor reads it, union branches chosen by the value) and that equals the target id;
 2. with at least one match the problem is at those paths: the first is `LabProblem.sourcePath` / `configPath` (`widgetLevel: false`), the
    others are `LabProblem.moreLocations` (all of them are wrong values);
-3. with none, the placement stays widget-level, unchanged: no `@widgetRef` tag (quote-rules' Valibot schemas have none), an id that does
+3. with none, the placement stays widget-level, unchanged: no `WidgetRef` type (quote-rules' Valibot schemas have none), an id that does
    not come from config (a slot child, the root), a `self`, `root` or `parent` target, or a code the rule leaves out;
 4. the text is never searched.
 
 The codes (`LOCATED_DEPENDENCY_CODES`), by what Core says each one means: `missing-dependency-target` (no widget of the Document has the
 target id) is located at the value. `missing-dependency-capability` and `missing-dependency-member` (the widget with that id exists and its
 plugin lacks the capability or member the dependency's operation needs) are located at the value only when that widget's type, from Core's
-`related` location of the target, is not one of the types the value's `@widgetRef` allows: the value names a widget the plugin's own
+`related` location of the target, is not one of the types the value's `WidgetRef` allows: the value names a widget the plugin's own
 contract rules out. When the type is allowed, the value keeps the contract, the fault is in what the plugin reads, and the problem stays at the
 widget. Left out: `ambiguous-dependency-target` (several widgets share the id; no value can choose between them, the fix is a unique id, and
 those widgets already carry `duplicate-widget-id`), `unresolved-dependency-target` (the target widget did not resolve and has its own
@@ -1631,7 +1642,7 @@ location" selects the first location (`problemSpan()`). The code, message and lo
 and count, the header chip and the Blueprint panel's "All diagnostics" (which Explain's Declaration details embed) keep Core's facts and
 Core's widget/member location. Explain's Relations and "Why" list resolved dependencies only, so a broken reference is not in them either
 way. `collectProblems()` takes the showcase's `configSchemas` (the store passes `ShowcaseEntry.configSchemas`); without it nothing is
-located inside a config. `explain/why.ts` reads the `@widgetRef` mark and walks the schema through the same helpers (`fieldModelAt()`,
+located inside a config. `explain/why.ts` reads the widget-reference mark and walks the schema through the same helpers (`fieldModelAt()`,
 `stringValuePaths()`).
 
 Several diagnostics about one target: Core reports one per member that depends on it (sessions' `options` and `errors` both read a
@@ -1908,9 +1919,9 @@ Structure tree only). Top to bottom, each part its own component in `components/
    config equal to the other widget's id names it; a dependency path that starts with a top-level config key (`["rules", "guests"]`) limits the search
    to that field, and keys another Property's dependency on the same widget claims that way are skipped (so `sessions.options` does not borrow
    `rules`). Outside such a field a matching value counts only when the generated schema marks it as a widget reference, the sentence
-   `widgetDocs()` writes for `@widgetRef` ("Must be the id of a widget of type A | B in the same document.", `widgetRefTypesOf`), preferring one
+   `widgetDocs()` writes for a `WidgetRef` value ("Must be the id of a widget of type A | B in the same document.", `widgetRefTypesOf`), preferring one
    that names the other widget's type; otherwise no field is shown, so a string that only equals the id (`{ inputType: "email" }` beside a widget
-   `email`) is never taken for a reference. The survey's condition `question` carries `@widgetRef` for this (the four question types; `Numeric` for
+   `email`) is never taken for a reference. The survey's condition `question` is typed `WidgetRef` for this (the four question types; `Numeric` for
    `greaterThan`/`lessThan`, `MultipleChoice` for `includes`/`excludes`). The field shown is the top-level key, or, inside a list of objects, the item's key (`options[1].enabledWhen.question` -> `enabledWhen`),
    with its description from the generated config schema (`describeField`, the Structure editor's reader). A plugin that finds its widgets through its
    slots (the trip's chain, quote-rules, onboarding) gets no field, which is the honest answer; so does the sandbox, which has no schemas. A widget

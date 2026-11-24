@@ -19,9 +19,8 @@ function labPath(path: string): string {
 }
 
 /**
- * The one place the Lab configures `widgetDocs()`: each showcase's plugin documentation, generated from the JSDoc of its
- * plugins' `Interfaces` types, is served as `virtual:widget-docs/<showcase id>` (Core 0.3 carries no descriptions at run
- * time). `vite.config.ts`, `vitest.config.ts` and the repository's root `vitest.config.ts` (project `lab`) all call it. The
+ * The one place the Lab configures `widgetDocs()`: each showcase's plugin documentation, generated from its plugins' types (the
+ * shape) and their builder docs (`plugin.docs`, the prose), is served as `virtual:widget-docs/<showcase id>`. `vite.config.ts`, `vitest.config.ts` and the repository's root `vitest.config.ts` (project `lab`) all call it. The
  * paths are absolute, so the result does not depend on which Vite root loads the plugin, and the disk cache always lives
  * in this app's `node_modules/.cache/widget-docs`. Generating imports each System module (its top-level code runs).
  */

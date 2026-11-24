@@ -8,42 +8,33 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { TextFieldConfig, TextFieldRawConfig } from '../config'
 import type { Density, I18nText } from '../domain'
-import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
+import { createWidgetPlugin } from '@deviltea/widget-core'
 import { checkTextFieldConfig, resolveTextFieldConfig } from '../config'
+import { textFieldConfigDocs, textFieldRawConfigDocs } from '../docs'
 import { isDensity, isString, textProblem } from '../domain'
 import { checkInsideSection, checkProvider, densityReads } from './structure'
 
-/**
- * A labelled text box. State `value`. Properties: `label`, `placeholder`, `maxLength`, `message` (the validation message of
- * the current value, or null while it is acceptable) and `density` (read from the Appearance named in the `appearance` config,
- * through dep.widget(id)).
- */
 export interface TextFieldInterfaces extends WidgetInterfaces {
-	/** The label, a placeholder, how many characters are acceptable, the Appearance it reads and the value at the start. */
 	config: { raw: TextFieldRawConfig, resolved: TextFieldConfig }
 	state: {
-		/** The text, as typed: any string is accepted. */
 		value: string
 	}
 	properties: {
-		/** The label per language. */
 		label: I18nText
-		/** The placeholder per language; `null` without one. */
 		placeholder: I18nText | null
-		/** How many characters are acceptable. */
 		maxLength: number
-		/** The validation message of the current value per language; `null` while it is acceptable. */
 		message: I18nText | null
-		/** `comfortable` or `compact`: the `density` State of the Appearance named in the `appearance` config, read through `dep.widget(id)`; `comfortable` when it cannot be read. */
 		density: Density
 	}
 }
 
 export const TextFieldPlugin = createWidgetPlugin('TextField')
-	.description(undocumented)
+	.description('A labelled text box. State `value`. Properties: `label`, `placeholder`, `maxLength`, `message` (the validation message of the current value, or null while it is acceptable) and `density` (read from the Appearance named in the `appearance` config, through dep.widget(id)).')
 	.interfaces<TextFieldInterfaces>()
 	.config({
-		description: undocumented,
+		description: 'The label, a placeholder, how many characters are acceptable, the Appearance it reads and the value at the start.',
+		raw: textFieldRawConfigDocs,
+		resolved: textFieldConfigDocs,
 		validate: (input, ctx): input is TextFieldRawConfig => {
 			checkTextFieldConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -57,16 +48,16 @@ export const TextFieldPlugin = createWidgetPlugin('TextField')
 			checkProvider(ctx, ctx.config.appearance, 'Appearance', 'appearance')
 	})
 	.state(state => state.value({
-		description: undocumented,
+		description: 'The text, as typed: any string is accepted.',
 		validate: (input): input is string => isString(input),
 		default: ({ config }) => config.value,
 	}))
 	.properties(properties => properties
-		.label({ description: undocumented, compute: ({ config }) => config.label })
-		.placeholder({ description: undocumented, compute: ({ config }) => config.placeholder })
-		.maxLength({ description: undocumented, compute: ({ config }) => config.maxLength })
+		.label({ description: 'The label per language.', compute: ({ config }) => config.label })
+		.placeholder({ description: 'The placeholder per language; `null` without one.', compute: ({ config }) => config.placeholder })
+		.maxLength({ description: 'How many characters are acceptable.', compute: ({ config }) => config.maxLength })
 		.message({
-			description: undocumented,
+			description: 'The validation message of the current value per language; `null` while it is acceptable.',
 			registerDeps: ({ dep }) => ({ value: dep.self.state.get('value') }),
 			compute: ({ deps, config }) => {
 				const value = deps.value()
@@ -74,7 +65,7 @@ export const TextFieldPlugin = createWidgetPlugin('TextField')
 			},
 		})
 		.density({
-			description: undocumented,
+			description: '`comfortable` or `compact`: the `density` State of the Appearance named in the `appearance` config, read through `dep.widget(id)`; `comfortable` when it cannot be read.',
 			registerDeps: ({ dep, blueprint, config }) => densityReads(dep, blueprint, config.appearance),
 			compute: ({ deps }) => {
 				const density = deps.density?.()

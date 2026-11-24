@@ -11,54 +11,39 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { MultipleChoiceConfig, MultipleChoiceRawConfig } from '../config'
 import type { AnswerError, OptionState, QuestionText } from '../domain'
-import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
+import { createWidgetPlugin } from '@deviltea/widget-core'
 import { checkMultipleChoiceConfig, resolveMultipleChoiceConfig } from '../config'
+import { answerErrorDocs, multipleChoiceConfigDocs, multipleChoiceRawConfigDocs, optionStateDocs, questionTextDocs } from '../docs'
 import { builtinError, questionText } from '../domain'
 import { checkQuestion } from './check-question'
 import { computeOptions, computeRequired, computeVisible, optionReads, questionErrors, requiredReads, ruleReads, selectionOf, visibleReads } from './question-members'
 import { languageFrom, languageReads } from './reads'
 
-/**
- * A pick-several question. The chosen option values are State `answer`. Properties: `text` (label, help and option labels
- * in the survey language), `visible`, `required`, `options` (each option's visible and enabled flags), `value` (the
- * effective answer: only the visible and enabled chosen options; null while hidden or when none remains) and `errors`
- * (empty while hidden). Method `clear()` empties the answer.
- */
 export interface MultipleChoiceInterfaces extends WidgetInterfaces {
-	/**
-	 * Label and help text per language, options (value, label per language, visibleWhen, enabledWhen), minSelected,
-	 * maxSelected, required (true, false or a condition), visibleWhen, and custom rules.
-	 */
 	config: { raw: MultipleChoiceRawConfig, resolved: MultipleChoiceConfig }
 	state: {
-		/** The chosen option values; `null` while nothing is chosen. */
 		answer: readonly string[] | null
 	}
 	properties: {
-		/** The label, help text and option labels in the survey language. */
 		text: QuestionText
-		/** `visibleWhen` evaluated against the other questions' effective answers; `true` without one. */
 		visible: boolean
-		/** Whether an answer is required (`required`, or its condition), whatever the visibility. */
 		required: boolean
-		/** Each option's value and its visible and enabled flags. */
 		options: readonly OptionState[]
-		/** The effective answer: only the visible and enabled chosen options; `null` while hidden or when none remains. */
 		value: readonly string[] | null
-		/** The answer errors in the survey language: `required`, the built-in checks, then the custom rules. Empty while hidden. */
 		errors: readonly AnswerError[]
 	}
 	methods: {
-		/** Empties the answer. */
 		clear: () => void
 	}
 }
 
 export const MultipleChoicePlugin = createWidgetPlugin('MultipleChoice')
-	.description(undocumented)
+	.description('A pick-several question. The chosen option values are State `answer`. Properties: `text` (label, help and option labels in the survey language), `visible`, `required`, `options` (each option\'s visible and enabled flags), `value` (the effective answer: only the visible and enabled chosen options; null while hidden or when none remains) and `errors` (empty while hidden). Method `clear()` empties the answer.')
 	.interfaces<MultipleChoiceInterfaces>()
 	.config({
-		description: undocumented,
+		description: 'Label and help text per language, options (value, label per language, visibleWhen, enabledWhen), minSelected, maxSelected, required (true, false or a condition), visibleWhen, and custom rules.',
+		raw: multipleChoiceRawConfigDocs,
+		resolved: multipleChoiceConfigDocs,
 		validate: (input, ctx): input is MultipleChoiceRawConfig => {
 			checkMultipleChoiceConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -67,33 +52,35 @@ export const MultipleChoicePlugin = createWidgetPlugin('MultipleChoice')
 	})
 	.structure(ctx => checkQuestion(ctx, ctx.config))
 	.state(state => state.answer({
-		description: undocumented,
+		description: 'The chosen option values; `null` while nothing is chosen.',
 		validate: (input): input is readonly string[] | null => input === null || (Array.isArray(input) && input.every(item => typeof item === 'string')),
 		default: () => null,
 	}))
 	.properties(properties => properties
 		.text({
-			description: undocumented,
+			description: 'The label, help text and option labels in the survey language.',
+			ref: questionTextDocs,
 			registerDeps: ({ dep, blueprint }) => languageReads(dep, blueprint),
 			compute: ({ deps, config }) => questionText(config, languageFrom(deps)),
 		})
 		.visible({
-			description: undocumented,
+			description: '`visibleWhen` evaluated against the other questions\' effective answers; `true` without one.',
 			registerDeps: ({ dep, config }) => visibleReads(dep, config),
 			compute: ({ deps, config }) => computeVisible(config, deps),
 		})
 		.required({
-			description: undocumented,
+			description: 'Whether an answer is required (`required`, or its condition), whatever the visibility.',
 			registerDeps: ({ dep, config }) => requiredReads(dep, config),
 			compute: ({ deps, config }) => computeRequired(config, deps),
 		})
 		.options({
-			description: undocumented,
+			description: 'Each option\'s value and its visible and enabled flags.',
+			items: { ref: optionStateDocs },
 			registerDeps: ({ dep, config }) => optionReads(dep, config.options),
 			compute: ({ deps, config }) => computeOptions(config.options, deps),
 		})
 		.value({
-			description: undocumented,
+			description: 'The effective answer: only the visible and enabled chosen options; `null` while hidden or when none remains.',
 			registerDeps: ({ dep }) => ({
 				answer: dep.self.state.get('answer'),
 				visible: dep.self.properties.get('visible'),
@@ -113,7 +100,8 @@ export const MultipleChoicePlugin = createWidgetPlugin('MultipleChoice')
 			},
 		})
 		.errors({
-			description: undocumented,
+			description: 'The answer errors in the survey language: `required`, the built-in checks, then the custom rules. Empty while hidden.',
+			items: { ref: answerErrorDocs },
 			registerDeps: ({ dep, config, widget, blueprint }) => ({
 				visible: dep.self.properties.get('visible'),
 				required: dep.self.properties.get('required'),
@@ -141,7 +129,7 @@ export const MultipleChoicePlugin = createWidgetPlugin('MultipleChoice')
 			},
 		}))
 	.methods(methods => methods.clear({
-		description: undocumented,
+		description: 'Empties the answer.',
 		registerDeps: ({ dep }) => dep.self.state.set('answer'),
 		validateArgs: (args): args is [] => args.length === 0,
 		execute: ({ deps }) => {

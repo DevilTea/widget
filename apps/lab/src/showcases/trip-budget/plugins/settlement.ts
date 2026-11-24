@@ -15,41 +15,35 @@
 
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { BalanceEntry, SettlementOutcome, TripView } from '../domain'
-import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
+import { createWidgetPlugin } from '@deviltea/widget-core'
+import { balanceEntryDocs, settlementOutcomeDocs, tripViewDocs } from '../docs'
 import { settle } from '../domain'
 import { childIds, currencyIdOf, isBoolean, isNumber, isString, viewFrom, viewReads } from './reads'
 import { checkInsideTrip } from './structure'
 
-/**
- * The settlement summary. Properties: `view`, `balances` (every person's balance in cents), `total` (what the trip cost)
- * and `transfers` (who pays whom, rounded to the Currency's `roundStep` by calling its read-only Method `roundTransfer`,
- * with the rounding gap).
- */
 export interface SettlementInterfaces extends WidgetInterfaces {
 	properties: {
-		/** The trip language and the base currency, derived from the root Trip and the Currency. */
 		view: TripView
-		/** Every person's balance in cents; positive means they get money back. */
 		balances: readonly BalanceEntry[]
-		/** What the trip cost: the sum of every counted expense's `amountBase`. */
 		total: number
-		/** Who pays whom to clear the balances, each payment rounded to the Currency's `roundStep`, with the rounding gap. */
 		transfers: SettlementOutcome
 	}
 }
 
 export const SettlementPlugin = createWidgetPlugin('Settlement')
-	.description(undocumented)
+	.description('The settlement summary. Properties: `view`, `balances` (every person\'s balance in cents), `total` (what the trip cost) and `transfers` (who pays whom, rounded to the Currency\'s `roundStep` by calling its read-only Method `roundTransfer`, with the rounding gap).')
 	.interfaces<SettlementInterfaces>()
 	.structure(ctx => checkInsideTrip(ctx, 'Settlement'))
 	.properties(properties => properties
 		.view({
-			description: undocumented,
+			description: 'The trip language and the base currency, derived from the root Trip and the Currency.',
+			ref: tripViewDocs,
 			registerDeps: ({ dep, blueprint }) => viewReads(dep, blueprint),
 			compute: ({ deps }) => viewFrom(deps),
 		})
 		.balances({
-			description: undocumented,
+			description: 'Every person\'s balance in cents; positive means they get money back.',
+			items: { ref: balanceEntryDocs },
 			registerDeps: ({ dep, blueprint }) => ({
 				people: Object.fromEntries(childIds(blueprint, 'people', 'Person')
 					.map((id) => {
@@ -70,7 +64,7 @@ export const SettlementPlugin = createWidgetPlugin('Settlement')
 				}),
 		})
 		.total({
-			description: undocumented,
+			description: 'What the trip cost: the sum of every counted expense\'s `amountBase`.',
 			registerDeps: ({ dep, blueprint }) => ({
 				expenses: Object.fromEntries(childIds(blueprint, 'expenses', 'Expense')
 					.map((id) => {
@@ -94,7 +88,8 @@ export const SettlementPlugin = createWidgetPlugin('Settlement')
 				}, 0),
 		})
 		.transfers({
-			description: undocumented,
+			description: 'Who pays whom to clear the balances, each payment rounded to the Currency\'s `roundStep`, with the rounding gap.',
+			ref: settlementOutcomeDocs,
 			registerDeps: ({ dep, blueprint }) => {
 				const currency = currencyIdOf(blueprint)
 				return {

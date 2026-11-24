@@ -7,50 +7,43 @@ import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { DeliveryConfig } from '../config'
 import type { Adjustment } from '../domain'
 import type { DeliveryRawConfig } from '../raw-config'
-import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
+import { createWidgetPlugin } from '@deviltea/widget-core'
 import { resolveDeliveryConfig } from '../config'
+import { adjustmentDocs, deliveryConfigDocs, deliveryRawConfigDocs } from '../docs'
 import { deliveryConfigSchema, deliveryMethodSchema } from '../schemas'
 import { guard } from '../standard-schema'
 import { subtotalReads, valueOr } from './reads'
 import { checkInsideQuote } from './structure'
 
-/**
- * Pick-up or courier delivery. Config: `label`, `courierCents`, an optional `freeOverCents` and the starting `method`.
- * State `method`: `pickup` or `courier`. Property `adjustment`: the courier fee, waived from `freeOverCents` on
- * (`reason: free-over-threshold`).
- */
 export interface DeliveryInterfaces extends WidgetInterfaces {
-	/**
-	 * The label, the courier fee, the subtotal from which it is free and the starting method. Validated by a Valibot schema
-	 * through Standard Schema.
-	 */
 	config: { raw: DeliveryRawConfig, resolved: DeliveryConfig }
 	state: {
-		/** How the order reaches the customer: `pickup` or `courier`. */
 		method: 'pickup' | 'courier'
 	}
 	properties: {
-		/** The courier fee in minor units, waived from `freeOverCents` on; 0 for pick-up. */
 		adjustment: Adjustment
 	}
 }
 
 export const DeliveryPlugin = createWidgetPlugin('Delivery')
-	.description(undocumented)
+	.description('Pick-up or courier delivery. Config: `label`, `courierCents`, an optional `freeOverCents` and the starting `method`. State `method`: `pickup` or `courier`. Property `adjustment`: the courier fee, waived from `freeOverCents` on (`reason: free-over-threshold`).')
 	.interfaces<DeliveryInterfaces>()
 	.config({
-		description: undocumented,
+		description: 'The label, the courier fee, the subtotal from which it is free and the starting method. Validated by a Valibot schema through Standard Schema.',
+		raw: deliveryRawConfigDocs,
+		resolved: deliveryConfigDocs,
 		validate: guard(deliveryConfigSchema),
 		resolve: resolveDeliveryConfig,
 	})
 	.structure(ctx => checkInsideQuote(ctx, 'Delivery'))
 	.state(state => state.method({
-		description: undocumented,
+		description: 'How the order reaches the customer: `pickup` or `courier`.',
 		validate: guard(deliveryMethodSchema),
 		default: ({ config }) => config.method,
 	}))
 	.properties(properties => properties.adjustment({
-		description: undocumented,
+		description: 'The courier fee in minor units, waived from `freeOverCents` on; 0 for pick-up.',
+		ref: adjustmentDocs,
 		registerDeps: ({ dep, blueprint }) => ({
 			method: dep.self.state.get('method'),
 			...subtotalReads(dep, blueprint),

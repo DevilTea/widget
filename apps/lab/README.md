@@ -196,7 +196,7 @@ layout** and a Developer submenu (Implementation, Document Tools).
   or the JSON syntax error); each row jumps to its place in the JSON, which also gets error squiggles. Structure shows the same
   problems at the fields they are about, at the widget for the others, and lists the other widgets' problems with a way to each.
   A reference to a widget that is not there (a condition's `question` with a typo) is placed at the value that names it, in both
-  views, when the plugin's config documents that value as a widget reference (`@widgetRef`).
+  views, when the plugin's config documents that value as a widget reference (a `WidgetRef<…>` type).
   The preview shows a plain-language notice with **Show problems** while it still shows the last working version; it, and the
   header's problems button, show the problems in the open Edit view.
 

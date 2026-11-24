@@ -19,43 +19,36 @@ import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { VolumeDiscountConfig } from '../config'
 import type { Adjustment } from '../domain'
 import type { VolumeDiscountRawConfig } from '../raw-config'
-import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
+import { createWidgetPlugin } from '@deviltea/widget-core'
 import { resolveVolumeDiscountConfig } from '../config'
+import { adjustmentDocs, volumeDiscountConfigDocs, volumeDiscountRawConfigDocs } from '../docs'
 import { percentOf } from '../domain'
 import { volumeDiscountConfigSchema } from '../schemas'
 import { guard } from '../standard-schema'
 import { quantityReads, subtotalReads, valueOr } from './reads'
 import { checkInsideQuote } from './structure'
 
-/**
- * A percentage off the subtotal by the total number of pieces. Config: `label` and the `tiers` (`minQuantity`, `percent`).
- * Property `adjustment`: the (negative) amount. Tiers may be in any order and the tier with the largest `minQuantity` that
- * the total quantity reaches applies. Known defect: it assumes the smallest tier starts at 1, so a quantity below every tier
- * makes `adjustment` throw instead of reporting a diagnostic.
- */
 export interface VolumeDiscountInterfaces extends WidgetInterfaces {
-	/**
-	 * The label and the volume tiers (in any order; percentages count to two decimals). Validated by a Valibot schema through
-	 * Standard Schema; the schema does not say that the smallest tier must start at 1.
-	 */
 	config: { raw: VolumeDiscountRawConfig, resolved: VolumeDiscountConfig }
 	properties: {
-		/** The discount: a negative amount in minor units. Throws when the total quantity is below every tier. */
 		adjustment: Adjustment
 	}
 }
 
 export const VolumeDiscountPlugin = createWidgetPlugin('VolumeDiscount')
-	.description(undocumented)
+	.description('A percentage off the subtotal by the total number of pieces. Config: `label` and the `tiers` (`minQuantity`, `percent`). Property `adjustment`: the (negative) amount. Tiers may be in any order and the tier with the largest `minQuantity` that the total quantity reaches applies. Known defect: it assumes the smallest tier starts at 1, so a quantity below every tier makes `adjustment` throw instead of reporting a diagnostic.')
 	.interfaces<VolumeDiscountInterfaces>()
 	.config({
-		description: undocumented,
+		description: 'The label and the volume tiers (in any order; percentages count to two decimals). Validated by a Valibot schema through Standard Schema; the schema does not say that the smallest tier must start at 1.',
+		raw: volumeDiscountRawConfigDocs,
+		resolved: volumeDiscountConfigDocs,
 		validate: guard(volumeDiscountConfigSchema),
 		resolve: resolveVolumeDiscountConfig,
 	})
 	.structure(ctx => checkInsideQuote(ctx, 'VolumeDiscount'))
 	.properties(properties => properties.adjustment({
-		description: undocumented,
+		description: 'The discount: a negative amount in minor units. Throws when the total quantity is below every tier.',
+		ref: adjustmentDocs,
 		registerDeps: ({ dep, blueprint }) => ({ ...subtotalReads(dep, blueprint), ...quantityReads(dep, blueprint) }),
 		compute: ({ deps, config }): Adjustment => {
 			const quantityRead = deps.totalQuantity?.()

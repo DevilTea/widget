@@ -8,32 +8,27 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { AppearanceConfig, AppearanceRawConfig } from '../config'
 import type { Density, Mode } from '../domain'
-import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
+import { createWidgetPlugin } from '@deviltea/widget-core'
 import { checkAppearanceConfig, resolveAppearanceConfig } from '../config'
+import { appearanceConfigDocs, appearanceRawConfigDocs } from '../docs'
 import { isDensity, isMode } from '../domain'
 import { checkAtMostOneAppearance } from './structure'
 
-/**
- * A capability widget: how dense the settings page is (State `density`: `comfortable` or `compact`) and which colour mode it
- * wants (State `mode`: `auto`, `light` or `dark`; `auto` follows the host theme). Fields read `density` by naming this widget
- * in their `appearance` config; there is no nearest-ancestor lookup.
- */
 export interface AppearanceInterfaces extends WidgetInterfaces {
-	/** The density and the colour mode at the start. */
 	config: { raw: AppearanceRawConfig, resolved: AppearanceConfig }
 	state: {
-		/** How dense the page is: `comfortable` or `compact`. */
 		density: Density
-		/** The colour mode: `auto` (follow the host theme), `light` or `dark`. */
 		mode: Mode
 	}
 }
 
 export const AppearancePlugin = createWidgetPlugin('Appearance')
-	.description(undocumented)
+	.description('A capability widget: how dense the settings page is (State `density`: `comfortable` or `compact`) and which colour mode it wants (State `mode`: `auto`, `light` or `dark`; `auto` follows the host theme). Fields read `density` by naming this widget in their `appearance` config; there is no nearest-ancestor lookup.')
 	.interfaces<AppearanceInterfaces>()
 	.config({
-		description: undocumented,
+		description: 'The density and the colour mode at the start.',
+		raw: appearanceRawConfigDocs,
+		resolved: appearanceConfigDocs,
 		validate: (input, ctx): input is AppearanceRawConfig => {
 			checkAppearanceConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -43,12 +38,12 @@ export const AppearancePlugin = createWidgetPlugin('Appearance')
 	.structure(ctx => checkAtMostOneAppearance(ctx))
 	.state(state => state
 		.density({
-			description: undocumented,
+			description: 'How dense the page is: `comfortable` or `compact`.',
 			validate: (input): input is Density => isDensity(input),
 			default: ({ config }) => config.density,
 		})
 		.mode({
-			description: undocumented,
+			description: 'The colour mode: `auto` (follow the host theme), `light` or `dark`.',
 			validate: (input): input is Mode => isMode(input),
 			default: ({ config }) => config.mode,
 		}))
