@@ -4,8 +4,9 @@ title: '@deviltea/widget-vue'
 
 # @deviltea/widget-vue
 
-> **Upgrading?** From 0.2, follow the [migration guide to 0.3](../migration/0.3#vue-adapter). From 0.0.x, follow the
-> [migration guide to 0.1](../migration/0.1).
+> **Upgrading?** From 0.3, see the [migration guide to 0.4](../migration/0.4#vue-adapter): the adapter has no change,
+> but its plugins move to the 0.4 builder. From 0.2, follow the [migration guide to 0.3](../migration/0.3#vue-adapter).
+> From 0.0.x, follow the [migration guide to 0.1](../migration/0.1).
 
 `@deviltea/widget-vue` is a thin Vue 3 integration over
 [`@deviltea/widget-core`](./widget-core) Runtime semantics. It owns exactly
@@ -205,10 +206,11 @@ matching section of the plugin's `Interfaces`. TypeScript carries a property's
 JSDoc through such a mapping, so hovering `count` in `useState().count`, or
 `increment` in `useMethods().increment`, shows the text written on that member
 in the Interfaces; the same holds for the diagnostics surfaces and for `emit`.
-This is the one place the documentation of a plugin lives (see
-[Interfaces are the single source](../migration/0.3)). A test reads the JSDoc
-through the TypeScript checker so a regression to a mapping over a key union,
-which drops it, fails the build.
+Such a comment is an editor convenience only: a plugin's documentation is
+written in its builder and kept on `plugin.docs` (see
+[Documentation in the builder](./widget-core#documentation-in-the-builder)), and
+no tool reads the JSDoc. A test reads the JSDoc through the TypeScript checker
+so a regression to a mapping over a key union, which drops it, fails the build.
 
 Because a failed Property or Method projects to `null` (see below), a member
 whose own type includes `null` cannot distinguish "failed" from a legitimate

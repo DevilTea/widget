@@ -10,6 +10,6 @@ The Widget packages are developed together in this repository and released toget
 - [`@deviltea/widget-inspector`](./widget-inspector) — read-only, versioned Inspector protocol, client, DOM agent, and inspect-anchor contract (`0.x` experimental).
 - [`@deviltea/widget-vue`](./widget-vue) — thin Vue 3 renderer/reactivity integration over `@deviltea/widget-core`.
 
-Upgrading from the published `0.0.x` packages? Follow the [migration guide to 0.1](../migration/0.1).
+Upgrading from `0.3`? Follow the [migration guide to 0.4](../migration/0.4). Upgrading from the published `0.0.x` packages? Start with the [migration guide to 0.1](../migration/0.1).
 
 The private [Widget Lab](../lab/){target="_self"} exercises these packages as a real downstream application and architecture probe.
