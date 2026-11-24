@@ -5,7 +5,7 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { SectionConfig, SectionRawConfig } from '../config'
 import type { I18nText } from '../domain'
-import { createWidgetPlugin } from '@deviltea/widget-core'
+import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
 import { checkSectionConfig, resolveSectionConfig } from '../config'
 import { isFieldType } from './structure'
 
@@ -29,8 +29,10 @@ export interface SectionInterfaces extends WidgetInterfaces {
 }
 
 export const SectionPlugin = createWidgetPlugin('Section')
+	.description(undocumented)
 	.interfaces<SectionInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input, ctx): input is SectionRawConfig => {
 			checkSectionConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -39,6 +41,7 @@ export const SectionPlugin = createWidgetPlugin('Section')
 	})
 	.slots({
 		fields: {
+			description: undocumented,
 			validateStructure: ({ children, addDiagnostic }) => {
 				children.forEach((child, index) => {
 					if (child.resolved && !isFieldType(child.type))
@@ -53,6 +56,6 @@ export const SectionPlugin = createWidgetPlugin('Section')
 			addDiagnostic({ message: 'A Section must be placed in the sections of a SettingsPage.', reason: 'outside-settings-page' })
 	})
 	.properties(properties => properties
-		.title({ compute: ({ config }) => config.title })
-		.description({ compute: ({ config }) => config.description }))
+		.title({ description: undocumented, compute: ({ config }) => config.title })
+		.description({ description: undocumented, compute: ({ config }) => config.description }))
 	.done()

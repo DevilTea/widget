@@ -8,7 +8,7 @@ import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { SalesTaxConfig } from '../config'
 import type { Adjustment } from '../domain'
 import type { SalesTaxRawConfig } from '../raw-config'
-import { createWidgetPlugin } from '@deviltea/widget-core'
+import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
 import { resolveSalesTaxConfig } from '../config'
 import { percentOf } from '../domain'
 import { salesTaxConfigSchema } from '../schemas'
@@ -30,13 +30,16 @@ export interface SalesTaxInterfaces extends WidgetInterfaces {
 }
 
 export const SalesTaxPlugin = createWidgetPlugin('SalesTax')
+	.description(undocumented)
 	.interfaces<SalesTaxInterfaces>()
 	.config({
+		description: undocumented,
 		validate: guard(salesTaxConfigSchema),
 		resolve: resolveSalesTaxConfig,
 	})
 	.structure(ctx => checkInsideQuote(ctx, 'SalesTax'))
 	.properties(properties => properties.adjustment({
+		description: undocumented,
 		registerDeps: ({ dep, blueprint }) => taxableReads(dep, blueprint),
 		compute: ({ deps, config }): Adjustment => ({
 			type: 'SalesTax',

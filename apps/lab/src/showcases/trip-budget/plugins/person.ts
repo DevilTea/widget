@@ -15,7 +15,7 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { PersonConfig, PersonRawConfig } from '../config'
 import type { LedgerEntry, PersonLedger, TripView } from '../domain'
-import { createWidgetPlugin } from '@deviltea/widget-core'
+import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
 import { checkPersonConfig, resolvePersonConfig } from '../config'
 import { childIds, isBoolean, isNullableString, isNumber, isNumberRecord, isString, viewFrom, viewReads } from './reads'
 import { checkInsideTrip, checkPersonId } from './structure'
@@ -45,8 +45,10 @@ export interface PersonInterfaces extends WidgetInterfaces {
 }
 
 export const PersonPlugin = createWidgetPlugin('Person')
+	.description(undocumented)
 	.interfaces<PersonInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input, ctx): input is PersonRawConfig => {
 			checkPersonConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -58,12 +60,14 @@ export const PersonPlugin = createWidgetPlugin('Person')
 		checkPersonId(ctx)
 	})
 	.properties(properties => properties
-		.name({ compute: ({ config }) => config.name })
+		.name({ description: undocumented, compute: ({ config }) => config.name })
 		.view({
+			description: undocumented,
 			registerDeps: ({ dep, blueprint }) => viewReads(dep, blueprint),
 			compute: ({ deps }) => viewFrom(deps),
 		})
 		.paid({
+			description: undocumented,
 			registerDeps: ({ dep, blueprint }) => ({
 				expenses: Object.fromEntries(childIds(blueprint, 'expenses', 'Expense')
 					.map((id) => {
@@ -93,6 +97,7 @@ export const PersonPlugin = createWidgetPlugin('Person')
 				}, 0),
 		})
 		.owed({
+			description: undocumented,
 			registerDeps: ({ dep, blueprint }) => ({
 				expenses: Object.fromEntries(childIds(blueprint, 'expenses', 'Expense')
 					.map((id) => {
@@ -110,6 +115,7 @@ export const PersonPlugin = createWidgetPlugin('Person')
 				}, 0),
 		})
 		.balance({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({
 				paid: dep.self.properties.get('paid'),
 				owed: dep.self.properties.get('owed'),
@@ -121,6 +127,7 @@ export const PersonPlugin = createWidgetPlugin('Person')
 			},
 		})
 		.ledger({
+			description: undocumented,
 			registerDeps: ({ dep, blueprint }) => ({
 				expenses: Object.fromEntries(childIds(blueprint, 'expenses', 'Expense')
 					.map((id) => {

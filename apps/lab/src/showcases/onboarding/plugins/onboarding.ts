@@ -19,7 +19,7 @@
 import type { WidgetContract, WidgetInterfaces } from '@deviltea/widget-core'
 import type { OnboardingConfig, OnboardingRawConfig } from '../config'
 import type { Completion, I18nText, Progress, StepChange, StepSummary, StepType } from '../domain'
-import { createWidgetPlugin } from '@deviltea/widget-core'
+import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
 import { checkOnboardingConfig, resolveOnboardingConfig } from '../config'
 import { describeValue, isBoolean, isNumber, isStepType } from '../domain'
 import { stepAnswerReads, stepSummaryReads } from './reads'
@@ -110,8 +110,10 @@ export interface OnboardingInterfaces extends WidgetInterfaces {
 }
 
 export const OnboardingPlugin = createWidgetPlugin('Onboarding')
+	.description(undocumented)
 	.interfaces<OnboardingInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input, ctx): input is OnboardingRawConfig => {
 			checkOnboardingConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -120,6 +122,7 @@ export const OnboardingPlugin = createWidgetPlugin('Onboarding')
 	})
 	.slots({
 		steps: {
+			description: undocumented,
 			validateStructure: ({ children, addDiagnostic }) => {
 				if (children.length === 0)
 					addDiagnostic({ message: 'An Onboarding needs at least one step.', reason: 'no-steps' })
@@ -139,16 +142,19 @@ export const OnboardingPlugin = createWidgetPlugin('Onboarding')
 	})
 	.state(state => state
 		.current({
+			description: undocumented,
 			validate: (input): input is number => isNumber(input) && Number.isInteger(input) && input >= 0,
 			default: ({ config }) => config.startStep,
 		})
 		.finished({
+			description: undocumented,
 			validate: (input): input is boolean => isBoolean(input),
 			default: () => false,
 		}))
 	.properties(properties => properties
-		.title({ compute: ({ config }) => config.title })
+		.title({ description: undocumented, compute: ({ config }) => config.title })
 		.steps({
+			description: undocumented,
 			registerDeps: ({ dep, blueprint }) => ({ steps: stepSummaryReads(dep, blueprint) }),
 			compute: ({ deps, blueprint }) => stepChildrenOfView(blueprint)
 				.flatMap(({ id, type }) => {
@@ -163,6 +169,7 @@ export const OnboardingPlugin = createWidgetPlugin('Onboarding')
 				}),
 		})
 		.progress({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ steps: dep.self.properties.get('steps'), current: dep.self.state.get('current') }),
 			compute: ({ deps }) => {
 				const steps = deps.steps()
@@ -182,6 +189,7 @@ export const OnboardingPlugin = createWidgetPlugin('Onboarding')
 			},
 		})
 		.answers({
+			description: undocumented,
 			registerDeps: ({ dep, blueprint }) => ({ steps: stepAnswerReads(dep, blueprint) }),
 			compute: ({ deps, blueprint }) => Object.fromEntries(stepChildrenOfView(blueprint)
 				.flatMap(({ id }) => {
@@ -191,6 +199,7 @@ export const OnboardingPlugin = createWidgetPlugin('Onboarding')
 		}))
 	.methods(methods => methods
 		.canEnter({
+			description: undocumented,
 			validateArgs: (args, { addDiagnostic }): args is [number] => {
 				const ok = args.length === 1 && typeof args[0] === 'number' && Number.isFinite(args[0])
 				if (!ok)
@@ -204,6 +213,7 @@ export const OnboardingPlugin = createWidgetPlugin('Onboarding')
 			},
 		})
 		.next({
+			description: undocumented,
 			validateArgs: (args): args is [] => args.length === 0,
 			registerDeps: ({ dep }) => ({
 				progress: dep.self.properties.get('progress'),
@@ -248,6 +258,7 @@ export const OnboardingPlugin = createWidgetPlugin('Onboarding')
 			},
 		})
 		.back({
+			description: undocumented,
 			validateArgs: (args): args is [] => args.length === 0,
 			registerDeps: ({ dep }) => ({
 				progress: dep.self.properties.get('progress'),
@@ -275,6 +286,7 @@ export const OnboardingPlugin = createWidgetPlugin('Onboarding')
 			},
 		})
 		.goTo({
+			description: undocumented,
 			validateArgs: (args, { addDiagnostic, hasAnyDiagnostic }): args is [number] => {
 				if (args.length !== 1) {
 					addDiagnostic({ message: `goTo(index) takes exactly one argument, the step number counted from 0, got ${args.length}.`, reason: 'wrong-arity' })
@@ -324,6 +336,7 @@ export const OnboardingPlugin = createWidgetPlugin('Onboarding')
 			},
 		})
 		.finish({
+			description: undocumented,
 			validateArgs: (args): args is [] => args.length === 0,
 			registerDeps: ({ dep }) => ({
 				progress: dep.self.properties.get('progress'),
@@ -352,5 +365,5 @@ export const OnboardingPlugin = createWidgetPlugin('Onboarding')
 				return true
 			},
 		}))
-	.events(['stepChanged', 'completed'])
+	.events({ stepChanged: undocumented, completed: undocumented })
 	.done()

@@ -1,6 +1,6 @@
 import type { WidgetChild, WidgetInterfaces } from '@deviltea/widget-core'
 import type { InspectorRequestResult } from '@deviltea/widget-inspector/protocol'
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 import { createInspectorAgent } from '@deviltea/widget-inspector/agent'
 import { createMessagePortChannelHub } from '@deviltea/widget-inspector/channel'
 import { createInspectorClient, InspectorClientError } from '@deviltea/widget-inspector/client'
@@ -804,13 +804,16 @@ export async function runPreviewReadinessTimeoutContract(): Promise<PreviewReadi
 
 export async function runDevtoolsGeometryBrowserContracts(): Promise<DevtoolsGeometryBrowserContractResult> {
 	const RootPlugin = createWidgetPlugin('Root')
+		.description(undocumented)
 		.interfaces<GeometryFixtureRootInterfaces>()
-		.slots({ items: {} })
+		.slots({ items: { description: undocumented } })
 		.done()
 
 	const CounterPlugin = createWidgetPlugin('Counter')
+		.description(undocumented)
 		.interfaces<GeometryFixtureCounterInterfaces>()
 		.state(state => state.count({
+			description: undocumented,
 			validate: (input): input is number => typeof input === 'number',
 			default: () => 0,
 		}))

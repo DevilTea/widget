@@ -7,7 +7,7 @@
 
 import type { WidgetChild } from '@deviltea/widget-core'
 import type { ResolvedBlueprintInspectionNode } from '@deviltea/widget-core/inspection'
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 import { describe, expect, it } from 'vitest'
 import { projectSemanticGraph } from './projection'
@@ -23,8 +23,9 @@ interface ContainerInterfaces {
 }
 
 const containerPlugin = createWidgetPlugin('graph-container')
+	.description(undocumented)
 	.interfaces<ContainerInterfaces>()
-	.slots({ children: {} })
+	.slots({ children: { description: undocumented } })
 	.done()
 
 interface TargetInterfaces {
@@ -34,10 +35,11 @@ interface TargetInterfaces {
 }
 
 const targetPlugin = createWidgetPlugin('graph-target')
+	.description(undocumented)
 	.interfaces<TargetInterfaces>()
-	.state(state => state.value({ validate: (input): input is number => typeof input === 'number', default: () => 1 }))
-	.properties(properties => properties.val({ compute: () => 2 }))
-	.methods(methods => methods.run({ validateArgs: (args): args is [] => args.length === 0, execute: () => 3 }))
+	.state(state => state.value({ description: undocumented, validate: (input): input is number => typeof input === 'number', default: () => 1 }))
+	.properties(properties => properties.val({ description: undocumented, compute: () => 2 }))
+	.methods(methods => methods.run({ description: undocumented, validateArgs: (args): args is [] => args.length === 0, execute: () => 3 }))
 	.done()
 
 interface ConsumerInterfaces {
@@ -53,9 +55,11 @@ interface ConsumerInterfaces {
 }
 
 const consumerPlugin = createWidgetPlugin('graph-consumer')
+	.description(undocumented)
 	.interfaces<ConsumerInterfaces>()
 	.properties(properties => properties
 		.reader({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({
 				s: dep.widget('target').state.get('value'),
 				p: dep.widget('target').properties.get('val'),
@@ -64,18 +68,22 @@ const consumerPlugin = createWidgetPlugin('graph-consumer')
 			compute: () => 0,
 		})
 		.isolated({
+			description: undocumented,
 			compute: () => 0,
 		})
 		.viaAbsent({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ v: dep.widget('missing-optional')
 				.optional().state.get('value') }),
 			compute: () => 0,
 		})
 		.viaInvalid({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ v: dep.widget('missing-required').state.get('value') }),
 			compute: () => 0,
 		}))
 	.methods(methods => methods.writer({
+		description: undocumented,
 		registerDeps: ({ dep }) => ({ setValue: dep.widget('target').state.set('value') }),
 		validateArgs: (args): args is [] => args.length === 0,
 		execute: () => null,
@@ -93,20 +101,24 @@ interface WriteChainInterfaces {
 
 /** `a` -> `b` -> `c` -> direct `state.set` — a 3-layer transitive write chain (mirrors core's own conformance fixture shape). */
 const writeChainPlugin = createWidgetPlugin('graph-write-chain')
+	.description(undocumented)
 	.interfaces<WriteChainInterfaces>()
-	.state(state => state.value({ validate: (input): input is number => typeof input === 'number' }))
+	.state(state => state.value({ description: undocumented, validate: (input): input is number => typeof input === 'number' }))
 	.methods(methods => methods
 		.a({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ call: dep.self.methods.invoke('b') }),
 			validateArgs: (args): args is [] => args.length === 0,
 			execute: () => null,
 		})
 		.b({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ call: dep.self.methods.invoke('c') }),
 			validateArgs: (args): args is [] => args.length === 0,
 			execute: () => null,
 		})
 		.c({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ setValue: dep.self.state.set('value') }),
 			validateArgs: (args): args is [] => args.length === 0,
 			execute: () => null,
@@ -126,23 +138,26 @@ interface EmitterInterfaces {
 
 /** `ping` emits, `relay` only invokes `ping`, `bump` writes and emits, `quiet` does neither. */
 const emitterPlugin = createWidgetPlugin('graph-emitter')
+	.description(undocumented)
 	.interfaces<EmitterInterfaces>()
-	.state(state => state.value({ validate: (input): input is number => typeof input === 'number', default: () => 0 }))
+	.state(state => state.value({ description: undocumented, validate: (input): input is number => typeof input === 'number', default: () => 0 }))
 	.methods(methods => methods
-		.ping({ registerDeps: ({ dep }) => ({ value: dep.self.state.get('value') }), validateArgs: (args): args is [] => args.length === 0, emits: ['pinged'], execute: ({ emit }) => { emit.pinged() } })
+		.ping({ description: undocumented, registerDeps: ({ dep }) => ({ value: dep.self.state.get('value') }), validateArgs: (args): args is [] => args.length === 0, emits: ['pinged'], execute: ({ emit }) => { emit.pinged() } })
 		.relay({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ ping: dep.self.methods.invoke('ping') }),
 			validateArgs: (args): args is [] => args.length === 0,
 			execute: () => null,
 		})
 		.bump({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ setValue: dep.self.state.set('value') }),
 			validateArgs: (args): args is [] => args.length === 0,
 			emits: ['pinged'],
 			execute: ({ emit }) => { emit.pinged() },
 		})
-		.quiet({ registerDeps: ({ dep }) => ({ value: dep.self.state.get('value') }), validateArgs: (args): args is [] => args.length === 0, execute: () => null }))
-	.events(['pinged'])
+		.quiet({ description: undocumented, registerDeps: ({ dep }) => ({ value: dep.self.state.get('value') }), validateArgs: (args): args is [] => args.length === 0, execute: () => null }))
+	.events({ pinged: undocumented })
 	.done()
 
 interface CycleInterfaces {
@@ -154,10 +169,11 @@ interface CycleInterfaces {
 
 /** `p1` <-> `p2` — a 2-member Property<->Property invalid evaluation cycle. */
 const cyclePlugin = createWidgetPlugin('graph-cycle')
+	.description(undocumented)
 	.interfaces<CycleInterfaces>()
 	.properties(properties => properties
-		.p1({ registerDeps: ({ dep }) => ({ read: dep.self.properties.get('p2') }), compute: () => null })
-		.p2({ registerDeps: ({ dep }) => ({ read: dep.self.properties.get('p1') }), compute: () => null }))
+		.p1({ description: undocumented, registerDeps: ({ dep }) => ({ read: dep.self.properties.get('p2') }), compute: () => null })
+		.p2({ description: undocumented, registerDeps: ({ dep }) => ({ read: dep.self.properties.get('p1') }), compute: () => null }))
 	.done()
 
 const system = createWidgetSystem({

@@ -9,7 +9,7 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { NumericConfig, NumericRawConfig } from '../config'
 import type { AnswerError, QuestionText } from '../domain'
-import { createWidgetPlugin } from '@deviltea/widget-core'
+import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
 import { checkNumericConfig, resolveNumericConfig } from '../config'
 import { builtinError, questionText } from '../domain'
 import { checkQuestion } from './check-question'
@@ -47,8 +47,10 @@ export interface NumericInterfaces extends WidgetInterfaces {
 }
 
 export const NumericPlugin = createWidgetPlugin('Numeric')
+	.description(undocumented)
 	.interfaces<NumericInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input, ctx): input is NumericRawConfig => {
 			checkNumericConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -57,23 +59,28 @@ export const NumericPlugin = createWidgetPlugin('Numeric')
 	})
 	.structure(ctx => checkQuestion(ctx, ctx.config))
 	.state(state => state.answer({
+		description: undocumented,
 		validate: (input): input is number | null => input === null || (typeof input === 'number' && Number.isFinite(input)),
 		default: () => null,
 	}))
 	.properties(properties => properties
 		.text({
+			description: undocumented,
 			registerDeps: ({ dep, blueprint }) => languageReads(dep, blueprint),
 			compute: ({ deps, config }) => questionText(config, languageFrom(deps)),
 		})
 		.visible({
+			description: undocumented,
 			registerDeps: ({ dep, config }) => visibleReads(dep, config),
 			compute: ({ deps, config }) => computeVisible(config, deps),
 		})
 		.required({
+			description: undocumented,
 			registerDeps: ({ dep, config }) => requiredReads(dep, config),
 			compute: ({ deps, config }) => computeRequired(config, deps),
 		})
 		.value({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({
 				answer: dep.self.state.get('answer'),
 				visible: dep.self.properties.get('visible'),
@@ -85,6 +92,7 @@ export const NumericPlugin = createWidgetPlugin('Numeric')
 			},
 		})
 		.errors({
+			description: undocumented,
 			registerDeps: ({ dep, config, widget, blueprint }) => ({
 				visible: dep.self.properties.get('visible'),
 				required: dep.self.properties.get('required'),
@@ -106,6 +114,7 @@ export const NumericPlugin = createWidgetPlugin('Numeric')
 			}, { selfId: widget.id }),
 		}))
 	.methods(methods => methods.clear({
+		description: undocumented,
 		registerDeps: ({ dep }) => dep.self.state.set('answer'),
 		validateArgs: (args): args is [] => args.length === 0,
 		execute: ({ deps }) => {

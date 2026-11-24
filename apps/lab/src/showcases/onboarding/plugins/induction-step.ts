@@ -23,7 +23,7 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { InductionConfig, InductionRawConfig } from '../config'
 import type { BookingOutcome, BookingStatus, I18nText, InductionAnswers, Slot, SlotCancelled, SlotConfirmation, SlotDeclined, SlotRequest } from '../domain'
-import { createWidgetPlugin } from '@deviltea/widget-core'
+import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
 import { checkInductionConfig, resolveInductionConfig } from '../config'
 import { describeValue, isBookingOutcome, isBookingStatus, isBoolean, isIsoDate, isNullableSlot, isNumber, isTime } from '../domain'
 import { checkInsideOnboarding } from './structure'
@@ -111,8 +111,10 @@ export interface InductionInterfaces extends WidgetInterfaces {
 }
 
 export const InductionStepPlugin = createWidgetPlugin('InductionStep')
+	.description(undocumented)
 	.interfaces<InductionInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input, ctx): input is InductionRawConfig => {
 			checkInductionConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -131,29 +133,35 @@ export const InductionStepPlugin = createWidgetPlugin('InductionStep')
 	})
 	.state(state => state
 		.status({
+			description: undocumented,
 			validate: (input): input is BookingStatus => isBookingStatus(input),
 			default: () => 'idle',
 		})
 		.ticket({
+			description: undocumented,
 			validate: (input): input is number => isNumber(input) && Number.isInteger(input) && input >= 0,
 			default: () => 0,
 		})
 		.slot({
+			description: undocumented,
 			validate: (input): input is Slot | null => isNullableSlot(input),
 			default: () => null,
 		})
 		.reference({
+			description: undocumented,
 			validate: (input): input is string | null => input === null || typeof input === 'string',
 			default: () => null,
 		})
 		.reason({
+			description: undocumented,
 			validate: (input): input is string | null => input === null || typeof input === 'string',
 			default: () => null,
 		}))
 	.properties(properties => properties
-		.title({ compute: ({ config }) => config.title })
-		.offered({ compute: ({ config }) => ({ days: config.days, times: config.times }) })
+		.title({ description: undocumented, compute: ({ config }) => config.title })
+		.offered({ description: undocumented, compute: ({ config }) => ({ days: config.days, times: config.times }) })
 		.missing({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ status: dep.self.state.get('status') }),
 			compute: ({ deps }) => {
 				const status = deps.status()
@@ -163,6 +171,7 @@ export const InductionStepPlugin = createWidgetPlugin('InductionStep')
 			},
 		})
 		.complete({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ status: dep.self.state.get('status') }),
 			compute: ({ deps }) => {
 				const status = deps.status()
@@ -170,6 +179,7 @@ export const InductionStepPlugin = createWidgetPlugin('InductionStep')
 			},
 		})
 		.answers({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({
 				status: dep.self.state.get('status'),
 				slot: dep.self.state.get('slot'),
@@ -185,6 +195,7 @@ export const InductionStepPlugin = createWidgetPlugin('InductionStep')
 		}))
 	.methods(methods => methods
 		.requestSlot({
+			description: undocumented,
 			validateArgs: (args, { config, addDiagnostic, hasAnyDiagnostic }): args is [string, string] => {
 				if (args.length !== 2) {
 					addDiagnostic({ message: `requestSlot(date, time) takes exactly two arguments, got ${args.length}.`, reason: 'wrong-arity' })
@@ -243,6 +254,7 @@ export const InductionStepPlugin = createWidgetPlugin('InductionStep')
 			},
 		})
 		.settleBooking({
+			description: undocumented,
 			validateArgs: (args, { addDiagnostic, hasAnyDiagnostic }): args is [number, BookingOutcome] => {
 				if (args.length !== 2) {
 					addDiagnostic({ message: `settleBooking(ticket, outcome) takes exactly two arguments, got ${args.length}.`, reason: 'wrong-arity' })
@@ -289,6 +301,7 @@ export const InductionStepPlugin = createWidgetPlugin('InductionStep')
 			},
 		})
 		.cancelBooking({
+			description: undocumented,
 			validateArgs: (args): args is [] => args.length === 0,
 			registerDeps: ({ dep }) => ({
 				status: dep.self.state.get('status'),
@@ -326,5 +339,5 @@ export const InductionStepPlugin = createWidgetPlugin('InductionStep')
 				return ticket.value ?? 0
 			},
 		}))
-	.events(['slotRequested', 'slotConfirmed', 'slotDeclined', 'slotCancelled'])
+	.events({ slotRequested: undocumented, slotConfirmed: undocumented, slotDeclined: undocumented, slotCancelled: undocumented })
 	.done()

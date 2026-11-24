@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import type { WidgetChild } from '@deviltea/widget-core'
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
@@ -87,39 +87,42 @@ describe('diagnostic list related locations', () => {
 
 	const validateValue = (input: unknown): input is number => typeof input === 'number'
 	const noArgs = (args: readonly unknown[]): args is [] => args.length === 0
-	const idle = { compute: () => null }
+	const idle = { description: undocumented, compute: () => null }
 
 	/** `p1` and `p2` depend on each other. */
 	const cyclePlugin = createWidgetPlugin('cycle')
+		.description(undocumented)
 		.interfaces<FixtureInterfaces>()
-		.state(state => state.value({ validate: validateValue, default: () => 0 }))
+		.state(state => state.value({ description: undocumented, validate: validateValue, default: () => 0 }))
 		.properties(properties => properties
-			.p1({ registerDeps: ({ dep }) => ({ other: dep.self.properties.get('p2') }), compute: () => null })
-			.p2({ registerDeps: ({ dep }) => ({ other: dep.self.properties.get('p1') }), compute: () => null })
+			.p1({ description: undocumented, registerDeps: ({ dep }) => ({ other: dep.self.properties.get('p2') }), compute: () => null })
+			.p2({ description: undocumented, registerDeps: ({ dep }) => ({ other: dep.self.properties.get('p1') }), compute: () => null })
 			.viaMethod(idle))
-		.methods(methods => methods.write({ registerDeps: ({ dep }) => ({ set: dep.self.state.set('value') }), validateArgs: noArgs, execute: () => {} }))
+		.methods(methods => methods.write({ description: undocumented, registerDeps: ({ dep }) => ({ set: dep.self.state.set('value') }), validateArgs: noArgs, execute: () => {} }))
 		.done()
 
 	/** `p1` depends on itself. */
 	const selfPlugin = createWidgetPlugin('self-dependent')
+		.description(undocumented)
 		.interfaces<FixtureInterfaces>()
-		.state(state => state.value({ validate: validateValue, default: () => 0 }))
+		.state(state => state.value({ description: undocumented, validate: validateValue, default: () => 0 }))
 		.properties(properties => properties
-			.p1({ registerDeps: ({ dep }) => ({ me: dep.self.properties.get('p1') }), compute: () => null })
+			.p1({ description: undocumented, registerDeps: ({ dep }) => ({ me: dep.self.properties.get('p1') }), compute: () => null })
 			.p2(idle)
 			.viaMethod(idle))
-		.methods(methods => methods.write({ registerDeps: ({ dep }) => ({ set: dep.self.state.set('value') }), validateArgs: noArgs, execute: () => {} }))
+		.methods(methods => methods.write({ description: undocumented, registerDeps: ({ dep }) => ({ set: dep.self.state.set('value') }), validateArgs: noArgs, execute: () => {} }))
 		.done()
 
 	/** `viaMethod` depends on a Method that writes State. */
 	const sideEffectPlugin = createWidgetPlugin('side-effect')
+		.description(undocumented)
 		.interfaces<FixtureInterfaces>()
-		.state(state => state.value({ validate: validateValue, default: () => 0 }))
+		.state(state => state.value({ description: undocumented, validate: validateValue, default: () => 0 }))
 		.properties(properties => properties
 			.p1(idle)
 			.p2(idle)
-			.viaMethod({ registerDeps: ({ dep }) => ({ call: dep.self.methods.invoke('write') }), compute: () => null }))
-		.methods(methods => methods.write({ registerDeps: ({ dep }) => ({ set: dep.self.state.set('value') }), validateArgs: noArgs, execute: () => {} }))
+			.viaMethod({ description: undocumented, registerDeps: ({ dep }) => ({ call: dep.self.methods.invoke('write') }), compute: () => null }))
+		.methods(methods => methods.write({ description: undocumented, registerDeps: ({ dep }) => ({ set: dep.self.state.set('value') }), validateArgs: noArgs, execute: () => {} }))
 		.done()
 
 	interface HostInterfaces {
@@ -131,14 +134,16 @@ describe('diagnostic list related locations', () => {
 	}
 
 	const hostPlugin = createWidgetPlugin('host')
+		.description(undocumented)
 		.interfaces<HostInterfaces>()
-		.slots({ children: {} })
+		.slots({ children: { description: undocumented } })
 		.done()
 
 	/** Two widgets that each have a Property named `a`, depending on each other. */
 	const sidePlugin = (type: string, peer: string) => createWidgetPlugin(type)
+		.description(undocumented)
 		.interfaces<SideInterfaces>()
-		.properties(properties => properties.a({ registerDeps: ({ dep }) => ({ other: dep.widget(peer).properties.get('a') }), compute: () => null }))
+		.properties(properties => properties.a({ description: undocumented, registerDeps: ({ dep }) => ({ other: dep.widget(peer).properties.get('a') }), compute: () => null }))
 		.done()
 
 	interface RingInterfaces {
@@ -147,8 +152,9 @@ describe('diagnostic list related locations', () => {
 
 	/** One member of a three-widget ring: its `value` depends on the `value` of widget `peer`. */
 	const ringPlugin = (type: string, peer: string) => createWidgetPlugin(type)
+		.description(undocumented)
 		.interfaces<RingInterfaces>()
-		.properties(properties => properties.value({ registerDeps: ({ dep }) => ({ next: dep.widget(peer).properties.get('value') }), compute: () => null }))
+		.properties(properties => properties.value({ description: undocumented, registerDeps: ({ dep }) => ({ next: dep.widget(peer).properties.get('value') }), compute: () => null }))
 		.done()
 
 	interface GuestsInterfaces {
@@ -161,17 +167,19 @@ describe('diagnostic list related locations', () => {
 
 	/** guests.visible -> sessions.options -> sessions.value -> guests.value -> guests.visible: four Properties on two widgets. */
 	const guestsPlugin = createWidgetPlugin('guests-q')
+		.description(undocumented)
 		.interfaces<GuestsInterfaces>()
 		.properties(properties => properties
-			.visible({ registerDeps: ({ dep }) => ({ next: dep.widget('sessions').properties.get('options') }), compute: () => null })
-			.value({ registerDeps: ({ dep }) => ({ next: dep.self.properties.get('visible') }), compute: () => null }))
+			.visible({ description: undocumented, registerDeps: ({ dep }) => ({ next: dep.widget('sessions').properties.get('options') }), compute: () => null })
+			.value({ description: undocumented, registerDeps: ({ dep }) => ({ next: dep.self.properties.get('visible') }), compute: () => null }))
 		.done()
 
 	const sessionsPlugin = createWidgetPlugin('sessions-q')
+		.description(undocumented)
 		.interfaces<SessionsInterfaces>()
 		.properties(properties => properties
-			.options({ registerDeps: ({ dep }) => ({ next: dep.self.properties.get('value') }), compute: () => null })
-			.value({ registerDeps: ({ dep }) => ({ next: dep.widget('guests').properties.get('value') }), compute: () => null }))
+			.options({ description: undocumented, registerDeps: ({ dep }) => ({ next: dep.self.properties.get('value') }), compute: () => null })
+			.value({ description: undocumented, registerDeps: ({ dep }) => ({ next: dep.widget('guests').properties.get('value') }), compute: () => null }))
 		.done()
 
 	const system = createWidgetSystem({ plugins: [cyclePlugin, selfPlugin, sideEffectPlugin, hostPlugin, sidePlugin('left-side', 'right'), sidePlugin('right-side', 'left'), ringPlugin('ring-a', 'b'), ringPlugin('ring-b', 'c'), ringPlugin('ring-c', 'a'), guestsPlugin, sessionsPlugin] })

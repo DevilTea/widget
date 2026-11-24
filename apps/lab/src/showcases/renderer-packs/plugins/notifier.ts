@@ -17,7 +17,7 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { NotifierConfig, NotifierRawConfig } from '../config'
 import type { I18nText, NotifierItem, Tone } from '../domain'
-import { createWidgetPlugin } from '@deviltea/widget-core'
+import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
 import { checkNotifierConfig, resolveNotifierConfig } from '../config'
 import { announcementsOf, appendNotification, describeValue, isI18nText, isNotifierItems, isTone } from '../domain'
 
@@ -68,8 +68,10 @@ export interface NotifierInterfaces extends WidgetInterfaces {
 }
 
 export const NotifierPlugin = createWidgetPlugin('Notifier')
+	.description(undocumented)
 	.interfaces<NotifierInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input, ctx): input is NotifierRawConfig => {
 			checkNotifierConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -77,12 +79,14 @@ export const NotifierPlugin = createWidgetPlugin('Notifier')
 		resolve: resolveNotifierConfig,
 	})
 	.state(state => state.items({
+		description: undocumented,
 		validate: (input): input is readonly NotifierItem[] => isNotifierItems(input),
 		default: () => [],
 	}))
 	.properties(properties => properties
-		.limit({ compute: ({ config }) => config.limit })
+		.limit({ description: undocumented, compute: ({ config }) => config.limit })
 		.alert({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ items: dep.self.state.get('items') }),
 			compute: ({ deps }) => {
 				const items = deps.items()
@@ -90,6 +94,7 @@ export const NotifierPlugin = createWidgetPlugin('Notifier')
 			},
 		})
 		.status({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ items: dep.self.state.get('items') }),
 			compute: ({ deps }) => {
 				const items = deps.items()
@@ -97,6 +102,7 @@ export const NotifierPlugin = createWidgetPlugin('Notifier')
 			},
 		})
 		.count({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ items: dep.self.state.get('items') }),
 			compute: ({ deps }) => {
 				const items = deps.items()
@@ -105,6 +111,7 @@ export const NotifierPlugin = createWidgetPlugin('Notifier')
 		}))
 	.methods(methods => methods
 		.notify({
+			description: undocumented,
 			validateArgs: (args, { addDiagnostic, hasAnyDiagnostic }): args is [I18nText, Tone] => {
 				if (args.length !== 2) {
 					addDiagnostic({ message: `notify(message, tone) takes exactly two arguments, got ${args.length}.`, reason: 'wrong-arity' })
@@ -135,6 +142,7 @@ export const NotifierPlugin = createWidgetPlugin('Notifier')
 			},
 		})
 		.dismiss({
+			description: undocumented,
 			validateArgs: (args, { addDiagnostic, hasAnyDiagnostic }): args is [number] => {
 				if (args.length !== 1) {
 					addDiagnostic({ message: `dismiss(id) takes exactly one argument, got ${args.length}.`, reason: 'wrong-arity' })
@@ -161,5 +169,5 @@ export const NotifierPlugin = createWidgetPlugin('Notifier')
 				return true
 			},
 		}))
-	.events(['notified'])
+	.events({ notified: undocumented })
 	.done()

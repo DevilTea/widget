@@ -7,7 +7,7 @@ import type { WidgetChild, WidgetInterfaces } from '@deviltea/widget-core'
 import type { InspectorClient } from '@deviltea/widget-inspector/client'
 import type { InspectorBlueprintSnapshot } from '@deviltea/widget-inspector/protocol'
 import type { ShowcaseEntry } from '../showcases/registry'
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 import { createInspectorAgent } from '@deviltea/widget-inspector/agent'
 import { createInspectorClient } from '@deviltea/widget-inspector/client'
 import { createInProcessInspectorTransportPair } from '@deviltea/widget-inspector/transport'
@@ -32,10 +32,12 @@ interface NotifierInterfaces extends WidgetInterfaces {
 }
 
 export const NotifierPlugin = createWidgetPlugin('Notifier')
+	.description(undocumented)
 	.interfaces<NotifierInterfaces>()
-	.slots({ children: {} })
+	.slots({ children: { description: undocumented } })
 	.methods(methods => methods
 		.fire({
+			description: undocumented,
 			validateArgs: (args): args is [number] => args.length === 1 && typeof args[0] === 'number',
 			emits: ['changed'],
 			execute: ({ args: [value], emit }) => {
@@ -43,6 +45,7 @@ export const NotifierPlugin = createWidgetPlugin('Notifier')
 			},
 		})
 		.ping({
+			description: undocumented,
 			validateArgs: (args): args is [] => args.length === 0,
 			emits: ['pinged'],
 			execute: ({ emit }) => {
@@ -50,6 +53,7 @@ export const NotifierPlugin = createWidgetPlugin('Notifier')
 			},
 		})
 		.check({
+			description: undocumented,
 			validateArgs: (args): args is [boolean] => args.length === 1 && typeof args[0] === 'boolean',
 			execute: ({ args: [ok], addDiagnostic }) => {
 				if (!ok)
@@ -57,7 +61,7 @@ export const NotifierPlugin = createWidgetPlugin('Notifier')
 				return ok
 			},
 		}))
-	.events(['changed', 'pinged'])
+	.events({ changed: undocumented, pinged: undocumented })
 	.done()
 
 /** Declares Methods but no Events: the log has nothing to listen to except Method failures. */
@@ -68,9 +72,11 @@ interface CheckerInterfaces extends WidgetInterfaces {
 }
 
 export const CheckerPlugin = createWidgetPlugin('Checker')
+	.description(undocumented)
 	.interfaces<CheckerInterfaces>()
 	.methods(methods => methods
 		.check({
+			description: undocumented,
 			validateArgs: (args): args is [boolean] => args.length === 1 && typeof args[0] === 'boolean',
 			execute: ({ args: [ok], addDiagnostic }) => {
 				if (!ok)
@@ -81,6 +87,7 @@ export const CheckerPlugin = createWidgetPlugin('Checker')
 	.done()
 
 export const PlainPlugin = createWidgetPlugin('Plain')
+	.description(undocumented)
 	.interfaces<WidgetInterfaces>()
 	.done()
 

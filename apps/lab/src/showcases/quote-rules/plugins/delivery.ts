@@ -7,7 +7,7 @@ import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { DeliveryConfig } from '../config'
 import type { Adjustment } from '../domain'
 import type { DeliveryRawConfig } from '../raw-config'
-import { createWidgetPlugin } from '@deviltea/widget-core'
+import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
 import { resolveDeliveryConfig } from '../config'
 import { deliveryConfigSchema, deliveryMethodSchema } from '../schemas'
 import { guard } from '../standard-schema'
@@ -36,17 +36,21 @@ export interface DeliveryInterfaces extends WidgetInterfaces {
 }
 
 export const DeliveryPlugin = createWidgetPlugin('Delivery')
+	.description(undocumented)
 	.interfaces<DeliveryInterfaces>()
 	.config({
+		description: undocumented,
 		validate: guard(deliveryConfigSchema),
 		resolve: resolveDeliveryConfig,
 	})
 	.structure(ctx => checkInsideQuote(ctx, 'Delivery'))
 	.state(state => state.method({
+		description: undocumented,
 		validate: guard(deliveryMethodSchema),
 		default: ({ config }) => config.method,
 	}))
 	.properties(properties => properties.adjustment({
+		description: undocumented,
 		registerDeps: ({ dep, blueprint }) => ({
 			method: dep.self.state.get('method'),
 			...subtotalReads(dep, blueprint),

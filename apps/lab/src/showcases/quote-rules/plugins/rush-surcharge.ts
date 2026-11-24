@@ -7,7 +7,7 @@ import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { RushSurchargeConfig } from '../config'
 import type { Adjustment } from '../domain'
 import type { RushSurchargeRawConfig } from '../raw-config'
-import { createWidgetPlugin } from '@deviltea/widget-core'
+import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
 import { resolveRushSurchargeConfig } from '../config'
 import { percentOf } from '../domain'
 import { enabledSchema, rushSurchargeConfigSchema } from '../schemas'
@@ -36,17 +36,21 @@ export interface RushSurchargeInterfaces extends WidgetInterfaces {
 }
 
 export const RushSurchargePlugin = createWidgetPlugin('RushSurcharge')
+	.description(undocumented)
 	.interfaces<RushSurchargeInterfaces>()
 	.config({
+		description: undocumented,
 		validate: guard(rushSurchargeConfigSchema),
 		resolve: resolveRushSurchargeConfig,
 	})
 	.structure(ctx => checkInsideQuote(ctx, 'RushSurcharge'))
 	.state(state => state.enabled({
+		description: undocumented,
 		validate: guard(enabledSchema),
 		default: ({ config }) => config.enabled,
 	}))
 	.properties(properties => properties.adjustment({
+		description: undocumented,
 		registerDeps: ({ dep, blueprint }) => ({
 			enabled: dep.self.state.get('enabled'),
 			...subtotalReads(dep, blueprint),

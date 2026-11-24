@@ -17,7 +17,7 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { DangerActionConfig, DangerActionRawConfig } from '../config'
 import type { Density, I18nText, Tone } from '../domain'
-import { createWidgetPlugin } from '@deviltea/widget-core'
+import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
 import { checkDangerActionConfig, resolveDangerActionConfig } from '../config'
 import { isBoolean, isDensity, isNumber } from '../domain'
 import { checkInsideSection, checkProvider, densityReads, providerId } from './structure'
@@ -84,8 +84,10 @@ export interface DangerActionInterfaces extends WidgetInterfaces {
 }
 
 export const DangerActionPlugin = createWidgetPlugin('DangerAction')
+	.description(undocumented)
 	.interfaces<DangerActionInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input, ctx): input is DangerActionRawConfig => {
 			checkDangerActionConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -101,15 +103,17 @@ export const DangerActionPlugin = createWidgetPlugin('DangerAction')
 		checkProvider(ctx, ctx.config.notifier, 'Notifier', 'notifier')
 	})
 	.state(state => state.confirming({
+		description: undocumented,
 		validate: (input): input is boolean => isBoolean(input),
 		default: () => false,
 	}))
 	.properties(properties => properties
-		.label({ compute: ({ config }) => config.label })
-		.confirmText({ compute: ({ config }) => config.confirmText })
-		.message({ compute: ({ config }) => config.message })
-		.tone({ compute: ({ config }) => config.tone })
+		.label({ description: undocumented, compute: ({ config }) => config.label })
+		.confirmText({ description: undocumented, compute: ({ config }) => config.confirmText })
+		.message({ description: undocumented, compute: ({ config }) => config.message })
+		.tone({ description: undocumented, compute: ({ config }) => config.tone })
 		.density({
+			description: undocumented,
 			registerDeps: ({ dep, blueprint, config }) => densityReads(dep, blueprint, config.appearance),
 			compute: ({ deps }) => {
 				const density = deps.density?.()
@@ -118,6 +122,7 @@ export const DangerActionPlugin = createWidgetPlugin('DangerAction')
 		}))
 	.methods(methods => methods
 		.ask({
+			description: undocumented,
 			validateArgs: (args): args is [] => args.length === 0,
 			registerDeps: ({ dep }) => ({
 				confirming: dep.self.state.get('confirming'),
@@ -136,6 +141,7 @@ export const DangerActionPlugin = createWidgetPlugin('DangerAction')
 			},
 		})
 		.cancel({
+			description: undocumented,
 			validateArgs: (args): args is [] => args.length === 0,
 			registerDeps: ({ dep }) => ({
 				confirming: dep.self.state.get('confirming'),
@@ -154,6 +160,7 @@ export const DangerActionPlugin = createWidgetPlugin('DangerAction')
 			},
 		})
 		.confirm({
+			description: undocumented,
 			validateArgs: (args): args is [] => args.length === 0,
 			registerDeps: ({ dep, blueprint, config }) => {
 				const notifier = providerId(blueprint, config.notifier, 'Notifier')
@@ -197,5 +204,5 @@ export const DangerActionPlugin = createWidgetPlugin('DangerAction')
 				return true
 			},
 		}))
-	.events(['confirmed'])
+	.events({ confirmed: undocumented })
 	.done()

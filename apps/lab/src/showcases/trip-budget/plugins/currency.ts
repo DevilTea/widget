@@ -17,7 +17,7 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { CurrencyConfig, CurrencyRawConfig } from '../config'
 import type { TripView } from '../domain'
-import { createWidgetPlugin } from '@deviltea/widget-core'
+import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
 import { checkCurrencyConfig, resolveCurrencyConfig } from '../config'
 import { isRoundStep, roundToStep, toBaseCents } from '../domain'
 import { languageReads, viewFrom } from './reads'
@@ -67,8 +67,10 @@ export interface CurrencyInterfaces extends WidgetInterfaces {
 }
 
 export const CurrencyPlugin = createWidgetPlugin('Currency')
+	.description(undocumented)
 	.interfaces<CurrencyInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input, ctx): input is CurrencyRawConfig => {
 			checkCurrencyConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -77,19 +79,22 @@ export const CurrencyPlugin = createWidgetPlugin('Currency')
 	})
 	.structure(ctx => checkInsideTrip(ctx, 'Currency'))
 	.state(state => state.roundStep({
+		description: undocumented,
 		validate: (input): input is number => isRoundStep(input),
 		default: ({ config }) => config.roundStep,
 	}))
 	.properties(properties => properties
-		.base({ compute: ({ config }) => config.base })
-		.rates({ compute: ({ config }) => config.rates })
-		.codes({ compute: ({ config }) => config.codes })
+		.base({ description: undocumented, compute: ({ config }) => config.base })
+		.rates({ description: undocumented, compute: ({ config }) => config.rates })
+		.codes({ description: undocumented, compute: ({ config }) => config.codes })
 		.view({
+			description: undocumented,
 			registerDeps: ({ dep, blueprint }) => languageReads(dep, blueprint),
 			compute: ({ deps, config }) => ({ ...viewFrom(deps), base: config.base }),
 		}))
 	.methods(methods => methods
 		.convert({
+			description: undocumented,
 			validateArgs: (args): args is [number, string] => args.length === 2 && typeof args[0] === 'number' && Number.isFinite(args[0]) && typeof args[1] === 'string',
 			execute: ({ args: [amount, currency], config, addDiagnostic }) => {
 				if (currency === config.base)
@@ -103,6 +108,7 @@ export const CurrencyPlugin = createWidgetPlugin('Currency')
 			},
 		})
 		.roundTransfer({
+			description: undocumented,
 			validateArgs: (args): args is [number] => args.length === 1 && typeof args[0] === 'number' && Number.isFinite(args[0]),
 			registerDeps: ({ dep }) => ({ step: dep.self.state.get('roundStep') }),
 			execute: ({ args: [cents], deps }) => {

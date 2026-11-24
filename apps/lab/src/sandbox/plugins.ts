@@ -8,7 +8,7 @@
  */
 
 import type { WidgetChild, WidgetInterfaces } from '@deviltea/widget-core'
-import { createWidgetPlugin } from '@deviltea/widget-core'
+import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -37,13 +37,16 @@ export interface TextInterfaces extends WidgetInterfaces {
 }
 
 export const TextPlugin = createWidgetPlugin('Text')
+	.description(undocumented)
 	.interfaces<TextInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input): input is { text: string } => isPlainObject(input) && typeof input.text === 'string',
 		resolve: raw => ({ text: raw?.text ?? '' }),
 	})
 	.properties(properties =>
 		properties.content({
+			description: undocumented,
 			compute: ({ config }) => config.text,
 		}))
 	.done()
@@ -76,14 +79,17 @@ export interface CounterInterfaces extends WidgetInterfaces {
 }
 
 export const CounterPlugin = createWidgetPlugin('Counter')
+	.description(undocumented)
 	.interfaces<CounterInterfaces>()
 	.state(state =>
 		state.count({
+			description: undocumented,
 			validate: (input): input is number => typeof input === 'number' && Number.isFinite(input),
 			default: () => 0,
 		}))
 	.properties(properties =>
 		properties.doubled({
+			description: undocumented,
 			registerDeps: ({ dep }) => dep.self.state.get('count'),
 			compute: ({ deps }) => {
 				const result = deps()
@@ -93,6 +99,7 @@ export const CounterPlugin = createWidgetPlugin('Counter')
 	.methods(methods =>
 		methods
 			.increment({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({
 					count: dep.self.state.get('count'),
 					setCount: dep.self.state.set('count'),
@@ -106,6 +113,7 @@ export const CounterPlugin = createWidgetPlugin('Counter')
 				},
 			})
 			.reset({
+				description: undocumented,
 				registerDeps: ({ dep }) => dep.self.state.set('count'),
 				validateArgs: (args): args is [] => args.length === 0,
 				execute: ({ deps }) => {
@@ -139,15 +147,18 @@ export interface SectionInterfaces extends WidgetInterfaces {
 }
 
 export const SectionPlugin = createWidgetPlugin('Section')
+	.description(undocumented)
 	.interfaces<SectionInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input): input is { title?: string } =>
 			isPlainObject(input) && (input.title === undefined || typeof input.title === 'string'),
 		resolve: raw => ({ title: raw?.title ?? 'Section' }),
 	})
-	.slots({ body: {} })
+	.slots({ body: { description: undocumented } })
 	.properties(properties =>
 		properties.heading({
+			description: undocumented,
 			compute: ({ config }) => config.title,
 		}))
 	.done()
@@ -165,8 +176,9 @@ export interface StackInterfaces extends WidgetInterfaces {
 }
 
 export const StackPlugin = createWidgetPlugin('Stack')
+	.description(undocumented)
 	.interfaces<StackInterfaces>()
-	.slots({ items: {} })
+	.slots({ items: { description: undocumented } })
 	.done()
 
 // -------------------------------------------------------------------------------------------------
@@ -196,13 +208,16 @@ export interface SummaryInterfaces extends WidgetInterfaces {
 }
 
 export const SummaryPlugin = createWidgetPlugin('Summary')
+	.description(undocumented)
 	.interfaces<SummaryInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input): input is { counterId: string } => isPlainObject(input) && typeof input.counterId === 'string',
 		resolve: raw => ({ counterId: raw?.counterId ?? '' }),
 	})
 	.properties(properties =>
 		properties.total({
+			description: undocumented,
 			registerDeps: ({ dep, config }) =>
 				dep.widget(config.counterId).properties.get('doubled')
 					.validate((value): value is number => typeof value === 'number'),

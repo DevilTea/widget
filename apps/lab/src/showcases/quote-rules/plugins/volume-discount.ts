@@ -19,7 +19,7 @@ import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { VolumeDiscountConfig } from '../config'
 import type { Adjustment } from '../domain'
 import type { VolumeDiscountRawConfig } from '../raw-config'
-import { createWidgetPlugin } from '@deviltea/widget-core'
+import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
 import { resolveVolumeDiscountConfig } from '../config'
 import { percentOf } from '../domain'
 import { volumeDiscountConfigSchema } from '../schemas'
@@ -46,13 +46,16 @@ export interface VolumeDiscountInterfaces extends WidgetInterfaces {
 }
 
 export const VolumeDiscountPlugin = createWidgetPlugin('VolumeDiscount')
+	.description(undocumented)
 	.interfaces<VolumeDiscountInterfaces>()
 	.config({
+		description: undocumented,
 		validate: guard(volumeDiscountConfigSchema),
 		resolve: resolveVolumeDiscountConfig,
 	})
 	.structure(ctx => checkInsideQuote(ctx, 'VolumeDiscount'))
 	.properties(properties => properties.adjustment({
+		description: undocumented,
 		registerDeps: ({ dep, blueprint }) => ({ ...subtotalReads(dep, blueprint), ...quantityReads(dep, blueprint) }),
 		compute: ({ deps, config }): Adjustment => {
 			const quantityRead = deps.totalQuantity?.()

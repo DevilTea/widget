@@ -17,7 +17,7 @@ import type { QuoteConfig } from '../config'
 import type { Adjustment, ItemLine, QuoteAdjustment, QuoteAnswers, QuoteLine, QuoteResult } from '../domain'
 import type { QuoteRawConfig } from '../raw-config'
 import type { RuleType } from './reads'
-import { createWidgetPlugin } from '@deviltea/widget-core'
+import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
 import { resolveQuoteConfig } from '../config'
 import { isPlainObject } from '../domain'
 import { quoteConfigSchema } from '../schemas'
@@ -61,13 +61,16 @@ function isAdjustment(input: unknown): input is Adjustment {
 }
 
 export const QuotePlugin = createWidgetPlugin('Quote')
+	.description(undocumented)
 	.interfaces<QuoteInterfaces>()
 	.config({
+		description: undocumented,
 		validate: guard(quoteConfigSchema),
 		resolve: resolveQuoteConfig,
 	})
 	.slots({
 		items: {
+			description: undocumented,
 			validateStructure: ({ children, addDiagnostic }) => {
 				if (children.length === 0)
 					addDiagnostic({ message: 'A quote needs at least one Item.', reason: 'needs-an-item' })
@@ -78,6 +81,7 @@ export const QuotePlugin = createWidgetPlugin('Quote')
 			},
 		},
 		rules: {
+			description: undocumented,
 			validateStructure: ({ children, addDiagnostic }) => {
 				const seen = new Set<string>()
 				children.forEach((child, index) => {
@@ -98,6 +102,7 @@ export const QuotePlugin = createWidgetPlugin('Quote')
 	})
 	.properties(properties => properties
 		.subtotalCents({
+			description: undocumented,
 			registerDeps: ({ dep, blueprint }) => ({
 				items: Object.fromEntries(childIds(blueprint, 'items', ['Item'])
 					.map(id => [id, dep.widget(id)
@@ -112,6 +117,7 @@ export const QuotePlugin = createWidgetPlugin('Quote')
 				}, 0),
 		})
 		.totalQuantity({
+			description: undocumented,
 			registerDeps: ({ dep, blueprint }) => ({
 				items: Object.fromEntries(childIds(blueprint, 'items', ['Item'])
 					.map(id => [id, dep.widget(id)
@@ -126,6 +132,7 @@ export const QuotePlugin = createWidgetPlugin('Quote')
 				}, 0),
 		})
 		.taxableCents({
+			description: undocumented,
 			registerDeps: ({ dep, blueprint }) => ({
 				subtotal: dep.self.properties.get('subtotalCents'),
 				rules: Object.fromEntries(childIds(blueprint, 'rules', PRE_TAX_RULE_TYPES)
@@ -141,6 +148,7 @@ export const QuotePlugin = createWidgetPlugin('Quote')
 				}, valueOr(deps.subtotal, 0)),
 		})
 		.answers({
+			description: undocumented,
 			registerDeps: ({ dep, blueprint }) => ({
 				items: Object.fromEntries(childIds(blueprint, 'items', ['Item'])
 					.map(id => [id, {
@@ -175,6 +183,7 @@ export const QuotePlugin = createWidgetPlugin('Quote')
 			},
 		})
 		.quote({
+			description: undocumented,
 			registerDeps: ({ dep, blueprint }) => ({
 				subtotal: dep.self.properties.get('subtotalCents'),
 				taxable: dep.self.properties.get('taxableCents'),

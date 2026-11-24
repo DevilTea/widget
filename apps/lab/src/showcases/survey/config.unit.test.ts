@@ -1,6 +1,6 @@
 import type { WidgetChild } from '@deviltea/widget-core'
 import type { ConfigChecker, ConfigDiagnostic, MultipleChoiceConfig, MultipleChoiceRawConfig, NumericConfig, NumericRawConfig, ShortAnswerConfig, ShortAnswerRawConfig, SingleChoiceConfig, SingleChoiceRawConfig, SurveyConfig, SurveyRawConfig } from './config'
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 import { describe, expect, it } from 'vitest'
 import {
 	checkMultipleChoiceConfig,
@@ -620,8 +620,10 @@ describe('integration with Core', () => {
 	// Compiling these plugins is also the type-level check that the recursive `Condition` and the other
 	// raw config types satisfy `.interfaces<>()`'s JSON-domain check (design risk R5).
 	const Numeric = createWidgetPlugin('Numeric')
+		.description(undocumented)
 		.interfaces<{ config: { raw: NumericRawConfig, resolved: NumericConfig } }>()
 		.config({
+			description: undocumented,
 			validate: (input, ctx): input is NumericRawConfig => {
 				checkNumericConfig(input, ctx.addDiagnostic)
 				return !ctx.hasAnyDiagnostic()
@@ -630,8 +632,10 @@ describe('integration with Core', () => {
 		})
 		.done()
 	const ShortAnswer = createWidgetPlugin('ShortAnswer')
+		.description(undocumented)
 		.interfaces<{ config: { raw: ShortAnswerRawConfig, resolved: ShortAnswerConfig } }>()
 		.config({
+			description: undocumented,
 			validate: (input, ctx): input is ShortAnswerRawConfig => {
 				checkShortAnswerConfig(input, ctx.addDiagnostic)
 				return !ctx.hasAnyDiagnostic()
@@ -640,8 +644,10 @@ describe('integration with Core', () => {
 		})
 		.done()
 	const SingleChoice = createWidgetPlugin('SingleChoice')
+		.description(undocumented)
 		.interfaces<{ config: { raw: SingleChoiceRawConfig, resolved: SingleChoiceConfig } }>()
 		.config({
+			description: undocumented,
 			validate: (input, ctx): input is SingleChoiceRawConfig => {
 				checkSingleChoiceConfig(input, ctx.addDiagnostic)
 				return !ctx.hasAnyDiagnostic()
@@ -650,8 +656,10 @@ describe('integration with Core', () => {
 		})
 		.done()
 	const MultipleChoice = createWidgetPlugin('MultipleChoice')
+		.description(undocumented)
 		.interfaces<{ config: { raw: MultipleChoiceRawConfig, resolved: MultipleChoiceConfig } }>()
 		.config({
+			description: undocumented,
 			validate: (input, ctx): input is MultipleChoiceRawConfig => {
 				checkMultipleChoiceConfig(input, ctx.addDiagnostic)
 				return !ctx.hasAnyDiagnostic()
@@ -660,8 +668,10 @@ describe('integration with Core', () => {
 		})
 		.done()
 	const Survey = createWidgetPlugin('Survey')
+		.description(undocumented)
 		.interfaces<{ config: { raw: SurveyRawConfig, resolved: SurveyConfig } }>()
 		.config({
+			description: undocumented,
 			validate: (input, ctx): input is SurveyRawConfig => {
 				checkSurveyConfig(input, ctx.addDiagnostic)
 				return !ctx.hasAnyDiagnostic()
@@ -726,19 +736,23 @@ describe('compile-view nodes', () => {
 	const seen: { id: string, languages: readonly string[] | null, self: boolean, other: boolean | null }[] = []
 
 	const Survey = createWidgetPlugin('Survey')
+		.description(undocumented)
 		.interfaces<{ config: { raw: SurveyRawConfig, resolved: SurveyConfig }, slots: { questions: WidgetChild } }>()
 		.config({
+			description: undocumented,
 			validate: (input, ctx): input is SurveyRawConfig => {
 				checkSurveyConfig(input, ctx.addDiagnostic)
 				return !ctx.hasAnyDiagnostic()
 			},
 			resolve: resolveSurveyConfig,
 		})
-		.slots({ questions: {} })
+		.slots({ questions: { description: undocumented } })
 		.done()
 	const Question = createWidgetPlugin('Question')
+		.description(undocumented)
 		.interfaces<{ config: { raw: NumericRawConfig, resolved: NumericConfig } }>()
 		.config({
+			description: undocumented,
 			validate: (input, ctx): input is NumericRawConfig => {
 				checkNumericConfig(input, ctx.addDiagnostic)
 				return !ctx.hasAnyDiagnostic()

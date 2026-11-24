@@ -16,7 +16,7 @@
 import type { WidgetContract, WidgetInterfaces } from '@deviltea/widget-core'
 import type { SurveyConfig, SurveyRawConfig } from '../config'
 import type { AnswerError, AnswerValue, QuestionType, SurveyResponse, SurveyText } from '../domain'
-import { createWidgetPlugin } from '@deviltea/widget-core'
+import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
 import { checkSurveyConfig, resolveSurveyConfig } from '../config'
 import { isAnswerErrors, isAnswerValue, isQuestionType, isSurveyResponse, sameAnswerValues, surveyText } from '../domain'
 import { languageOf } from './reads'
@@ -82,8 +82,10 @@ function isBoolean(input: unknown): input is boolean {
 }
 
 export const SurveyPlugin = createWidgetPlugin('Survey')
+	.description(undocumented)
 	.interfaces<SurveyInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input, ctx): input is SurveyRawConfig => {
 			checkSurveyConfig(input, diagnostic => ctx.addDiagnostic(diagnostic))
 			return !ctx.hasAnyDiagnostic()
@@ -92,6 +94,7 @@ export const SurveyPlugin = createWidgetPlugin('Survey')
 	})
 	.slots({
 		questions: {
+			description: undocumented,
 			validateStructure: ({ children, addDiagnostic }) => {
 				children.forEach((child, index) => {
 					if (child.resolved && !isQuestionType(child.type))
@@ -106,19 +109,23 @@ export const SurveyPlugin = createWidgetPlugin('Survey')
 	})
 	.state(state => state
 		.language({
+			description: undocumented,
 			validate: (input, ctx): input is string => typeof input === 'string' && ctx.config.languages.includes(input),
 			default: ({ config }) => config.languages[0] ?? 'en',
 		})
 		.submitted({
+			description: undocumented,
 			validate: (input): input is SurveyResponse | null => input === null || isSurveyResponse(input),
 			default: () => null,
 		}))
 	.properties(properties => properties
 		.text({
+			description: undocumented,
 			registerDeps: ({ dep }) => dep.self.state.get('language'),
 			compute: ({ deps, config }) => surveyText(config, languageOf(deps())),
 		})
 		.response({
+			description: undocumented,
 			registerDeps: ({ widget, blueprint, dep }) => ({
 				language: dep.self.state.get('language'),
 				// Only a child that is a question and whose id names exactly that child. A child that is not a
@@ -160,6 +167,7 @@ export const SurveyPlugin = createWidgetPlugin('Survey')
 			}),
 		})
 		.canSubmit({
+			description: undocumented,
 			registerDeps: ({ dep }) => dep.self.properties.get('response'),
 			compute: ({ deps }) => {
 				const response = deps()
@@ -168,6 +176,7 @@ export const SurveyPlugin = createWidgetPlugin('Survey')
 			},
 		})
 		.changedSinceSubmit({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({
 				submitted: dep.self.state.get('submitted'),
 				response: dep.self.properties.get('response'),
@@ -179,6 +188,7 @@ export const SurveyPlugin = createWidgetPlugin('Survey')
 			},
 		}))
 	.methods(methods => methods.submit({
+		description: undocumented,
 		validateArgs: (args): args is [] => args.length === 0,
 		registerDeps: ({ dep }) => ({
 			response: dep.self.properties.get('response'),
@@ -202,5 +212,5 @@ export const SurveyPlugin = createWidgetPlugin('Survey')
 			return response.value
 		},
 	}))
-	.events(['submitted'])
+	.events({ submitted: undocumented })
 	.done()
