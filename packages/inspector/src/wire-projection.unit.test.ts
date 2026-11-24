@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { readFileSync } from 'node:fs'
-import { createWidgetPlugin, createWidgetSystem, createWidgetValueContract } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, createWidgetValueContract, undocumented } from '@deviltea/widget-core'
 import { inspectBlueprint } from '@deviltea/widget-core/inspection'
 import { describe, expect, it } from 'vitest'
 import { createInspectorAgent } from './agent'
@@ -22,30 +22,35 @@ interface WireInterfaces {
 }
 
 const WirePlugin = createWidgetPlugin('WireFixture')
+	.description(undocumented)
 	.interfaces<WireInterfaces>()
 	.state(state => state.count({
+		description: undocumented,
 		authorWritable: true,
 		validate: (input): input is number => typeof input === 'number',
 		default: () => 0,
 	}))
 	.properties(properties => properties
-		.label({ valueContract: contract, compute: () => 'x' })
+		.label({ description: undocumented, valueContract: contract, compute: () => 'x' })
 		.doubled({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ count: dep.self.state.get('count') }),
 			compute: ({ deps }) => (deps.count().ok ? 2 : 0),
 		}))
 	.methods(methods => methods
 		.bump({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ set: dep.self.state.set('count'), absent: dep.parent.optional().state.get('count') }),
 			validateArgs: (args): args is [] => args.length === 0,
 			execute: () => 1,
 		})
 		.ping({
+			description: undocumented,
 			validateArgs: (args): args is [] => args.length === 0,
 			emits: ['pinged'],
 			execute: ({ emit }) => emit.pinged(),
 		}))
-	.events(['pinged'])
+	.events({ pinged: undocumented })
 	.done()
 
 interface CycleInterfaces {
@@ -53,10 +58,11 @@ interface CycleInterfaces {
 }
 
 const CyclePlugin = createWidgetPlugin('WireCycle')
+	.description(undocumented)
 	.interfaces<CycleInterfaces>()
 	.properties(properties => properties
-		.p1({ registerDeps: ({ dep }) => ({ read: dep.self.properties.get('p2') }), compute: () => null })
-		.p2({ registerDeps: ({ dep }) => ({ read: dep.self.properties.get('p1') }), compute: () => null }))
+		.p1({ description: undocumented, registerDeps: ({ dep }) => ({ read: dep.self.properties.get('p2') }), compute: () => null })
+		.p2({ description: undocumented, registerDeps: ({ dep }) => ({ read: dep.self.properties.get('p1') }), compute: () => null }))
 	.done()
 
 const system = createWidgetSystem({ plugins: [WirePlugin, CyclePlugin] })

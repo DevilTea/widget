@@ -4,7 +4,7 @@
  */
 
 import type { WidgetChild, WidgetContract, WidgetInterfaces } from '@deviltea/widget-core'
-import { createWidgetPlugin } from '@deviltea/widget-core'
+import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
 
 interface HostInterfaces extends WidgetInterfaces {
 	slots: {
@@ -20,8 +20,9 @@ interface HostInterfaces extends WidgetInterfaces {
 }
 
 export const HostPlugin = createWidgetPlugin('Host')
+	.description(undocumented)
 	.interfaces<HostInterfaces>()
-	.slots({ header: {}, body: {}, free: {}, leaves: {} })
+	.slots({ header: { description: undocumented }, body: { description: undocumented }, free: { description: undocumented }, leaves: { description: undocumented } })
 	.done()
 
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false

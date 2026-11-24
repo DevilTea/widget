@@ -1,5 +1,5 @@
 import type { WidgetChild, WidgetInterfaces } from '@deviltea/widget-core'
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 
 interface RootInterfaces extends WidgetInterfaces {
 	slots: { body: WidgetChild }
@@ -18,17 +18,21 @@ interface CounterInterfaces extends WidgetInterfaces {
 }
 
 const RootPlugin = createWidgetPlugin('DevtoolsRoot')
+	.description(undocumented)
 	.interfaces<RootInterfaces>()
-	.slots({ body: {} })
+	.slots({ body: { description: undocumented } })
 	.done()
 
 const CounterPlugin = createWidgetPlugin('DevtoolsCounter')
+	.description(undocumented)
 	.interfaces<CounterInterfaces>()
 	.state(state => state.count({
+		description: undocumented,
 		validate: (input): input is number => typeof input === 'number' && Number.isFinite(input),
 		default: () => 1,
 	}))
 	.properties(properties => properties.doubled({
+		description: undocumented,
 		registerDeps: ({ dep }) => dep.self.state.get('count'),
 		compute: ({ deps }) => {
 			const count = deps()
@@ -36,6 +40,7 @@ const CounterPlugin = createWidgetPlugin('DevtoolsCounter')
 		},
 	}))
 	.methods(methods => methods.increment({
+		description: undocumented,
 		registerDeps: ({ dep }) => ({
 			count: dep.self.state.get('count'),
 			setCount: dep.self.state.set('count'),

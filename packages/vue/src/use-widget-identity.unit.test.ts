@@ -13,7 +13,7 @@
 
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { UseWidgetResult } from './types'
-import { createWidgetPlugin } from '@deviltea/widget-core'
+import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { WidgetVueIntegrationError } from './errors'
 import {
@@ -104,6 +104,7 @@ describe('useWidget() identity — widgetId / widgetType', () => {
 		// ever be read after this assertion has already succeeded, so a rejection here proves this
 		// amendment added no bypass around it.
 		const impostorCounterPlugin = createWidgetPlugin('Counter')
+			.description(undocumented)
 			.interfaces<WidgetInterfaces>()
 			.done()
 		const runtime = createFixtureRuntime({ id: 'counter-4', type: 'Counter' })

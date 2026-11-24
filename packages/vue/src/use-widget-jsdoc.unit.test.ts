@@ -10,7 +10,7 @@
 
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { UseWidgetResult } from './types'
-import { createWidgetPlugin } from '@deviltea/widget-core'
+import { createWidgetPlugin, undocumented } from '@deviltea/widget-core'
 import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 
@@ -40,17 +40,19 @@ interface DocumentedInterfaces extends WidgetInterfaces {
 }
 
 const DocumentedPlugin = createWidgetPlugin('Documented')
+	.description(undocumented)
 	.interfaces<DocumentedInterfaces>()
-	.slots({ content: {} })
+	.slots({ content: { description: undocumented } })
 	.state(state => state
-		.count({ validate: (input): input is number => typeof input === 'number', default: () => 0 })
-		.caption({ validate: (input): input is string => typeof input === 'string', default: () => '' }))
-	.properties(properties => properties.doubled({ compute: () => 0 }))
+		.count({ description: undocumented, validate: (input): input is number => typeof input === 'number', default: () => 0 })
+		.caption({ description: undocumented, validate: (input): input is string => typeof input === 'string', default: () => '' }))
+	.properties(properties => properties.doubled({ description: undocumented, compute: () => 0 }))
 	.methods(methods => methods.increment({
+		description: undocumented,
 		validateArgs: (args): args is [number] => args.length === 1 && typeof args[0] === 'number',
 		execute: ({ args: [step] }) => step,
 	}))
-	.events(['pressed'])
+	.events({ pressed: undocumented })
 	.done()
 
 /** Read by the TypeScript program below, by name. */

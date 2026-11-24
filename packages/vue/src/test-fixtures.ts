@@ -9,7 +9,7 @@
 import type { AnyWidgetPlugin, AnyWidgetPluginTuple, CreateWidgetSystemRuntimeOptions, RuntimeWidgetFor, WidgetChild, WidgetInterfaces, WidgetSystemRuntime } from '@deviltea/widget-core'
 import type { RuntimeWidgetLike } from './context'
 import type { UseWidgetResult } from './types'
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 import { mount } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
 import { CurrentWidgetContextKey } from './context'
@@ -37,14 +37,17 @@ export interface CounterInterfaces extends WidgetInterfaces {
 export const COUNTER_CRASH_ERROR = new Error('crash() always throws — an implementation exception, not an Diagnostic.')
 
 export const CounterPlugin = createWidgetPlugin('Counter')
+	.description(undocumented)
 	.interfaces<CounterInterfaces>()
 	.state(state =>
 		state.count({
+			description: undocumented,
 			validate: (input): input is number => typeof input === 'number' && input >= 0,
 			default: () => 0,
 		}))
 	.properties(properties =>
 		properties.doubled({
+			description: undocumented,
 			registerDeps: ({ dep }) => dep.self.state.get('count'),
 			compute: ({ deps }) => {
 				const result = deps()
@@ -54,6 +57,7 @@ export const CounterPlugin = createWidgetPlugin('Counter')
 	.methods(methods =>
 		methods
 			.increment({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({
 					count: dep.self.state.get('count'),
 					setCount: dep.self.state.set('count'),
@@ -67,6 +71,7 @@ export const CounterPlugin = createWidgetPlugin('Counter')
 				},
 			})
 			.reset({
+				description: undocumented,
 				registerDeps: ({ dep }) => dep.self.state.set('count'),
 				validateArgs: (args): args is [] => args.length === 0,
 				execute: ({ deps }) => {
@@ -74,12 +79,14 @@ export const CounterPlugin = createWidgetPlugin('Counter')
 				},
 			})
 			.crash({
+				description: undocumented,
 				validateArgs: (args): args is [] => args.length === 0,
 				execute: (): never => {
 					throw COUNTER_CRASH_ERROR
 				},
 			})
 			.then({
+				description: undocumented,
 				validateArgs: (args): args is [] => args.length === 0,
 				execute: () => 'not-a-promise',
 			}))
@@ -93,13 +100,16 @@ export interface LabelInterfaces extends WidgetInterfaces {
 }
 
 export const LabelPlugin = createWidgetPlugin('Label')
+	.description(undocumented)
 	.interfaces<LabelInterfaces>()
 	.properties(properties =>
 		properties
 			.text({
+				description: undocumented,
 				compute: () => 'hello',
 			})
 			.failing({
+				description: undocumented,
 				compute: (ctx) => {
 					ctx.addDiagnostic({ message: 'this property always fails' })
 					return ''
@@ -112,11 +122,12 @@ export interface ContainerInterfaces extends WidgetInterfaces {
 }
 
 export const ContainerPlugin = createWidgetPlugin('Container')
+	.description(undocumented)
 	.interfaces<ContainerInterfaces>()
 	.slots({
-		'header': {},
-		'body': {},
-		'slot-one': {},
+		'header': { description: undocumented },
+		'body': { description: undocumented },
+		'slot-one': { description: undocumented },
 	})
 	.done()
 
@@ -127,9 +138,11 @@ export interface LeafInterfaces extends WidgetInterfaces {
 }
 
 export const LeafPlugin = createWidgetPlugin('Leaf')
+	.description(undocumented)
 	.interfaces<LeafInterfaces>()
 	.state(state =>
 		state.label({
+			description: undocumented,
 			validate: (input): input is string => typeof input === 'string',
 			default: () => '',
 		}))
@@ -140,6 +153,7 @@ export interface EmptyStateInterfaces extends WidgetInterfaces {
 }
 
 export const EmptyStatePlugin = createWidgetPlugin('EmptyState')
+	.description(undocumented)
 	.interfaces<EmptyStateInterfaces>()
 	.state(state => state)
 	.done()
@@ -149,6 +163,7 @@ export interface EmptyPropertiesInterfaces extends WidgetInterfaces {
 }
 
 export const EmptyPropertiesPlugin = createWidgetPlugin('EmptyProperties')
+	.description(undocumented)
 	.interfaces<EmptyPropertiesInterfaces>()
 	.properties(properties => properties)
 	.done()
@@ -158,6 +173,7 @@ export interface EmptyMethodsInterfaces extends WidgetInterfaces {
 }
 
 export const EmptyMethodsPlugin = createWidgetPlugin('EmptyMethods')
+	.description(undocumented)
 	.interfaces<EmptyMethodsInterfaces>()
 	.methods(methods => methods)
 	.done()
@@ -174,6 +190,7 @@ export interface EmptySlotsInterfaces extends WidgetInterfaces {
 }
 
 export const EmptySlotsPlugin = createWidgetPlugin('EmptySlots')
+	.description(undocumented)
 	.interfaces<EmptySlotsInterfaces>()
 	.slots({})
 	.done()
@@ -186,6 +203,7 @@ export const EmptySlotsPlugin = createWidgetPlugin('EmptySlots')
 export interface BareInterfaces extends WidgetInterfaces {}
 
 export const BarePlugin = createWidgetPlugin('Bare')
+	.description(undocumented)
 	.interfaces<BareInterfaces>()
 	.done()
 

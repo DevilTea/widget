@@ -1,7 +1,7 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
 import type { CreateInspectorAgentOptions } from './agent'
 import type { InspectorResponseMessage } from './protocol'
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 import { describe, expect, it } from 'vitest'
 import { createInspectorAgent } from './agent'
 import { createInspectorClient } from './client'
@@ -14,12 +14,14 @@ interface LimitInterfaces extends WidgetInterfaces {
 }
 
 const LimitPlugin = createWidgetPlugin('LimitFixture')
+	.description(undocumented)
 	.interfaces<LimitInterfaces>()
 	.state(state => state.count({
+		description: undocumented,
 		validate: (input): input is number => typeof input === 'number',
 		default: () => 0,
 	}))
-	.events(['changed'])
+	.events({ changed: undocumented })
 	.done()
 
 function createFixture(agentOptions: Partial<CreateInspectorAgentOptions> = {}) {

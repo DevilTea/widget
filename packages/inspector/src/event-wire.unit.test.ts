@@ -1,5 +1,5 @@
 import type { WidgetInterfaces } from '@deviltea/widget-core'
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 import { inspectRuntime } from '@deviltea/widget-core/inspection'
 import { describe, expect, it, vi } from 'vitest'
 import { createInspectorAgent } from './agent'
@@ -16,15 +16,17 @@ interface EventWireInterfaces extends WidgetInterfaces {
 }
 
 const EventWirePlugin = createWidgetPlugin('EventWireFixture')
+	.description(undocumented)
 	.interfaces<EventWireInterfaces>()
 	.methods(methods => methods.fire({
+		description: undocumented,
 		validateArgs: (args): args is [number] => args.length === 1 && typeof args[0] === 'number',
 		emits: ['change'],
 		execute: ({ args: [value], emit }) => {
 			emit.change({ value, callback: () => {} })
 		},
 	}))
-	.events(['change'])
+	.events({ change: undocumented })
 	.done()
 
 function createFixture() {

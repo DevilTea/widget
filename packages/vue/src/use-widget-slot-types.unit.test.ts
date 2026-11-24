@@ -9,7 +9,7 @@
 import type { WidgetChild, WidgetContract, WidgetInterfaces } from '@deviltea/widget-core'
 import type { VNode } from 'vue'
 import type { UseWidgetResult, WidgetSlotChildTypeOf, WidgetSlotChildTypesOf, WidgetSlotScope } from './types'
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 import { mount } from '@vue/test-utils'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { defineComponent, h } from 'vue'
@@ -33,8 +33,9 @@ interface HostInterfaces extends WidgetInterfaces {
 }
 
 const HostPlugin = createWidgetPlugin('Host')
+	.description(undocumented)
 	.interfaces<HostInterfaces>()
-	.slots({ header: {}, body: {}, free: {}, leaves: {}, labelled: {} })
+	.slots({ header: { description: undocumented }, body: { description: undocumented }, free: { description: undocumented }, leaves: { description: undocumented }, labelled: { description: undocumented } })
 	.done()
 
 type HostResult = UseWidgetResult<typeof HostPlugin>
@@ -136,6 +137,7 @@ describe('widgetSlot slot typing', () => {
 
 	it('keeps `name: never` for an explicitly empty `slots: never`', () => {
 		const Empty = createWidgetPlugin('Empty')
+			.description(undocumented)
 			.interfaces<{ slots: never }>()
 			.slots({})
 			.done()

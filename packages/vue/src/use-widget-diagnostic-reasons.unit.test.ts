@@ -8,7 +8,7 @@
 import type { JsonValue, RuntimeMethodDiagnostic, RuntimePropertyDiagnostic, RuntimeStateDiagnostic, RuntimeWidgetDiagnostic, WidgetInterfaces } from '@deviltea/widget-core'
 import type { CounterPlugin } from './test-fixtures'
 import type { ReadonlyRef, ReasonedDiagnostic, UseWidgetResult } from './types'
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { nextTick } from 'vue'
 import { mountWidgetBridge } from './test-fixtures'
@@ -24,8 +24,10 @@ interface GaugeInterfaces extends WidgetInterfaces {
 }
 
 const GaugePlugin = createWidgetPlugin('Gauge')
+	.description(undocumented)
 	.interfaces<GaugeInterfaces>()
 	.state(state => state.level({
+		description: undocumented,
 		validate: (input, ctx): input is number => {
 			if (typeof input !== 'number') {
 				ctx.addDiagnostic({ message: 'The level must be a number.', reason: 'not-a-number' })
@@ -40,12 +42,14 @@ const GaugePlugin = createWidgetPlugin('Gauge')
 		default: () => 0,
 	}))
 	.properties(properties => properties.percent({
+		description: undocumented,
 		compute: ({ addDiagnostic }) => {
 			addDiagnostic({ message: 'The percentage is out of range.', reason: 'too-large', details: { max: 100, received: 250 } })
 			return 0
 		},
 	}))
 	.methods(methods => methods.setLevel({
+		description: undocumented,
 		validateArgs: (args, ctx): args is [number] => {
 			if (args.length === 1 && typeof args[0] === 'number')
 				return true
@@ -54,6 +58,7 @@ const GaugePlugin = createWidgetPlugin('Gauge')
 		},
 		execute: ({ args: [level] }) => level,
 	}))
+	.reasons({ 'not-a-number': undocumented, 'too-large': undocumented })
 	.done()
 
 const gaugeSystem = createWidgetSystem({ plugins: [GaugePlugin] as const })
