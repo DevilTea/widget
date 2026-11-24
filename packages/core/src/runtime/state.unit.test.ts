@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem, EMPTY_DIAGNOSTICS } from '../index'
+import { createWidgetPlugin, createWidgetSystem, EMPTY_DIAGNOSTICS, undocumented } from '../index'
 
 interface CounterInterfaces {
 	state: {
@@ -19,8 +19,10 @@ function createCounterRuntime(params: {
 	const validate = params.validate ?? ((input: unknown): boolean => typeof input === 'number')
 
 	const plugin = createWidgetPlugin('counter')
+		.description(undocumented)
 		.interfaces<CounterInterfaces>()
 		.state(section => section.count({
+			description: undocumented,
 			validate: (input): input is number => validate(input),
 			...(params.default === undefined ? {} : { default: params.default }),
 		}))

@@ -6,7 +6,7 @@
 import type { WidgetInterfaces } from './index'
 import type { WidgetChild } from './types'
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from './index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from './index'
 
 interface NoteInterfaces extends WidgetInterfaces {
 	config: {
@@ -18,13 +18,15 @@ interface NoteInterfaces extends WidgetInterfaces {
 }
 
 const notePlugin = createWidgetPlugin('note')
+	.description(undocumented)
 	.interfaces<NoteInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input): input is { text: string } => typeof input === 'object' && input !== null && typeof (input as { text?: unknown }).text === 'string',
 		resolve: raw => ({ text: raw?.text ?? '' }),
 	})
-	.slots({ children: {} })
-	.state(state => state.count({ validate: (input): input is number => typeof input === 'number', default: () => 0 }))
+	.slots({ children: { description: undocumented } })
+	.state(state => state.count({ description: undocumented, validate: (input): input is number => typeof input === 'number', default: () => 0 }))
 	.done()
 
 const system = createWidgetSystem({ plugins: [notePlugin] })

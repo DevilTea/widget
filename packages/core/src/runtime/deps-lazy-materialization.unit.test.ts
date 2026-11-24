@@ -15,7 +15,7 @@
 
 import type { WidgetChild } from '../types'
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 
 // -------------------------------------------------------------------------------------------------
 // Fixture 1: forward Property -> later Property, and Property -> read-only Method (same widget).
@@ -33,10 +33,12 @@ interface OrderingInterfaces {
 }
 
 const orderingPlugin = createWidgetPlugin('ordering')
+	.description(undocumented)
 	.interfaces<OrderingInterfaces>()
 	.properties(properties => properties
 		// Declared first, but depends on `second`, declared after it.
 		.first({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ second: dep.self.properties.get('second') }),
 			compute: ({ deps }) => {
 				const result = deps.second()
@@ -44,11 +46,13 @@ const orderingPlugin = createWidgetPlugin('ordering')
 			},
 		})
 		.second({
+			description: undocumented,
 			compute: () => 41,
 		})
 		// Depends on a Method, which is only materialized after every Property regardless of
 		// declaration order.
 		.viaMethod({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ readOnly: dep.self.methods.invoke('readOnly') }),
 			compute: ({ deps }) => {
 				const result = deps.readOnly()
@@ -56,6 +60,7 @@ const orderingPlugin = createWidgetPlugin('ordering')
 			},
 		}))
 	.methods(methods => methods.readOnly({
+		description: undocumented,
 		validateArgs: (args): args is [] => args.length === 0,
 		execute: () => 99,
 	}))
@@ -72,8 +77,10 @@ interface LeafBInterfaces {
 }
 
 const leafBPlugin = createWidgetPlugin('leaf-b')
+	.description(undocumented)
 	.interfaces<LeafBInterfaces>()
 	.properties(properties => properties.value({
+		description: undocumented,
 		compute: () => 5,
 	}))
 	.done()
@@ -85,8 +92,10 @@ interface LeafAInterfaces {
 }
 
 const leafAPlugin = createWidgetPlugin('leaf-a')
+	.description(undocumented)
 	.interfaces<LeafAInterfaces>()
 	.properties(properties => properties.viaB({
+		description: undocumented,
 		registerDeps: ({ dep }) => ({ value: dep.widget('b').properties.get('value') }),
 		compute: ({ deps }) => {
 			const result = deps.value()
@@ -100,8 +109,9 @@ interface ContainerInterfaces {
 }
 
 const containerPlugin = createWidgetPlugin('container')
+	.description(undocumented)
 	.interfaces<ContainerInterfaces>()
-	.slots({ children: {} })
+	.slots({ children: { description: undocumented } })
 	.done()
 
 // -------------------------------------------------------------------------------------------------
@@ -116,9 +126,11 @@ interface CycleInterfaces {
 }
 
 const cyclePlugin = createWidgetPlugin('cycle')
+	.description(undocumented)
 	.interfaces<CycleInterfaces>()
 	.methods(methods => methods
 		.a({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ callB: dep.self.methods.invoke('b') }),
 			validateArgs: (args): args is [boolean] => args.length === 1 && typeof args[0] === 'boolean',
 			execute: ({ args, deps }) => {
@@ -129,6 +141,7 @@ const cyclePlugin = createWidgetPlugin('cycle')
 			},
 		})
 		.b({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ callA: dep.self.methods.invoke('a') }),
 			validateArgs: (args): args is [boolean] => args.length === 1 && typeof args[0] === 'boolean',
 			execute: ({ args, deps }) => {

@@ -7,7 +7,7 @@ import type {
 	WidgetSystemBlueprint,
 } from './index'
 import { describe, expect, expectTypeOf, it } from 'vitest'
-import { createWidgetDocument, createWidgetPlugin, createWidgetSystem } from './index'
+import { createWidgetDocument, createWidgetPlugin, createWidgetSystem, undocumented } from './index'
 
 type Blueprint = WidgetSystemBlueprint
 
@@ -90,6 +90,7 @@ describe('blueprint sourceJsonCompatible proof', () => {
 
 describe('valid blueprint source typing', () => {
 	const leaf = createWidgetPlugin('leaf')
+		.description(undocumented)
 		.interfaces<Record<never, never>>()
 		.done()
 	const typedSystem = createWidgetSystem({ plugins: [leaf] })

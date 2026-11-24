@@ -7,7 +7,7 @@
 import type { WidgetId } from '../index'
 import type { WidgetChild } from '../types'
 import { describe, expect, expectTypeOf, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem, WidgetSystemRuntimeDisposedError } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented, WidgetSystemRuntimeDisposedError } from '../index'
 
 interface FormInterfaces {
 	slots: { children: WidgetChild }
@@ -27,21 +27,24 @@ interface NoteInterfaces {
 }
 
 const form = createWidgetPlugin('form')
+	.description(undocumented)
 	.interfaces<FormInterfaces>()
-	.slots({ children: {} })
+	.slots({ children: { description: undocumented } })
 	.state(state => state
-		.label({ validate: (input): input is string => typeof input === 'string', default: () => 'initial' })
-		.count({ validate: (input): input is number => typeof input === 'number', default: () => 0 })
+		.label({ description: undocumented, validate: (input): input is string => typeof input === 'string', default: () => 'initial' })
+		.count({ description: undocumented, validate: (input): input is number => typeof input === 'number', default: () => 0 })
 		.payload({
+			description: undocumented,
 			validate: (input): input is { readonly items: readonly number[] } => typeof input === 'object' && input !== null,
 			default: () => ({ items: [1] }),
 		})
-		.draft({ validate: (input): input is string => typeof input === 'string' }))
+		.draft({ description: undocumented, validate: (input): input is string => typeof input === 'string' }))
 	.done()
 
 const note = createWidgetPlugin('note')
+	.description(undocumented)
 	.interfaces<NoteInterfaces>()
-	.properties(properties => properties.text({ compute: () => 'note' }))
+	.properties(properties => properties.text({ description: undocumented, compute: () => 'note' }))
 	.done()
 
 const system = createWidgetSystem({ plugins: [form, note] })

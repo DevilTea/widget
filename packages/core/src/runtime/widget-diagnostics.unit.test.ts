@@ -15,7 +15,7 @@
 
 import type { WidgetChild } from '../types'
 import { describe, expect, it, vi } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem, EMPTY_DIAGNOSTICS, WidgetSystemRuntimeDisposedError } from '../index'
+import { createWidgetPlugin, createWidgetSystem, EMPTY_DIAGNOSTICS, undocumented, WidgetSystemRuntimeDisposedError } from '../index'
 
 // -------------------------------------------------------------------------------------------------
 // Harness: one widget with two members per capability, declared in reverse-alphabetical order ("two"
@@ -48,18 +48,22 @@ function createOrderHarness() {
 	let lazyComputeCount = 0
 
 	const plugin = createWidgetPlugin('order-probe')
+		.description(undocumented)
 		.interfaces<OrderInterfaces>()
 		.state(state => state
 			.two({
+				description: undocumented,
 				validate: (input): input is number => typeof input === 'number',
 				default: () => 0,
 			})
 			.one({
+				description: undocumented,
 				validate: (input): input is number => typeof input === 'number',
 				default: () => 0,
 			}))
 		.properties(properties => properties
 			.two({
+				description: undocumented,
 				compute: ({ addDiagnostic }) => {
 					if (propertyTwoShouldFail)
 						addDiagnostic({ message: 'property two failed' })
@@ -69,6 +73,7 @@ function createOrderHarness() {
 				},
 			})
 			.one({
+				description: undocumented,
 				compute: ({ addDiagnostic }) => {
 					if (propertyOneShouldFail)
 						addDiagnostic({ message: 'property one failed' })
@@ -76,6 +81,7 @@ function createOrderHarness() {
 				},
 			})
 			.lazy({
+				description: undocumented,
 				compute: () => {
 					lazyComputeCount++
 					return 0
@@ -83,6 +89,7 @@ function createOrderHarness() {
 			}))
 		.methods(methods => methods
 			.two({
+				description: undocumented,
 				validateArgs: (args): args is [] => args.length === 0,
 				execute: ({ addDiagnostic }) => {
 					if (methodTwoShouldFail)
@@ -91,6 +98,7 @@ function createOrderHarness() {
 				},
 			})
 			.one({
+				description: undocumented,
 				validateArgs: (args): args is [] => args.length === 0,
 				execute: ({ addDiagnostic }) => {
 					if (methodOneShouldFail)
@@ -201,8 +209,10 @@ describe('runtimeWidget.getDiagnostics() — widgets without every capability', 
 
 		let shouldFail = false
 		const plugin = createWidgetPlugin('props-only-probe')
+			.description(undocumented)
 			.interfaces<PropsOnlyInterfaces>()
 			.properties(properties => properties.flaky({
+				description: undocumented,
 				compute: ({ addDiagnostic }) => {
 					if (shouldFail)
 						addDiagnostic({ message: 'flaky failed' })
@@ -234,6 +244,7 @@ describe('runtimeWidget.getDiagnostics() — widgets without every capability', 
 
 	it('a widget declaring no capabilities at all still exposes getDiagnostics()/subscribeDiagnostics(), aggregating to the canonical empty array', () => {
 		const plugin = createWidgetPlugin('capability-less-probe')
+			.description(undocumented)
 			.interfaces<Record<never, never>>()
 			.done()
 
@@ -444,8 +455,10 @@ describe('runtime.getDiagnostics() composes runtime-level diagnostics + each Run
 	// is a union keyed by literal `type`, and a widened `string` type would collapse `getWidget()`'s
 	// return narrowing.
 	const leafAPlugin = createWidgetPlugin('leaf-a-probe')
+		.description(undocumented)
 		.interfaces<LeafInterfaces>()
 		.properties(properties => properties.flaky({
+			description: undocumented,
 			compute: ({ addDiagnostic }) => {
 				addDiagnostic({ message: 'leaf-a-probe flaky failed' })
 				return 0
@@ -454,8 +467,10 @@ describe('runtime.getDiagnostics() composes runtime-level diagnostics + each Run
 		.done()
 
 	const leafBPlugin = createWidgetPlugin('leaf-b-probe')
+		.description(undocumented)
 		.interfaces<LeafInterfaces>()
 		.properties(properties => properties.flaky({
+			description: undocumented,
 			compute: ({ addDiagnostic }) => {
 				addDiagnostic({ message: 'leaf-b-probe flaky failed' })
 				return 0
@@ -471,9 +486,11 @@ describe('runtime.getDiagnostics() composes runtime-level diagnostics + each Run
 	}
 
 	const containerPlugin = createWidgetPlugin('container-probe')
+		.description(undocumented)
 		.interfaces<ContainerInterfaces>()
-		.slots({ children: {} })
+		.slots({ children: { description: undocumented } })
 		.state(state => state.count({
+			description: undocumented,
 			validate: (input): input is number => typeof input === 'number',
 			default: () => 0,
 		}))

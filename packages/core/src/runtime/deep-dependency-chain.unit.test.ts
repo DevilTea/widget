@@ -12,7 +12,7 @@
 import type { ExecutionResult, RuntimeWidgetDiagnostic } from '../index'
 import type { WidgetChild } from '../types'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem, WidgetSystemRuntimeDisposedError } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented, WidgetSystemRuntimeDisposedError } from '../index'
 import { inspectRuntime } from '../inspection'
 
 /** Far beyond what V8 can nest (around a thousand cold links) and every engine Core targets. */
@@ -67,13 +67,16 @@ interface LinkInterfaces {
 const linkStats = { computeCalls: [] as number[], fallbacks: 0, onCompute: null as ((index: number) => void) | null }
 
 const linkPlugin = createWidgetPlugin('link')
+	.description(undocumented)
 	.interfaces<LinkInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input): input is LinkConfig => typeof input === 'object' && input !== null,
 		resolve: raw => raw!,
 	})
-	.state(state => state.n({ validate: isNumber, default: () => 1 }))
+	.state(state => state.n({ description: undocumented, validate: isNumber, default: () => 1 }))
 	.properties(properties => properties.total({
+		description: undocumented,
 		registerDeps: ({ dep, config }) => ({
 			prev: dep.widget(config.prev ?? 'absent')
 				.optional()
@@ -111,8 +114,9 @@ const linkPlugin = createWidgetPlugin('link')
 	.done()
 
 const listPlugin = createWidgetPlugin('list')
+	.description(undocumented)
 	.interfaces<{ slots: { items: WidgetChild } }>()
-	.slots({ items: {} })
+	.slots({ items: { description: undocumented } })
 	.done()
 
 const linkSystem = createWidgetSystem({ plugins: [linkPlugin, listPlugin] })
@@ -181,12 +185,14 @@ describe('a cold read of the head of a long chain', () => {
 		const length = LONG
 		let computeCalls = 0
 		const widePlugin = createWidgetPlugin('wide')
+			.description(undocumented)
 			.interfaces<{ state: { seed: number }, properties: Record<`p${number}`, number> }>()
-			.state(state => state.seed({ validate: isNumber, default: () => 1 }))
+			.state(state => state.seed({ description: undocumented, validate: isNumber, default: () => 1 }))
 			// Ten thousand members cannot be spelled out: register them through the section's string keys.
 			.properties(((section: unknown) => {
 				const registrars = section as Record<string, (definition: unknown) => unknown>
 				registrars.p0!({
+					description: undocumented,
 					registerDeps: ({ dep }: { dep: any }) => ({ seed: dep.self.state.get('seed') }),
 					compute: ({ deps }: { deps: { seed: () => ExecutionResult<number | null, unknown> } }) => {
 						computeCalls++
@@ -195,6 +201,7 @@ describe('a cold read of the head of a long chain', () => {
 				})
 				for (let index = 1; index < length; index++) {
 					registrars[`p${index}`]!({
+						description: undocumented,
 						registerDeps: ({ dep }: { dep: any }) => ({ prev: dep.self.properties.get(`p${index - 1}`) }),
 						compute: ({ deps }: { deps: { prev: () => ExecutionResult<number, unknown> } }) => {
 							computeCalls++
@@ -240,14 +247,17 @@ interface QuestionInterfaces {
 }
 
 const questionPlugin = createWidgetPlugin('question')
+	.description(undocumented)
 	.interfaces<QuestionInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input): input is QuestionConfig => typeof input === 'object' && input !== null,
 		resolve: raw => raw!,
 	})
-	.state(state => state.answer({ validate: (input): input is number | null => input === null || typeof input === 'number', default: () => 1 }))
+	.state(state => state.answer({ description: undocumented, validate: (input): input is number | null => input === null || typeof input === 'number', default: () => 1 }))
 	.properties(properties => properties
 		.visible({
+			description: undocumented,
 			registerDeps: ({ dep, config }) => ({
 				prev: dep.widget(config.prev ?? 'absent')
 					.optional()
@@ -260,6 +270,7 @@ const questionPlugin = createWidgetPlugin('question')
 			},
 		})
 		.value({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ answer: dep.self.state.get('answer'), visible: dep.self.properties.get('visible') }),
 			compute: ({ deps }) => {
 				const visible = deps.visible()
@@ -439,16 +450,20 @@ interface ReaderInterfaces {
 }
 
 const readerPlugin = createWidgetPlugin('reader')
+	.description(undocumented)
 	.interfaces<ReaderInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input): input is ReaderConfig => typeof input === 'object' && input !== null,
 		resolve: raw => raw!,
 	})
 	.properties(properties => properties.viaMethod({
+		description: undocumented,
 		registerDeps: ({ dep }) => ({ readHead: dep.self.methods.invoke('readHead') }),
 		compute: ({ deps }) => numberOf(deps.readHead()) * 2,
 	}))
 	.methods(methods => methods.readHead({
+		description: undocumented,
 		registerDeps: ({ dep, config }) => ({
 			head: dep.widget(config.head)
 				.optional()
@@ -666,12 +681,15 @@ interface SumInterfaces {
 const sumStats = { computeCalls: 0 }
 
 const sumPlugin = createWidgetPlugin('sum')
+	.description(undocumented)
 	.interfaces<SumInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input): input is SumConfig => typeof input === 'object' && input !== null,
 		resolve: raw => raw!,
 	})
 	.properties(properties => properties.sum({
+		description: undocumented,
 		registerDeps: ({ dep, config }) => ({
 			heads: config.heads.map(id => dep.widget(id)
 				.optional()
@@ -808,8 +826,10 @@ describe('two Runtimes in one realm', () => {
 		const other = createChain(LONG)
 		const otherHead = other.link(LONG - 1)
 		const bridgePlugin = createWidgetPlugin('bridge')
+			.description(undocumented)
 			.interfaces<{ properties: { foreign: number } }>()
 			.properties(properties => properties.foreign({
+				description: undocumented,
 				registerDeps: () => ({}),
 				compute: () => numberOf(otherHead.properties.total.get()),
 			}))

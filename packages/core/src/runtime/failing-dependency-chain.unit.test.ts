@@ -11,7 +11,7 @@
 import type { ExecutionResult } from '../index'
 import type { WidgetChild } from '../types'
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 
 /** Far beyond what V8 can nest, and long enough that re-walking each cause made a read quadratic. */
 const LONG = 8_000
@@ -36,13 +36,16 @@ function numberOf(result: ExecutionResult<unknown, unknown>): number {
 const stats = { computeCalls: 0 }
 
 const linkPlugin = createWidgetPlugin('link')
+	.description(undocumented)
 	.interfaces<LinkInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input): input is LinkConfig => typeof input === 'object' && input !== null,
 		resolve: raw => raw!,
 	})
-	.state(state => state.n({ validate: isNumber, default: () => 1 }))
+	.state(state => state.n({ description: undocumented, validate: isNumber, default: () => 1 }))
 	.properties(properties => properties.total({
+		description: undocumented,
 		registerDeps: ({ dep, config }) => ({
 			prev: dep.widget(config.prev ?? 'absent')
 				.optional()
@@ -60,6 +63,7 @@ const linkPlugin = createWidgetPlugin('link')
 		},
 	}))
 	.methods(methods => methods.readTotal({
+		description: undocumented,
 		registerDeps: ({ dep }) => ({ total: dep.self.properties.get('total') }),
 		validateArgs: (args): args is [] => args.length === 0,
 		execute: ({ deps }) => numberOf(deps.total()),
@@ -67,8 +71,9 @@ const linkPlugin = createWidgetPlugin('link')
 	.done()
 
 const listPlugin = createWidgetPlugin('list')
+	.description(undocumented)
 	.interfaces<{ slots: { items: WidgetChild } }>()
-	.slots({ items: {} })
+	.slots({ items: { description: undocumented } })
 	.done()
 
 const system = createWidgetSystem({ plugins: [linkPlugin, listPlugin] })

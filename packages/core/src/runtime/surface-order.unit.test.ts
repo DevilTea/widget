@@ -5,7 +5,7 @@
 
 import type { WidgetInterfaces } from '../index'
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 
 interface OrderedInterfaces extends WidgetInterfaces {
 	state: { zeta: number, alpha: number, mid: number }
@@ -17,22 +17,23 @@ interface OrderedInterfaces extends WidgetInterfaces {
 const isNumber = (input: unknown): input is number => typeof input === 'number'
 
 const ordered = createWidgetPlugin('ordered')
+	.description(undocumented)
 	.interfaces<OrderedInterfaces>()
 	.state(state => state
-		.zeta({ validate: isNumber, default: () => 1 })
-		.alpha({ validate: isNumber, default: () => 2 })
-		.mid({ validate: isNumber, default: () => 3 }))
+		.zeta({ description: undocumented, validate: isNumber, default: () => 1 })
+		.alpha({ description: undocumented, validate: isNumber, default: () => 2 })
+		.mid({ description: undocumented, validate: isNumber, default: () => 3 }))
 	.properties(properties => properties
-		.pz({ compute: () => 1 })
-		.pa({ compute: () => 2 }))
+		.pz({ description: undocumented, compute: () => 1 })
+		.pa({ description: undocumented, compute: () => 2 }))
 	.methods(methods => methods
-		.mz({ validateArgs: (args): args is [] => args.length === 0, emits: ['ez', 'ea'], execute: ({ emit }) => {
+		.mz({ description: undocumented, validateArgs: (args): args is [] => args.length === 0, emits: ['ez', 'ea'], execute: ({ emit }) => {
 			emit.ez()
 			emit.ea()
 			return null
 		} })
-		.ma({ validateArgs: (args): args is [] => args.length === 0, execute: () => null }))
-	.events(['ez', 'ea'])
+		.ma({ description: undocumented, validateArgs: (args): args is [] => args.length === 0, execute: () => null }))
+	.events({ ez: undocumented, ea: undocumented })
 	.done()
 
 const system = createWidgetSystem({ plugins: [ordered] })

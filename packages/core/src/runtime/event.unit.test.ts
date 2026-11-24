@@ -2,7 +2,7 @@ import type { WidgetEventEmitter } from '../index'
 import type { WidgetChild } from '../types'
 import { computed, signal } from 'alien-signals'
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem, WidgetSystemRuntimeDisposedError } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented, WidgetSystemRuntimeDisposedError } from '../index'
 
 const PROTO_KEY = '__proto__' as const
 
@@ -30,37 +30,43 @@ function readCapturedEmitter(): WidgetEventEmitter<EventInterfaces> | null {
 }
 
 const eventPlugin = createWidgetPlugin('event-widget')
+	.description(undocumented)
 	.interfaces<EventInterfaces>()
-	.slots({ children: {} })
+	.slots({ children: { description: undocumented } })
 	.methods(methods => methods
 		.emitPing({
+			description: undocumented,
 			validateArgs: (args): args is [] => args.length === 0,
 			emits: ['ping'],
 			execute: ({ emit }) => emit.ping(),
 		})
 		.emitChange({
+			description: undocumented,
 			validateArgs: (args): args is [string] => args.length === 1 && typeof args[0] === 'string',
 			emits: ['change'],
 			execute: ({ args, emit }) => emit.change(args[0]),
 		})
 		.emitChain({
+			description: undocumented,
 			validateArgs: (args): args is [string] => args.length === 1 && typeof args[0] === 'string',
 			emits: ['chain'],
 			execute: ({ args, emit }) => emit.chain(args[0]),
 		})
 		.emitProto({
+			description: undocumented,
 			validateArgs: (args): args is [number] => args.length === 1 && typeof args[0] === 'number',
 			emits: [PROTO_KEY],
 			execute: ({ args, emit }) => emit[PROTO_KEY](args[0]),
 		})
 		.captureEmitter({
+			description: undocumented,
 			validateArgs: (args): args is [] => args.length === 0,
 			emits: ['ping', 'change', 'chain', PROTO_KEY],
 			execute: ({ emit }) => {
 				capturedEmitter = emit
 			},
 		}))
-	.events(['ping', 'change', 'chain', PROTO_KEY])
+	.events({ ping: undocumented, change: undocumented, chain: undocumented, [PROTO_KEY]: undocumented })
 	.done()
 
 function createRuntime() {

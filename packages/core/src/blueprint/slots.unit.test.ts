@@ -6,11 +6,12 @@
 import type { BlueprintDefinitionDiagnostic, WidgetInterfaces } from '../index'
 import type { WidgetChild } from '../types'
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 
 interface LeafInterfaces extends WidgetInterfaces {}
 
 const leafPlugin = createWidgetPlugin('leaf')
+	.description(undocumented)
 	.interfaces<LeafInterfaces>()
 	.done()
 
@@ -19,10 +20,11 @@ interface ContainerInterfaces extends WidgetInterfaces {
 }
 
 const containerPlugin = createWidgetPlugin('container')
+	.description(undocumented)
 	.interfaces<ContainerInterfaces>()
 	.slots({
-		header: {},
-		content: {},
+		header: { description: undocumented },
+		content: { description: undocumented },
 	})
 	.done()
 
@@ -37,6 +39,7 @@ interface EmptySlotsInterfaces extends WidgetInterfaces {
  * all.
  */
 const emptySlotsPlugin = createWidgetPlugin('empty-slots')
+	.description(undocumented)
 	.interfaces<EmptySlotsInterfaces>()
 	.slots({})
 	.done()

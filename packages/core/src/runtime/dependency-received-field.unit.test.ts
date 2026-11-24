@@ -12,7 +12,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 
 interface ReceivedInterfaces {
 	properties: {
@@ -29,14 +29,17 @@ function createHarness() {
 	let flakyShouldFail = false
 
 	const plugin = createWidgetPlugin('probe')
+		.description(undocumented)
 		.interfaces<ReceivedInterfaces>()
 		.properties(properties => properties
 			// Always reads back as `undefined`.
 			.source({
+				description: undocumented,
 				compute: () => undefined,
 			})
 			// Refinement rejects everything, including the actual `undefined` produced by `source`.
 			.rejectsUndefined({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({
 					source: dep.self.properties.get('source')
 						.validate((_value): _value is never => false),
@@ -47,6 +50,7 @@ function createHarness() {
 				},
 			})
 			.viaFlaky({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ flaky: dep.self.methods.invoke('flakyMethod') }),
 				compute: ({ deps }) => {
 					const result = deps.flaky()
@@ -54,6 +58,7 @@ function createHarness() {
 				},
 			}))
 		.methods(methods => methods.flakyMethod({
+			description: undocumented,
 			validateArgs: (args): args is [] => args.length === 0,
 			execute: ({ addDiagnostic }) => {
 				if (flakyShouldFail)

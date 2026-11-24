@@ -7,7 +7,7 @@
 import type { WidgetInterfaces } from '../index'
 import { effect, setActiveSub, signal } from 'alien-signals'
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 
 const isNumber = (input: unknown): input is number => typeof input === 'number'
 
@@ -17,8 +17,9 @@ describe('resetState inside a listener of the write that is still running', () =
 	}
 
 	const badDefault = createWidgetPlugin('bad-default')
+		.description(undocumented)
 		.interfaces<BadDefaultInterfaces>()
-		.state(state => state.a({ validate: isNumber, default: () => 'bad' as unknown as number }))
+		.state(state => state.a({ description: undocumented, validate: isNumber, default: () => 'bad' as unknown as number }))
 		.done()
 	const badDefaultBlueprint = createWidgetSystem({ plugins: [badDefault] })
 		.createBlueprint({ id: 'root', type: 'bad-default' })
@@ -56,11 +57,12 @@ describe('resetState inside a listener of the write that is still running', () =
 	}
 
 	const unset = createWidgetPlugin('unset')
+		.description(undocumented)
 		.interfaces<UnsetInterfaces>()
 		.state(state => state
-			.n({ validate: isNumber, default: () => Number.NaN })
-			.u({ validate: isNumber })
-			.m({ validate: isNumber, default: () => Number.NaN }))
+			.n({ description: undocumented, validate: isNumber, default: () => Number.NaN })
+			.u({ description: undocumented, validate: isNumber })
+			.m({ description: undocumented, validate: isNumber, default: () => Number.NaN }))
 		.done()
 	const unsetBlueprint = createWidgetSystem({ plugins: [unset] })
 		.createBlueprint({ id: 'root', type: 'unset' })
@@ -99,11 +101,13 @@ describe('resetState inside a Property compute', () => {
 	let runtimeRef: { resetState: () => void } | null = null
 	let computes = 0
 	const plugin = createWidgetPlugin('reset-in-compute')
+		.description(undocumented)
 		.interfaces<ComputeInterfaces>()
 		.state(state => state
-			.a({ validate: isNumber, default: () => 1 })
-			.b({ validate: isNumber, default: () => 2 }))
+			.a({ description: undocumented, validate: isNumber, default: () => 1 })
+			.b({ description: undocumented, validate: isNumber, default: () => 2 }))
 		.properties(properties => properties.r({
+			description: undocumented,
 			compute: () => {
 				runtimeRef!.resetState()
 				return ++computes
@@ -146,9 +150,11 @@ describe('resetState after a reset ran inside the flush of a Method write', () =
 	}
 
 	const put = createWidgetPlugin('put')
+		.description(undocumented)
 		.interfaces<PutInterfaces>()
-		.state(state => state.t({ validate: (input): input is unknown => typeof input === 'string' || typeof input === 'object', default: () => 'x' }))
+		.state(state => state.t({ description: undocumented, validate: (input): input is unknown => typeof input === 'string' || typeof input === 'object', default: () => 'x' }))
 		.methods(methods => methods.put({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ setT: dep.self.state.set('t') }),
 			validateArgs: (args): args is [unknown] => args.length === 1,
 			execute: ({ deps, args }) => deps.setT(args[0]),
@@ -189,10 +195,11 @@ describe('resetState inside an effect created outside Core', () => {
 	}
 
 	const pair = createWidgetPlugin('pair')
+		.description(undocumented)
 		.interfaces<PairInterfaces>()
 		.state(state => state
-			.a({ validate: isNumber, default: () => 1 })
-			.b({ validate: isNumber, default: () => 2 }))
+			.a({ description: undocumented, validate: isNumber, default: () => 1 })
+			.b({ description: undocumented, validate: isNumber, default: () => 2 }))
 		.done()
 	const pairBlueprint = createWidgetSystem({ plugins: [pair] })
 		.createBlueprint({ id: 'root', type: 'pair' })

@@ -32,7 +32,7 @@ import type {
 	WidgetSystemSlotTypeViolation,
 } from './index'
 import { describe, expect, expectTypeOf, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from './index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from './index'
 import { inspectBlueprint } from './inspection/index'
 
 // -------------------------------------------------------------------------------------------------
@@ -75,18 +75,22 @@ function createFixture() {
 	const seen = { steps: [] as number[], extras: [] as number[] }
 
 	const step = createWidgetPlugin('step')
+		.description(undocumented)
 		.interfaces<StepInterfaces>()
 		.config({
+			description: undocumented,
 			validate: (input): input is { readonly title: string } => typeof input === 'object' && input !== null && typeof (input as { readonly title?: unknown }).title === 'string',
 			resolve: raw => ({ title: raw?.title ?? '' }),
 		})
 		.state(state => state.visited({
+			description: undocumented,
 			validate: (input): input is boolean => typeof input === 'boolean',
 			default: () => false,
 		}))
 		.properties(properties => properties
-			.title({ compute: ({ config }) => config.title })
+			.title({ description: undocumented, compute: ({ config }) => config.title })
 			.complete({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ visited: dep.self.state.get('visited') }),
 				compute: ({ deps }) => {
 					const visited = deps.visited()
@@ -95,6 +99,7 @@ function createFixture() {
 			}))
 		.methods(methods => methods
 			.visit({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ setVisited: dep.self.state.set('visited') }),
 				validateArgs: noArgs,
 				execute: ({ deps }) => {
@@ -102,6 +107,7 @@ function createFixture() {
 				},
 			})
 			.reset({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ setVisited: dep.self.state.set('visited') }),
 				validateArgs: noArgs,
 				execute: ({ deps }) => {
@@ -111,14 +117,17 @@ function createFixture() {
 		.done()
 
 	const note = createWidgetPlugin('note')
+		.description(undocumented)
 		.interfaces<Record<never, never>>()
 		.done()
 
 	const wizard = createWidgetPlugin('wizard')
+		.description(undocumented)
 		.interfaces<WizardInterfaces>()
-		.slots({ steps: {}, extras: {}, notes: {} })
+		.slots({ steps: { description: undocumented }, extras: { description: undocumented }, notes: { description: undocumented } })
 		.properties(properties => properties
 			.titles({
+				description: undocumented,
 				registerDeps: ({ slot }) => {
 					seen.steps.push(slot('steps').length)
 					seen.extras.push(slot('extras').length)
@@ -131,6 +140,7 @@ function createFixture() {
 				}),
 			})
 			.completeCount({
+				description: undocumented,
 				registerDeps: ({ slot }) => slot('steps')
 					.map(child => child.properties.get('complete')),
 				compute: ({ deps }) => deps.filter((read) => {
@@ -139,6 +149,7 @@ function createFixture() {
 				}).length,
 			}))
 		.methods(methods => methods.resetAll({
+			description: undocumented,
 			registerDeps: ({ slot }) => slot('steps')
 				.map(child => child.methods.invoke('reset')),
 			validateArgs: noArgs,
@@ -178,6 +189,7 @@ describe('the slots record', () => {
 	it('rejects an expectation that is neither plugin types nor a contract', () => {
 		const typeOnly = () => {
 			const builder = createWidgetPlugin('bad-slot')
+				.description(undocumented)
 			// @ts-expect-error an ordinary object type is not a WidgetContract
 			builder.interfaces<{ slots: { body: { properties: { title: string } } } }>()
 			// @ts-expect-error a number is not an expectation
@@ -214,6 +226,7 @@ describe('the slots record', () => {
 
 	it('keeps `slots: never` as the explicit-empty declaration', () => {
 		const plugin = createWidgetPlugin('empty-slots')
+			.description(undocumented)
 			.interfaces<{ slots: never }>()
 			.slots({})
 			.done()
@@ -416,9 +429,11 @@ describe('`slot(name)` of a registerDeps context', () => {
 
 	it('throws a TypeError for a slot name the plugin does not declare', () => {
 		const untypedSlot = (name: unknown) => createWidgetPlugin('asks')
+			.description(undocumented)
 			.interfaces<{ slots: { body: WidgetChild }, properties: { total: number } }>()
-			.slots({ body: {} })
+			.slots({ body: { description: undocumented } })
 			.properties(properties => properties.total({
+				description: undocumented,
 				registerDeps: (ctx) => {
 					(ctx.slot as (name: unknown) => unknown)(name)
 					return {}
@@ -434,8 +449,10 @@ describe('`slot(name)` of a registerDeps context', () => {
 		}
 
 		const withoutSlots = createWidgetPlugin('no-slots')
+			.description(undocumented)
 			.interfaces<{ methods: { run: () => void } }>()
 			.methods(methods => methods.run({
+				description: undocumented,
 				registerDeps: (ctx) => {
 					(ctx as unknown as { slot: (name: string) => unknown }).slot('body')
 					return {}
@@ -605,9 +622,11 @@ describe('a WidgetContract that names the expected plugin types', () => {
 
 	function createDeck() {
 		return createWidgetPlugin('deck')
+			.description(undocumented)
 			.interfaces<DeckInterfaces>()
-			.slots({ cards: {}, extras: {} })
+			.slots({ cards: { description: undocumented }, extras: { description: undocumented } })
 			.properties(properties => properties.titles({
+				description: undocumented,
 				registerDeps: ({ slot }) => slot('cards')
 					.map(card => card.properties.get('title')),
 				compute: ({ deps }) => deps.map((read) => {
@@ -620,36 +639,39 @@ describe('a WidgetContract that names the expected plugin types', () => {
 
 	function createCardLike<const Type extends string>(type: Type) {
 		return createWidgetPlugin(type)
+			.description(undocumented)
 			.interfaces<CardInterfaces>()
-			.state(state => state.open({ validate: isBoolean, default: () => false }))
-			.properties(properties => properties.title({ compute: () => type }))
-			.methods(methods => methods.toggle({ validateArgs: noArgs, execute: () => {} }))
-			.events(['toggled'])
+			.state(state => state.open({ description: undocumented, validate: isBoolean, default: () => false }))
+			.properties(properties => properties.title({ description: undocumented, compute: () => type }))
+			.methods(methods => methods.toggle({ description: undocumented, validateArgs: noArgs, execute: () => {} }))
+			.events({ toggled: undocumented })
 			.done()
 	}
 
 	/** A 'tile' that lacks the `title` Property and the `toggle` Method the contract reads. */
 	function createBareTile() {
 		return createWidgetPlugin('tile')
+			.description(undocumented)
 			.interfaces<{ state: { open: boolean }, events: { toggled: [open: boolean] } }>()
-			.state(state => state.open({ validate: isBoolean, default: () => false }))
-			.events(['toggled'])
+			.state(state => state.open({ description: undocumented, validate: isBoolean, default: () => false }))
+			.events({ toggled: undocumented })
 			.done()
 	}
 
 	/** A 'tile' whose `title` is a number and whose `open` State is a string. */
 	function createWrongTile() {
 		return createWidgetPlugin('tile')
+			.description(undocumented)
 			.interfaces<{
 			state: { open: string }
 			properties: { title: number }
 			methods: { toggle: () => void }
 			events: { toggled: [open: boolean] }
 		}>()
-			.state(state => state.open({ validate: (input): input is string => typeof input === 'string', default: () => '' }))
-			.properties(properties => properties.title({ compute: () => 0 }))
-			.methods(methods => methods.toggle({ validateArgs: noArgs, execute: () => {} }))
-			.events(['toggled'])
+			.state(state => state.open({ description: undocumented, validate: (input): input is string => typeof input === 'string', default: () => '' }))
+			.properties(properties => properties.title({ description: undocumented, compute: () => 0 }))
+			.methods(methods => methods.toggle({ description: undocumented, validateArgs: noArgs, execute: () => {} }))
+			.events({ toggled: undocumented })
 			.done()
 	}
 
@@ -776,6 +798,7 @@ describe('a WidgetContract that names the expected plugin types', () => {
 		const deck = createDeck()
 		const card = createCardLike('card')
 		const tile = createWidgetPlugin('tile')
+			.description(undocumented)
 			.interfaces<{
 			state: { open: boolean, pinned: boolean }
 			properties: { title: 'Tile' }
@@ -783,11 +806,11 @@ describe('a WidgetContract that names the expected plugin types', () => {
 			events: { toggled: [open: boolean] }
 		}>()
 			.state(state => state
-				.open({ validate: isBoolean, default: () => true })
-				.pinned({ validate: isBoolean, default: () => false }))
-			.properties(properties => properties.title({ compute: () => 'Tile' }))
-			.methods(methods => methods.toggle({ validateArgs: (args): args is [force?: boolean] => args.length <= 1, execute: () => 1 }))
-			.events(['toggled'])
+				.open({ description: undocumented, validate: isBoolean, default: () => true })
+				.pinned({ description: undocumented, validate: isBoolean, default: () => false }))
+			.properties(properties => properties.title({ description: undocumented, compute: () => 'Tile' }))
+			.methods(methods => methods.toggle({ description: undocumented, validateArgs: (args): args is [force?: boolean] => args.length <= 1, execute: () => 1 }))
+			.events({ toggled: undocumented })
 			.done()
 
 		expectTypeOf<WidgetSystemPluginsCheck<readonly [typeof deck, typeof card, typeof tile]>>()
@@ -818,11 +841,12 @@ describe('a WidgetContract that names the expected plugin types', () => {
 			const deck = createDeck()
 			const card = createCardLike('card')
 			const tile = createWidgetPlugin('tile')
+				.description(undocumented)
 				.interfaces<Omit<CardInterfaces, 'state'> & { state: { open: true } }>()
-				.state(state => state.open({ validate: (input): input is true => input === true, default: () => true }))
-				.properties(properties => properties.title({ compute: () => 'Tile' }))
-				.methods(methods => methods.toggle({ validateArgs: noArgs, execute: () => {} }))
-				.events(['toggled'])
+				.state(state => state.open({ description: undocumented, validate: (input): input is true => input === true, default: () => true }))
+				.properties(properties => properties.title({ description: undocumented, compute: () => 'Tile' }))
+				.methods(methods => methods.toggle({ description: undocumented, validateArgs: noArgs, execute: () => {} }))
+				.events({ toggled: undocumented })
 				.done()
 			// @ts-expect-error the tile's `open` State is `true`, the contract's is `boolean`
 			const system = createWidgetSystem({ plugins: [deck, card, tile] })
@@ -887,11 +911,12 @@ describe('a WidgetContract that names the expected plugin types', () => {
 			const deck = createDeck()
 			const card = createCardLike('card')
 			const tile = createWidgetPlugin('tile')
+				.description(undocumented)
 				.interfaces<Empty<'properties', never>>()
-				.state(state => state.open({ validate: (input): input is boolean => typeof input === 'boolean', default: () => false }))
+				.state(state => state.open({ description: undocumented, validate: (input): input is boolean => typeof input === 'boolean', default: () => false }))
 				.properties(properties => properties)
-				.methods(methods => methods.toggle({ validateArgs: noArgs, execute: () => {} }))
-				.events(['toggled'])
+				.methods(methods => methods.toggle({ description: undocumented, validateArgs: noArgs, execute: () => {} }))
+				.events({ toggled: undocumented })
 				.done()
 			// @ts-expect-error the tile's Properties are explicit-empty: it has no `title`
 			const system = createWidgetSystem({ plugins: [deck, card, tile] })
@@ -918,6 +943,7 @@ describe('a WidgetContract that names the expected plugin types', () => {
 		const card = createCardLike('card')
 		const tile = createCardLike('tile')
 		const other = createWidgetPlugin('other')
+			.description(undocumented)
 			.interfaces<Record<never, never>>()
 			.done()
 		const system = createWidgetSystem({ plugins: [deck, card, tile, other] })

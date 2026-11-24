@@ -13,7 +13,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem, WidgetSystemRuntimeReentrancyError } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented, WidgetSystemRuntimeReentrancyError } from '../index'
 import { MAX_EMIT_DEPTH } from './event'
 
 interface LoopInterfaces {
@@ -26,8 +26,10 @@ interface LoopInterfaces {
 }
 
 const loopPlugin = createWidgetPlugin('loop')
+	.description(undocumented)
 	.interfaces<LoopInterfaces>()
 	.methods(methods => methods.fire({
+		description: undocumented,
 		validateArgs: (args): args is [] => args.length === 0,
 		emits: ['ev'],
 		execute: ({ emit }) => {
@@ -35,7 +37,7 @@ const loopPlugin = createWidgetPlugin('loop')
 			return null
 		},
 	}))
-	.events(['ev'])
+	.events({ ev: undocumented })
 	.done()
 
 const system = createWidgetSystem({ plugins: [loopPlugin] })

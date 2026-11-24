@@ -5,7 +5,7 @@
 
 import type { WidgetChild } from '../types'
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 import { inspectBlueprint, inspectRuntime } from './index'
 
 interface LeafInterfaces {
@@ -15,8 +15,10 @@ interface LeafInterfaces {
 }
 
 const leafPlugin = createWidgetPlugin('identity-leaf')
+	.description(undocumented)
 	.interfaces<LeafInterfaces>()
 	.state(state => state.value({
+		description: undocumented,
 		validate: (input): input is number => typeof input === 'number',
 		default: () => 0,
 	}))
@@ -27,8 +29,9 @@ interface ContainerInterfaces {
 }
 
 const containerPlugin = createWidgetPlugin('identity-container')
+	.description(undocumented)
 	.interfaces<ContainerInterfaces>()
-	.slots({ items: {} })
+	.slots({ items: { description: undocumented } })
 	.done()
 
 const system = createWidgetSystem({ plugins: [leafPlugin, containerPlugin] })

@@ -1,6 +1,6 @@
 import type { WidgetChild } from '../types'
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem, createWidgetValueContract } from '../index'
+import { createWidgetPlugin, createWidgetSystem, createWidgetValueContract, undocumented } from '../index'
 import { inspectBlueprint, inspectPlugin } from './index'
 
 interface TranslationResult {
@@ -31,17 +31,21 @@ interface FixtureInterfaces {
 let computeCalls = 0
 
 const plugin = createWidgetPlugin('plugin-inspection')
+	.description(undocumented)
 	.interfaces<FixtureInterfaces>()
 	.state(state => state
 		.authorVisible({
+			description: undocumented,
 			authorWritable: true,
 			validate: (input): input is number => typeof input === 'number',
 		})
 		.internal({
+			description: undocumented,
 			validate: (input): input is number => typeof input === 'number',
 		}))
 	.properties(properties => properties
 		.text({
+			description: undocumented,
 			valueContract: stringContract,
 			compute: () => {
 				computeCalls += 1
@@ -49,6 +53,7 @@ const plugin = createWidgetPlugin('plugin-inspection')
 			},
 		})
 		.translated({
+			description: undocumented,
 			valueContract: translationResultContract,
 			compute: () => {
 				computeCalls += 1
@@ -56,12 +61,13 @@ const plugin = createWidgetPlugin('plugin-inspection')
 			},
 		})
 		.untyped({
+			description: undocumented,
 			compute: () => {
 				computeCalls += 1
 				return 1
 			},
 		}))
-	.events(['changed'])
+	.events({ changed: undocumented })
 	.done()
 
 describe('plugin inspection', () => {
@@ -113,9 +119,11 @@ describe('plugin inspection', () => {
 
 	it('distinguishes absent capabilities from explicitly declared empty capabilities', () => {
 		const absent = createWidgetPlugin('inspection-absent-members')
+			.description(undocumented)
 			.interfaces<Record<never, never>>()
 			.done()
 		const empty = createWidgetPlugin('inspection-empty-members')
+			.description(undocumented)
 			.interfaces<{
 			state: Record<never, never>
 			properties: Record<never, never>
@@ -123,7 +131,7 @@ describe('plugin inspection', () => {
 		}>()
 			.state(state => state)
 			.properties(properties => properties)
-			.events([])
+			.events({})
 			.done()
 
 		expect(inspectPlugin(absent).state)
@@ -157,12 +165,13 @@ describe('plugin inspection', () => {
 		}
 
 		const special = createWidgetPlugin('inspection-special-names')
+			.description(undocumented)
 			.interfaces<SpecialInterfaces>()
-			.state(state => state[PROTO_KEY]({ validate: (input): input is number => typeof input === 'number' })
-				.constructor({ validate: (input): input is number => typeof input === 'number' }))
-			.properties(properties => properties[PROTO_KEY]({ valueContract: stringContract, compute: () => '__proto__' })
-				.constructor({ valueContract: stringContract, compute: () => 'constructor' }))
-			.events([PROTO_KEY, 'constructor'])
+			.state(state => state[PROTO_KEY]({ description: undocumented, validate: (input): input is number => typeof input === 'number' })
+				.constructor({ description: undocumented, validate: (input): input is number => typeof input === 'number' }))
+			.properties(properties => properties[PROTO_KEY]({ description: undocumented, valueContract: stringContract, compute: () => '__proto__' })
+				.constructor({ description: undocumented, valueContract: stringContract, compute: () => 'constructor' }))
+			.events({ [PROTO_KEY]: undocumented, constructor: undocumented })
 			.done()
 		const inspection = inspectPlugin(special)
 
@@ -185,13 +194,15 @@ describe('plugin inspection', () => {
 		}
 
 		const card = createWidgetPlugin('inspection-card')
+			.description(undocumented)
 			.interfaces<CardInterfaces>()
 			.config({
+				description: undocumented,
 				validate: (input): input is { readonly label?: string } | null => input === null || typeof input === 'object',
 				resolve: raw => ({ label: raw?.label ?? 'Card' }),
 			})
-			.slots({ header: {}, body: {} })
-			.state(state => state.open({ validate: (input): input is boolean => typeof input === 'boolean' }))
+			.slots({ header: { description: undocumented }, body: { description: undocumented } })
+			.state(state => state.open({ description: undocumented, validate: (input): input is boolean => typeof input === 'boolean' }))
 			.done()
 		const inspection = inspectPlugin(card)
 		const entry = createWidgetSystem({ plugins: [card] }).catalog.widgets[0]!
@@ -227,9 +238,11 @@ describe('plugin inspection', () => {
 
 	it('follows the catalog convention for absent and explicitly empty config and slots', () => {
 		const absent = createWidgetPlugin('inspection-absent-config-slots')
+			.description(undocumented)
 			.interfaces<Record<never, never>>()
 			.done()
 		const emptySlots = createWidgetPlugin('inspection-empty-slots')
+			.description(undocumented)
 			.interfaces<{ slots: never }>()
 			.slots({})
 			.done()

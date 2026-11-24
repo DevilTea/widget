@@ -8,7 +8,7 @@
 
 import type { WidgetChild } from '../types'
 import { describe, expect, it, vi } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem, WidgetSystemRuntimeDisposedError } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented, WidgetSystemRuntimeDisposedError } from '../index'
 import { inspectBlueprint, inspectRuntime } from './index'
 
 const PROTO_KEY = '__proto__' as const
@@ -24,12 +24,15 @@ interface HarnessInterfaces {
 
 function createHarness() {
 	const plugin = createWidgetPlugin('disposal-harness')
+		.description(undocumented)
 		.interfaces<HarnessInterfaces>()
 		.state(state => state.count({
+			description: undocumented,
 			validate: (input): input is number => typeof input === 'number',
 			default: () => 0,
 		}))
 		.properties(properties => properties.doubled({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ count: dep.self.state.get('count') }),
 			compute: ({ deps }) => {
 				const result = deps.count()
@@ -174,10 +177,12 @@ describe('immutability', () => {
 	}
 
 	const immutContainerPlugin = createWidgetPlugin('immut-container')
+		.description(undocumented)
 		.interfaces<ImmutInterfaces>()
-		.slots({ items: {} })
-		.state(state => state.value({ validate: (input): input is number => typeof input === 'number' }))
+		.slots({ items: { description: undocumented } })
+		.state(state => state.value({ description: undocumented, validate: (input): input is number => typeof input === 'number' }))
 		.properties(properties => properties.p({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ v: dep.self.state.get('value') }),
 			compute: ({ deps }) => {
 				const result = deps.v()
@@ -185,6 +190,7 @@ describe('immutability', () => {
 			},
 		}))
 		.methods(methods => methods.m({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ read: dep.self.properties.get('p') }),
 			validateArgs: (args): args is [] => args.length === 0,
 			execute: () => null,
@@ -198,8 +204,9 @@ describe('immutability', () => {
 	}
 
 	const immutLeafPlugin = createWidgetPlugin('immut-leaf')
+		.description(undocumented)
 		.interfaces<ImmutLeafInterfaces>()
-		.state(state => state.value({ validate: (input): input is number => typeof input === 'number' }))
+		.state(state => state.value({ description: undocumented, validate: (input): input is number => typeof input === 'number' }))
 		.done()
 
 	interface ImmutCycleInterfaces {
@@ -210,8 +217,10 @@ describe('immutability', () => {
 
 	/** A Property self-loop, used only to populate `invalidCycles` for the nested-member-freeze test. */
 	const immutCyclePlugin = createWidgetPlugin('immut-cycle')
+		.description(undocumented)
 		.interfaces<ImmutCycleInterfaces>()
 		.properties(properties => properties.loop({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ self: dep.self.properties.get('loop') }),
 			compute: () => null,
 		}))
@@ -399,17 +408,21 @@ describe('arbitrary-string safety: WidgetId as a dependency target', () => {
 	}
 
 	const targetPlugin = createWidgetPlugin('special-id-target')
+		.description(undocumented)
 		.interfaces<TargetInterfaces>()
 		.state(state => state.value({
+			description: undocumented,
 			validate: (input): input is number => typeof input === 'number',
 			default: () => 4,
 		}))
 		.done()
 
 	const consumerPlugin = createWidgetPlugin('special-id-consumer')
+		.description(undocumented)
 		.interfaces<ConsumerInterfaces>()
-		.slots({ children: {} })
+		.slots({ children: { description: undocumented } })
 		.properties(properties => properties.viaProtoId({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ v: dep.widget(PROTO_KEY).state.get('value') }),
 			compute: () => null,
 		}))

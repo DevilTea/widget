@@ -8,7 +8,7 @@
 
 import type { WidgetChild } from '../types'
 import { describe, expect, it, vi } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 
 interface MethodInterfaces {
 	state: {
@@ -33,14 +33,17 @@ function createHarness() {
 	let flakyShouldFail = false
 
 	const plugin = createWidgetPlugin('counter')
+		.description(undocumented)
 		.interfaces<MethodInterfaces>()
 		.state(state => state
 			.count({
+				description: undocumented,
 				validate: (input): input is number => typeof input === 'number',
 				default: () => 0,
 			}))
 		.methods(methods => methods
 			.guarded({
+				description: undocumented,
 				validateArgs: (args): args is [boolean] => {
 					guardedValidateArgsCount++
 					return args.length === 1 && typeof args[0] === 'boolean'
@@ -51,6 +54,7 @@ function createHarness() {
 				},
 			})
 			.ping({
+				description: undocumented,
 				validateArgs: (args): args is [] => {
 					pingValidateArgsCount++
 					return args.length === 0
@@ -61,6 +65,7 @@ function createHarness() {
 				},
 			})
 			.flakyExecute({
+				description: undocumented,
 				validateArgs: (args): args is [] => args.length === 0,
 				execute: ({ addDiagnostic }) => {
 					flakyExecuteCount++
@@ -72,6 +77,7 @@ function createHarness() {
 				},
 			})
 			.viaFlaky({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ flaky: dep.self.methods.invoke('flakyExecute') }),
 				validateArgs: (args): args is [] => args.length === 0,
 				execute: ({ deps }) => {
@@ -80,6 +86,7 @@ function createHarness() {
 				},
 			})
 			.incrementViaDep({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({
 					get: dep.self.state.get('count'),
 					set: dep.self.state.set('count'),
@@ -93,6 +100,7 @@ function createHarness() {
 				},
 			})
 			.viaAbsentParent({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({
 					read: dep.parent.optional().state.get('anything'),
 					invoke: dep.parent.optional().methods.invoke('anything'),
@@ -257,12 +265,15 @@ describe('runtimeMethod', () => {
 			properties: { doubled: number }
 		}
 		const targetPlugin = createWidgetPlugin('cross-widget-state-target')
+			.description(undocumented)
 			.interfaces<TargetInterfaces>()
 			.state(state => state.value({
+				description: undocumented,
 				validate: (input): input is number => typeof input === 'number',
 				default: () => 3,
 			}))
 			.properties(properties => properties.doubled({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ value: dep.self.state.get('value') }),
 				compute: ({ deps }) => {
 					const result = deps.value()
@@ -277,13 +288,16 @@ describe('runtimeMethod', () => {
 			methods: { writeTarget: (value: number) => number | null }
 		}
 		const callerPlugin = createWidgetPlugin('cross-widget-state-caller')
+			.description(undocumented)
 			.interfaces<CallerInterfaces>()
-			.slots({ children: {} })
+			.slots({ children: { description: undocumented } })
 			.state(state => state.value({
+				description: undocumented,
 				validate: (input): input is number => typeof input === 'number',
 				default: () => 10,
 			}))
 			.methods(methods => methods.writeTarget({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ setValue: dep.widget('target').state.set('value') }),
 				validateArgs: (args): args is [number] => args.length === 1 && typeof args[0] === 'number',
 				execute: ({ args, deps }) => {
@@ -333,9 +347,11 @@ describe('runtimeMethod', () => {
 			}
 		}
 		const plugin = createWidgetPlugin('nested-method-failures')
+			.description(undocumented)
 			.interfaces<NestedMethodInterfaces>()
 			.methods(methods => methods
 				.outer({
+					description: undocumented,
 					registerDeps: ({ dep }) => ({ middle: dep.self.methods.invoke('middle') }),
 					validateArgs: (args): args is [] => args.length === 0,
 					execute: ({ deps }) => {
@@ -344,6 +360,7 @@ describe('runtimeMethod', () => {
 					},
 				})
 				.middle({
+					description: undocumented,
 					registerDeps: ({ dep }) => ({ leaf: dep.self.methods.invoke('leaf') }),
 					validateArgs: (args): args is [] => args.length === 0,
 					execute: ({ deps }) => {
@@ -352,6 +369,7 @@ describe('runtimeMethod', () => {
 					},
 				})
 				.leaf({
+					description: undocumented,
 					validateArgs: (args): args is [] => args.length === 0,
 					execute: ({ addDiagnostic }) => {
 						addDiagnostic({ message: 'leaf failed' })

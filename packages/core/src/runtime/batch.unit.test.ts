@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 
 interface BatchInterfaces {
 	state: {
@@ -31,14 +31,17 @@ interface BatchInterfaces {
 
 function createHarness() {
 	const plugin = createWidgetPlugin('counter')
+		.description(undocumented)
 		.interfaces<BatchInterfaces>()
 		.state(state => state
 			.count({
+				description: undocumented,
 				validate: (input): input is number => typeof input === 'number',
 				default: () => 0,
 			}))
 		.properties(properties => properties
 			.doubled({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ count: dep.self.state.get('count') }),
 				compute: ({ deps }) => {
 					const result = deps.count()
@@ -47,6 +50,7 @@ function createHarness() {
 			}))
 		.methods(methods => methods
 			.bumpTwice({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({
 					get: dep.self.state.get('count'),
 					set: dep.self.state.set('count'),
@@ -61,6 +65,7 @@ function createHarness() {
 				},
 			})
 			.inner({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({
 					get: dep.self.state.get('count'),
 					set: dep.self.state.set('count'),
@@ -74,6 +79,7 @@ function createHarness() {
 				},
 			})
 			.outer({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({
 					invokeInner: dep.self.methods.invoke('inner'),
 					get: dep.self.state.get('count'),
@@ -89,6 +95,7 @@ function createHarness() {
 				},
 			})
 			.syncRead({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({
 					get: dep.self.state.get('count'),
 					set: dep.self.state.set('count'),
@@ -101,6 +108,7 @@ function createHarness() {
 				},
 			})
 			.propertyRecompute({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({
 					set: dep.self.state.set('count'),
 					doubled: dep.self.properties.get('doubled'),
@@ -113,6 +121,7 @@ function createHarness() {
 				},
 			})
 			.failAfterWrite({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ set: dep.self.state.set('count') }),
 				validateArgs: (args): args is [] => args.length === 0,
 				execute: ({ deps, addDiagnostic }) => {
@@ -122,6 +131,7 @@ function createHarness() {
 				},
 			})
 			.throwAfterWrite({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ set: dep.self.state.set('count') }),
 				validateArgs: (args): args is [] => args.length === 0,
 				execute: ({ deps }) => {

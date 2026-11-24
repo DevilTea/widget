@@ -4,7 +4,7 @@
  * "Event delivery semantics and Runtime Event inspection as a supported passive observation surface (#163)".
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem, WidgetSystemRuntimeDisposedError } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented, WidgetSystemRuntimeDisposedError } from '../index'
 import { inspectRuntime } from './index'
 
 interface Payload { readonly label: string }
@@ -21,24 +21,29 @@ interface ObservedInterfaces {
 }
 
 const plugin = createWidgetPlugin('observed')
+	.description(undocumented)
 	.interfaces<ObservedInterfaces>()
 	.methods(methods => methods
 		.fire({
+			description: undocumented,
 			validateArgs: (args): args is [string] => args.length === 1 && typeof args[0] === 'string',
 			emits: ['change'],
 			execute: ({ args, emit }) => emit.change(args[0]),
 		})
 		.fireObject({
+			description: undocumented,
 			validateArgs: (args): args is [Payload] => args.length === 1 && typeof args[0] === 'object' && args[0] !== null,
 			emits: ['object'],
 			execute: ({ args, emit }) => emit.object(args[0]),
 		}))
-	.events(['change', 'object'])
+	.events({ change: undocumented, object: undocumented })
 	.done()
 
 const stateOnlyPlugin = createWidgetPlugin('observed-no-events')
+	.description(undocumented)
 	.interfaces<{ state: { value: number } }>()
 	.state(state => state.value({
+		description: undocumented,
 		validate: (input): input is number => typeof input === 'number',
 	}))
 	.done()

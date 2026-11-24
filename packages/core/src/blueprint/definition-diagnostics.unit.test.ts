@@ -17,7 +17,7 @@ import type {
 } from '../index'
 import type { WidgetChild } from '../types'
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 
 // -------------------------------------------------------------------------------------------------
 // Fixture plugins/system
@@ -26,6 +26,7 @@ import { createWidgetPlugin, createWidgetSystem } from '../index'
 interface LeafInterfaces {}
 
 const leafPlugin = createWidgetPlugin('leaf')
+	.description(undocumented)
 	.interfaces<LeafInterfaces>()
 	.done()
 
@@ -34,9 +35,10 @@ interface ContainerInterfaces {
 }
 
 const containerPlugin = createWidgetPlugin('container')
+	.description(undocumented)
 	.interfaces<ContainerInterfaces>()
 	.slots({
-		children: {},
+		children: { description: undocumented },
 	})
 	.done()
 
@@ -48,8 +50,10 @@ interface ConfiguredInterfaces {
 }
 
 const configuredPlugin = createWidgetPlugin('configured')
+	.description(undocumented)
 	.interfaces<ConfiguredInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input, ctx): input is { label?: JsonValue } => {
 			if (typeof input !== 'object' || input === null || Array.isArray(input)) {
 				ctx.addDiagnostic({ message: 'Config must be an object.' })
@@ -514,8 +518,9 @@ describe('definition diagnostic codes do not depend on message text', () => {
 	}
 
 	const keywordSlotPlugin = createWidgetPlugin('keyword-slot')
+		.description(undocumented)
 		.interfaces<KeywordSlotInterfaces>()
-		.slots({ 'not declared': {} })
+		.slots({ 'not declared': { description: undocumented } })
 		.done()
 
 	const keywordSystem = createWidgetSystem({ plugins: [keywordSlotPlugin] })

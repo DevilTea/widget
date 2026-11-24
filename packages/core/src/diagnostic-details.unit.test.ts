@@ -27,7 +27,7 @@ import type {
 	WidgetStateValidateContext,
 } from './index'
 import { describe, expect, expectTypeOf, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from './index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from './index'
 import { inspectBlueprint } from './inspection/index'
 
 interface TooLarge {
@@ -166,7 +166,9 @@ describe('declared reasons type `reason` and `details` of every plugin-authored 
 
 	it('does not make `reasons` a capability', () => {
 		const plugin = createWidgetPlugin('reasons-only')
+			.description(undocumented)
 			.interfaces<{ reasons: { late: void } }>()
+			.reasons({ late: undocumented })
 			.done()
 
 		expect(plugin.capabilities)
@@ -183,12 +185,15 @@ function createHarness() {
 	const flags = { computeFails: false, executeFails: false }
 
 	const item = createWidgetPlugin('item')
+		.description(undocumented)
 		.interfaces<Record<never, never>>()
 		.done()
 
 	const counter = createWidgetPlugin('counter')
+		.description(undocumented)
 		.interfaces<CounterInterfaces>()
 		.config({
+			description: undocumented,
 			validate: (input, ctx): input is { readonly limit: number } | null => {
 				if (input === null)
 					return true
@@ -207,6 +212,7 @@ function createHarness() {
 		})
 		.slots({
 			items: {
+				description: undocumented,
 				validateStructure: (ctx) => {
 					if (ctx.children.length > 2)
 						ctx.addDiagnostic({ message: 'too many items', index: 2, reason: 'too-many', details: { max: 2 } })
@@ -218,6 +224,7 @@ function createHarness() {
 				ctx.addDiagnostic({ message: 'the counter holds too many items', slot: 'items', reason: 'too-many', details: { max: 2 } })
 		})
 		.state(state => state.count({
+			description: undocumented,
 			validate: (input, ctx): input is number => {
 				if (typeof input !== 'number') {
 					ctx.addDiagnostic({ message: 'count must be a number', reason: 'not-a-number' })
@@ -232,6 +239,7 @@ function createHarness() {
 			default: () => 0,
 		}))
 		.properties(properties => properties.doubled({
+			description: undocumented,
 			compute: (ctx) => {
 				if (flags.computeFails)
 					ctx.addDiagnostic({ message: 'doubled is too large', reason: 'too-large', details: { limit: ctx.config.limit, received: 999 } })
@@ -239,6 +247,7 @@ function createHarness() {
 			},
 		}))
 		.methods(methods => methods.add({
+			description: undocumented,
 			validateArgs: (args, ctx): args is [number] => {
 				if (typeof args[0] !== 'number') {
 					ctx.addDiagnostic({ message: 'amount must be a number', path: [0], reason: 'not-a-number' })
@@ -256,6 +265,11 @@ function createHarness() {
 				return ctx.args[0]
 			},
 		}))
+		.reasons({
+			'too-large': undocumented,
+			'not-a-number': undocumented,
+			'too-many': undocumented,
+		})
 		.done()
 
 	const system = createWidgetSystem({
@@ -414,6 +428,7 @@ describe('a non-JSON `details` is a contract violation', () => {
 	function createUntypedSystem(details: unknown, where: 'config' | 'slot' | 'plugin' | 'system' | 'state' | 'compute' | 'args' | 'execute') {
 		const report = (ctx: { addDiagnostic: (diagnostic: never) => void }, extra: Record<string, unknown> = {}) => ctx.addDiagnostic({ message: 'reported', reason: 'any', details, ...extra } as never)
 		const plugin = createWidgetPlugin('untyped')
+			.description(undocumented)
 			.interfaces<{
 			config: { raw: null, resolved: Record<never, never> }
 			slots: { items: WidgetChild }
@@ -422,6 +437,7 @@ describe('a non-JSON `details` is a contract violation', () => {
 			methods: { run: () => void }
 		}>()
 			.config({
+				description: undocumented,
 				validate: (input, ctx): input is null => {
 					if (where === 'config')
 						report(ctx)
@@ -431,6 +447,7 @@ describe('a non-JSON `details` is a contract violation', () => {
 			})
 			.slots({
 				items: {
+					description: undocumented,
 					validateStructure: (ctx) => {
 						if (where === 'slot')
 							report(ctx)
@@ -442,6 +459,7 @@ describe('a non-JSON `details` is a contract violation', () => {
 					report(ctx)
 			})
 			.state(state => state.count({
+				description: undocumented,
 				validate: (input, ctx): input is number => {
 					// Only the write under test reports: the default (0) is validated when the Runtime is created.
 					if (where === 'state' && input === 1)
@@ -451,6 +469,7 @@ describe('a non-JSON `details` is a contract violation', () => {
 				default: () => 0,
 			}))
 			.properties(properties => properties.total({
+				description: undocumented,
 				compute: (ctx) => {
 					if (where === 'compute')
 						report(ctx)
@@ -458,6 +477,7 @@ describe('a non-JSON `details` is a contract violation', () => {
 				},
 			}))
 			.methods(methods => methods.run({
+				description: undocumented,
 				validateArgs: (args, ctx): args is [] => {
 					if (where === 'args')
 						report(ctx)

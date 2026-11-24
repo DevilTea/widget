@@ -12,7 +12,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 
 interface DedupeInterfaces {
 	properties: {
@@ -31,9 +31,11 @@ function createHarness() {
 	let lastMethodCallResults: readonly boolean[] = []
 
 	const plugin = createWidgetPlugin('counter')
+		.description(undocumented)
 		.interfaces<DedupeInterfaces>()
 		.properties(properties => properties
 			.flaky({
+				description: undocumented,
 				compute: ({ addDiagnostic }) => {
 					if (flakyShouldFail)
 						addDiagnostic({ message: 'flaky failed' })
@@ -42,6 +44,7 @@ function createHarness() {
 			})
 			// Reads the same failing dependency (`flaky`) twice within one compute.
 			.readsFlakyTwice({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ flaky: dep.self.properties.get('flaky') }),
 				compute: ({ deps }) => {
 					const first = deps.flaky()
@@ -52,6 +55,7 @@ function createHarness() {
 			})
 			// The same refinement rejects the same read value twice within one compute.
 			.refinedTwice({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({
 					flaky: dep.self.properties.get('flaky')
 						.validate((_value): _value is never => false),
@@ -63,6 +67,7 @@ function createHarness() {
 				},
 			}))
 		.methods(methods => methods.invokesFlakyTwice({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ flaky: dep.self.properties.get('flaky') }),
 			validateArgs: (args): args is [] => args.length === 0,
 			execute: ({ deps }) => {
@@ -172,20 +177,24 @@ describe('dedupe anchor identity is collision-free for Symbols (review finding 3
 		const stableSymbol = Symbol('x')
 
 		const plugin = createWidgetPlugin('symbol-dedupe')
+			.description(undocumented)
 			.interfaces<SymbolDedupeInterfaces>()
 			.methods(methods => methods
 				// A fresh `Symbol('x')` every call: same description, different instance each time.
 				.distinctSymbol({
+					description: undocumented,
 					validateArgs: (args): args is [] => args.length === 0,
 					execute: () => Symbol('x'),
 				})
 				.stableSymbol({
+					description: undocumented,
 					validateArgs: (args): args is [] => args.length === 0,
 					execute: () => stableSymbol,
 				})
 				// A refinement that unconditionally rejects, so every read's rejected value (a fresh or
 				// stable Symbol, depending on which target it depends on) becomes `source.received`.
 				.viaDistinctSymbolTwice({
+					description: undocumented,
 					registerDeps: ({ dep }) => ({
 						sym: dep.self.methods.invoke('distinctSymbol')
 							.validate((_value): _value is never => false),
@@ -198,6 +207,7 @@ describe('dedupe anchor identity is collision-free for Symbols (review finding 3
 					},
 				})
 				.viaStableSymbolTwice({
+					description: undocumented,
 					registerDeps: ({ dep }) => ({
 						sym: dep.self.methods.invoke('stableSymbol')
 							.validate((_value): _value is never => false),

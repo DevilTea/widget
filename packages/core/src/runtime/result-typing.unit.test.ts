@@ -16,7 +16,7 @@ import type {
 	RuntimeWidgetDiagnostic,
 } from '../index'
 import { describe, expect, expectTypeOf, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 
 interface TypedInterfaces {
 	state: {
@@ -33,13 +33,16 @@ interface TypedInterfaces {
 }
 
 const plugin = createWidgetPlugin('typed')
+	.description(undocumented)
 	.interfaces<TypedInterfaces>()
 	.state(state => state.count({
+		description: undocumented,
 		validate: (input): input is number => typeof input === 'number',
 		default: () => 2,
 	}))
 	.properties(properties => properties
 		.total({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ count: dep.self.state.get('count') }),
 			compute: ({ deps }) => {
 				const count = deps.count()
@@ -49,6 +52,7 @@ const plugin = createWidgetPlugin('typed')
 			},
 		})
 		.label({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({
 				total: dep.self.properties.get('total'),
 				probe: dep.self.methods.invoke('probe'),
@@ -71,6 +75,7 @@ const plugin = createWidgetPlugin('typed')
 		}))
 	.methods(methods => methods
 		.run({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ probe: dep.self.methods.invoke('probe') }),
 			validateArgs: (args): args is [number] => typeof args[0] === 'number',
 			execute: ({ args: [factor], deps }) => {
@@ -81,6 +86,7 @@ const plugin = createWidgetPlugin('typed')
 			},
 		})
 		.probe({
+			description: undocumented,
 			validateArgs: (args): args is [] => args.length === 0,
 			execute: () => 7,
 		}))

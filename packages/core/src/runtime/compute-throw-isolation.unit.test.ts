@@ -14,7 +14,7 @@
 
 import type { ExecutionResult } from '../index'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 
 interface HostInterfaces {
 	state: {
@@ -39,17 +39,21 @@ function numberOf(result: ExecutionResult<number | null, unknown>): number {
 
 function createHarness(initial?: number) {
 	const plugin = createWidgetPlugin('host')
+		.description(undocumented)
 		.interfaces<HostInterfaces>()
 		.state(state => state.n({
+			description: undocumented,
 			validate: (input): input is number => typeof input === 'number',
 			default: () => 0,
 		}))
 		.properties(properties => properties
 			.a({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ n: dep.self.state.get('n') }),
 				compute: ({ deps }) => numberOf(deps.n()) * 10,
 			})
 			.boom({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ n: dep.self.state.get('n') }),
 				compute: ({ deps }) => {
 					const value = numberOf(deps.n())
@@ -59,10 +63,12 @@ function createHarness(initial?: number) {
 				},
 			})
 			.c({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ n: dep.self.state.get('n') }),
 				compute: ({ deps }) => numberOf(deps.n()) * 100,
 			})
 			.downstream({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ boom: dep.self.properties.get('boom') }),
 				compute: ({ deps }) => {
 					const boom = deps.boom()
@@ -70,6 +76,7 @@ function createHarness(initial?: number) {
 				},
 			}))
 		.methods(methods => methods.setN({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ setN: dep.self.state.set('n') }),
 			validateArgs: (args): args is [number] => typeof args[0] === 'number',
 			execute: ({ args, deps }) => {

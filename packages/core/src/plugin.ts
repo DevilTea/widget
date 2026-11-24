@@ -14,6 +14,22 @@ import type {
 	RelativeValueDiagnosticInput,
 } from './diagnostic'
 import type {
+	CapturedDocsNode,
+	WidgetConfigDocs,
+	WidgetConfigDocsData,
+	WidgetDescription,
+	WidgetEventDocs,
+	WidgetEventDocsData,
+	WidgetMethodDocs,
+	WidgetMethodDocsData,
+	WidgetPluginDocs,
+	WidgetReasonDocs,
+	WidgetReasonDocsData,
+	WidgetSlotDocs,
+	WidgetSlotDocsData,
+	WidgetValueDocs,
+} from './docs'
+import type {
 	BlueprintCompileView,
 	BlueprintRuntimeView,
 	BlueprintWidgetNodeView,
@@ -27,18 +43,22 @@ import type {
 	WidgetInterfaces,
 	WidgetInterfacesViolationOf,
 	WidgetMemberKey,
+	WidgetMemberValueOf,
 	WidgetMethodArgsOf,
 	WidgetMethodKeyOf,
 	WidgetMethodReturnOf,
 	WidgetPropertyKeyOf,
 	WidgetPropertyValueOf,
 	WidgetRawConfigOf,
+	WidgetReasonKeyOf,
+	WidgetReasonsOf,
 	WidgetResolvedConfigOf,
 	WidgetSlotExpectedOf,
 	WidgetSlotNameOf,
 	WidgetStateKeyOf,
 	WidgetStateValueOf,
 } from './types'
+import { captureDescription, captureDocsNode, captureDocsPositions, createDocsRecord, undocumented, WidgetDocsSerializer } from './docs'
 
 /**
  * Framework-private brand carrying the plugin's phantom interfaces and its erased definition record.
@@ -175,6 +195,12 @@ export interface WidgetPlugin<
 	readonly type: Type
 	/** Compiler/plugin-builder-authoritative declaration-presence facts. Immutable, stable for the plugin's lifetime. */
 	readonly capabilities: WidgetPluginCapabilities
+	/**
+	 * The plugin's documentation, as written in the builder: plain, serializable data (see
+	 * {@link WidgetPluginDocs}). Core never reads it, and it is not part of the catalog, inspection, Blueprints or
+	 * the Inspector protocol.
+	 */
+	readonly docs: WidgetPluginDocs
 	readonly [widgetPluginBrand]: WidgetPluginBrand<Interfaces>
 }
 
@@ -385,17 +411,25 @@ type WidgetMethodExecuteResult<Declared, Result> = IsAny<Declared> extends true
 // Member declarations
 // -------------------------------------------------------------------------------------------------
 
-export interface WidgetConfigDefinition<Interfaces extends WidgetInterfaces> {
+interface WidgetConfigDefinitionFields<Interfaces extends WidgetInterfaces> {
 	readonly validate: (input: unknown, ctx: WidgetConfigValidateContext<Interfaces>) => input is WidgetRawConfigOf<Interfaces>
 	readonly resolve: (rawConfig: WidgetRawConfigOf<Interfaces> | null) => WidgetResolvedConfigOf<Interfaces>
 }
+
+/**
+ * The config definition: `description`, the docs of `raw` and `resolved` (see `FieldDocs`), `validate` and
+ * `resolve`. With an `undocumented` description, `raw` and `resolved` may be left out.
+ */
+export type WidgetConfigDefinition<Interfaces extends WidgetInterfaces>
+	= & WidgetConfigDocs<WidgetRawConfigOf<Interfaces>, WidgetResolvedConfigOf<Interfaces>>
+		& WidgetConfigDefinitionFields<Interfaces>
 
 /** `Result` is the slot validator's own return type (see {@link WidgetSynchronousResult}). */
 export interface WidgetSlotDefinition<
 	Interfaces extends WidgetInterfaces,
 	SlotName extends WidgetMemberKey,
 	Result = unknown,
-> {
+> extends WidgetSlotDocs {
 	readonly validateStructure?: (ctx: WidgetSlotValidateStructureContext<Interfaces, SlotName>) => WidgetSynchronousResult<Result>
 }
 
@@ -424,7 +458,7 @@ export type ExactWidgetSlotDefinitions<Interfaces extends WidgetInterfaces, Defi
 /** `Result` is the validator's own return type (see {@link WidgetSynchronousResult}). */
 export type WidgetPluginValidateStructure<Interfaces extends WidgetInterfaces, Result = unknown> = (ctx: WidgetPluginValidateStructureContext<Interfaces>) => WidgetSynchronousResult<Result>
 
-export interface WidgetStateMemberDefinition<
+interface WidgetStateMemberDefinitionFields<
 	Interfaces extends WidgetInterfaces,
 	Key extends WidgetMemberKey,
 > {
@@ -434,7 +468,13 @@ export interface WidgetStateMemberDefinition<
 	readonly default?: (ctx: WidgetStateDefaultContext<Interfaces>) => WidgetStateValueOf<Interfaces, Key>
 }
 
-export interface WidgetPropertyDefinition<
+/** A State member: `description` plus the nested docs of its value type (see `ShapeDocs`), and its callbacks. */
+export type WidgetStateMemberDefinition<
+	Interfaces extends WidgetInterfaces,
+	Key extends WidgetMemberKey,
+> = WidgetValueDocs<WidgetStateValueOf<Interfaces, Key>> & WidgetStateMemberDefinitionFields<Interfaces, Key>
+
+interface WidgetPropertyDefinitionFields<
 	Interfaces extends WidgetInterfaces,
 	Name extends WidgetMemberKey,
 	Deps extends RegisteredDeps,
@@ -444,6 +484,13 @@ export interface WidgetPropertyDefinition<
 	readonly registerDeps?: (ctx: WidgetRegisterDepsContext<Interfaces, 'property'>) => Deps
 	readonly compute: (ctx: WidgetPropertyComputeContext<Interfaces, Deps>) => WidgetPropertyValueOf<Interfaces, Name>
 }
+
+/** A Property: `description` plus the nested docs of its value type (see `ShapeDocs`), and its callbacks. */
+export type WidgetPropertyDefinition<
+	Interfaces extends WidgetInterfaces,
+	Name extends WidgetMemberKey,
+	Deps extends RegisteredDeps,
+> = WidgetValueDocs<WidgetPropertyValueOf<Interfaces, Name>> & WidgetPropertyDefinitionFields<Interfaces, Name, Deps>
 
 interface WidgetMethodDefinitionFields<
 	Interfaces extends WidgetInterfaces,
@@ -475,33 +522,36 @@ export type WidgetMethodDefinition<
 	Result = unknown,
 	Emits extends WidgetEventKeyOf<Interfaces> = never,
 >
-	= & WidgetMethodDefinitionFields<Interfaces, Name, Deps, Result, Emits>
+	= & WidgetMethodDocs<WidgetMethodArgsOf<Interfaces, Name>, WidgetMethodReturnOf<Interfaces, Name>>
+		& WidgetMethodDefinitionFields<Interfaces, Name, Deps, Result, Emits>
 		& ([Emits] extends [never] ? unknown : { readonly emits: readonly Emits[] })
 
-/** What a `.events()` list that leaves declared Events out is checked against; `Missing` names them. */
-export interface WidgetEventNamesViolation<Missing extends string> {
-	readonly 'widget-core: .events() must list every declared Event; missing': Missing
+/**
+ * What `.events()` takes: one docs entry for every Event of `Interfaces['events']`, keyed by the Event name
+ * (the keys are the Events declared at run time). Each entry has a `description` and a `payload`, one docs
+ * entry per payload position.
+ */
+export type WidgetEventDefinitions<Interfaces extends WidgetInterfaces> = {
+	readonly [Name in WidgetEventKeyOf<Interfaces>]: WidgetEventDocs<WidgetEventArgsOf<Interfaces, Name>>
+}
+
+/** What `.reasons()` takes: one docs entry for every reason of `Interfaces['reasons']`. */
+export type WidgetReasonDefinitions<Interfaces extends WidgetInterfaces> = {
+	readonly [Reason in WidgetReasonKeyOf<Interfaces>]: WidgetReasonDocs<WidgetMemberValueOf<WidgetReasonsOf<Interfaces>, Reason>>
+}
+
+/** What a docs record passed through a variable with a key the interfaces do not declare is checked against. */
+export interface WidgetUndeclaredMemberViolation<Section extends string> {
+	readonly 'widget-core: this name is not declared in the interfaces': Section
 }
 
 /**
- * What a `.events()` list whose length is not known statically is checked against: a widened array such as
- * `('a' | 'b')[]` may hold only some of the names, which neither the types nor the builder can see.
+ * Rejects an `.events()` or `.reasons()` record with a name the interfaces never declared, also when the record
+ * is supplied through a variable instead of a fresh object literal.
  */
-export interface WidgetEventNamesTupleViolation {
-	readonly 'widget-core: .events() takes a tuple of Event names (a list literal or an `as const` array), not a widened array': never
+type ExactMemberRecord<Declared extends PropertyKey, Names extends PropertyKey, Section extends string> = {
+	readonly [Name in Exclude<Names, Declared>]: WidgetUndeclaredMemberViolation<Section>
 }
-
-/**
- * `unknown` (an intersection identity) when `Names` is a tuple that lists every Event the interfaces
- * declare; a {@link WidgetEventNamesTupleViolation} for a widened array, a {@link WidgetEventNamesViolation}
- * for a tuple that leaves Events out. A name the interfaces do not declare is already rejected by the list's
- * element type.
- */
-export type ExactWidgetEventNames<Interfaces extends WidgetInterfaces, Names extends readonly WidgetMemberKey[]> = number extends Names['length']
-	? WidgetEventNamesTupleViolation
-	: [WidgetEventKeyOf<Interfaces>] extends [Names[number]]
-			? unknown
-			: WidgetEventNamesViolation<Exclude<WidgetEventKeyOf<Interfaces>, Names[number]>>
 
 // -------------------------------------------------------------------------------------------------
 // Section keyed-chain typestate
@@ -566,15 +616,19 @@ export interface WidgetPluginDonePhase<Type extends string, Interfaces extends W
 }
 
 /**
- * Outer builder phases in their fixed call order: every capability phase plus the optional,
- * capability-independent `structure` phase. Part of the type-level order diagnostics only; the runtime
- * builder is order-agnostic.
+ * Outer builder phases after `.interfaces()` in their fixed call order: every capability phase, the
+ * optional, capability-independent `structure` phase, and `reasons`, whose phase exists when
+ * `Interfaces['reasons']` is declared (it is not a capability). Part of the type-level order diagnostics
+ * only; past `.description()` and `.interfaces()` the runtime builder is order-agnostic.
  */
-type WidgetPluginPhaseOrder = readonly ['config', 'slots', 'structure', 'state', 'properties', 'methods', 'events']
+type WidgetPluginPhaseOrder = readonly ['config', 'slots', 'structure', 'state', 'properties', 'methods', 'events', 'reasons']
 
 type WidgetPluginPhaseName = WidgetPluginPhaseOrder[number]
 
+/** The phases that exist only when their `Interfaces` key is declared. */
 type WidgetPluginCapabilityPhaseName = Exclude<WidgetPluginPhaseName, 'structure'>
+
+type WidgetPluginPhaseOrderText = 'Order: description -> interfaces -> config? -> slots? -> structure? -> state? -> properties? -> methods? -> events? -> reasons? -> done()'
 
 /**
  * The phases available for `Interfaces`: every phase whose capability was declared, plus `structure`,
@@ -613,16 +667,17 @@ type WidgetPluginMisplacedArguments<Interfaces extends WidgetInterfaces, Phase e
 				: Phase extends 'state' ? [build: Violation & ((section: WidgetStateSection<Interfaces, WidgetStateKeyOf<Interfaces>>) => unknown)]
 					: Phase extends 'properties' ? [build: Violation & ((section: WidgetPropertiesSection<Interfaces, WidgetPropertyKeyOf<Interfaces>>) => unknown)]
 						: Phase extends 'methods' ? [build: Violation & ((section: WidgetMethodsSection<Interfaces, WidgetMethodKeyOf<Interfaces>>) => unknown)]
-							: [names: Violation & readonly WidgetEventKeyOf<Interfaces>[]]
+							: Phase extends 'events' ? [definitions: Violation & WidgetEventDefinitions<Interfaces>]
+								: [definitions: Violation & WidgetReasonDefinitions<Interfaces>]
 
 type WidgetPluginPhaseOrderReason<
 	Phase extends WidgetPluginPhaseName,
 	Stage extends WidgetPluginPhaseName | 'done',
 > = Stage extends WidgetPluginPhaseName
 	? WidgetPluginPhaseIsBefore<Phase, Stage> extends true
-		? `'.${Phase}()' was already called or must be called earlier; the next phase is '.${Stage}()'. Order: interfaces -> config? -> slots? -> structure? -> state? -> properties? -> methods? -> events? -> done()`
-		: `'.${Phase}()' is called too early; call '.${Stage}()' first. Order: interfaces -> config? -> slots? -> structure? -> state? -> properties? -> methods? -> events? -> done()`
-	: `'.${Phase}()' cannot be called here; the declared phases are already complete, so only '.done()' remains. Order: interfaces -> config? -> slots? -> structure? -> state? -> properties? -> methods? -> events? -> done()`
+		? `'.${Phase}()' was already called or must be called earlier; the next phase is '.${Stage}()'. ${WidgetPluginPhaseOrderText}`
+		: `'.${Phase}()' is called too early; call '.${Stage}()' first. ${WidgetPluginPhaseOrderText}`
+	: `'.${Phase}()' cannot be called here; the declared phases are already complete, so only '.done()' remains. ${WidgetPluginPhaseOrderText}`
 
 /**
  * Adds type-only order markers for every available phase that is not in `Callable` (by default just
@@ -646,11 +701,24 @@ export type WidgetPluginOrderedPhase<
 		) => WidgetPluginOrderedPhase<Phase, Interfaces, Stage, Callable>
 	}
 
-interface WidgetPluginEventsPhaseMembers<Type extends string, Interfaces extends WidgetInterfaces> {
-	/** Declares the Events: the list of every Event name of `Interfaces['events']`, each exactly once. */
-	events: <const Names extends readonly WidgetEventKeyOf<Interfaces>[]>(
-		names: Names & ExactWidgetEventNames<Interfaces, Names>,
+interface WidgetPluginReasonsPhaseMembers<Type extends string, Interfaces extends WidgetInterfaces> {
+	/**
+	 * Documents the diagnostic reasons: one entry for every reason of `Interfaces['reasons']`, with `details`
+	 * (the docs of the payload) when the payload is not `void`.
+	 */
+	reasons: <const Names extends PropertyKey = never>(
+		definitions: WidgetReasonDefinitions<Interfaces> & ExactMemberRecord<WidgetReasonKeyOf<Interfaces>, Names, 'reasons'> & { readonly [Name in Names]?: unknown },
 	) => WidgetPluginOrderedPhase<WidgetPluginDonePhase<Type, Interfaces>, Interfaces, 'done'>
+}
+
+interface WidgetPluginEventsPhaseMembers<Type extends string, Interfaces extends WidgetInterfaces> {
+	/**
+	 * Declares the Events: one docs entry for every Event of `Interfaces['events']`, keyed by its name, with a
+	 * `description` and a `payload` (one docs entry per payload position).
+	 */
+	events: <const Names extends PropertyKey = never>(
+		definitions: WidgetEventDefinitions<Interfaces> & ExactMemberRecord<WidgetEventKeyOf<Interfaces>, Names, 'events'> & { readonly [Name in Names]?: unknown },
+	) => WidgetPluginReasonsPhase<Type, Interfaces>
 }
 
 interface WidgetPluginMethodsPhaseMembers<Type extends string, Interfaces extends WidgetInterfaces> {
@@ -677,9 +745,14 @@ interface WidgetPluginStatePhaseMembers<Type extends string, Interfaces extends 
 	) => WidgetPluginPropertiesPhase<Type, Interfaces>
 }
 
+/** The `.reasons()` phase, present when `Interfaces['reasons']` is declared (and then required). */
+export type WidgetPluginReasonsPhase<Type extends string, Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'reasons'> extends true
+	? WidgetPluginOrderedPhase<WidgetPluginReasonsPhaseMembers<Type, Interfaces>, Interfaces, 'reasons'>
+	: WidgetPluginOrderedPhase<WidgetPluginDonePhase<Type, Interfaces>, Interfaces, 'done'>
+
 export type WidgetPluginEventsPhase<Type extends string, Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'events'> extends true
 	? WidgetPluginOrderedPhase<WidgetPluginEventsPhaseMembers<Type, Interfaces>, Interfaces, 'events'>
-	: WidgetPluginOrderedPhase<WidgetPluginDonePhase<Type, Interfaces>, Interfaces, 'done'>
+	: WidgetPluginReasonsPhase<Type, Interfaces>
 
 export type WidgetPluginMethodsPhase<Type extends string, Interfaces extends WidgetInterfaces> = HasWidgetCapability<Interfaces, 'methods'> extends true
 	? WidgetPluginOrderedPhase<WidgetPluginMethodsPhaseMembers<Type, Interfaces>, Interfaces, 'methods'>
@@ -720,7 +793,9 @@ export type WidgetPluginStructurePhase<Type extends string, Interfaces extends W
 			? WidgetPluginStructureStage<Type, Interfaces, 'methods', WidgetPluginMethodsPhaseMembers<Type, Interfaces>>
 			: HasWidgetCapability<Interfaces, 'events'> extends true
 				? WidgetPluginStructureStage<Type, Interfaces, 'events', WidgetPluginEventsPhaseMembers<Type, Interfaces>>
-				: WidgetPluginStructureStage<Type, Interfaces, 'done', WidgetPluginDonePhase<Type, Interfaces>>
+				: HasWidgetCapability<Interfaces, 'reasons'> extends true
+					? WidgetPluginStructureStage<Type, Interfaces, 'reasons', WidgetPluginReasonsPhaseMembers<Type, Interfaces>>
+					: WidgetPluginStructureStage<Type, Interfaces, 'done', WidgetPluginDonePhase<Type, Interfaces>>
 
 /**
  * `slots: never` is the canonical explicit-empty slots declaration (diagnostic #10 amendment
@@ -749,6 +824,16 @@ export interface WidgetPluginInterfacesPhase<Type extends string> {
 		: WidgetInterfacesViolation<WidgetInterfacesViolationOf<Interfaces>>
 }
 
+/**
+ * The first builder phase: `.description(text)`, the plugin's description (Markdown prose, or `undocumented`).
+ * `.interfaces()` is an order marker here: calling it fails type-checking with the reason, and throws a
+ * `TypeError` at run time.
+ */
+export interface WidgetPluginDescriptionPhase<Type extends string> {
+	description: (description: WidgetDescription) => WidgetPluginInterfacesPhase<Type>
+	readonly interfaces: WidgetPluginPhaseOrderViolation<`'.interfaces()' is called too early; call '.description()' first. ${WidgetPluginPhaseOrderText}`>
+}
+
 // -------------------------------------------------------------------------------------------------
 // Builder implementation
 // -------------------------------------------------------------------------------------------------
@@ -763,12 +848,47 @@ interface WidgetPluginDraft {
 	/** The Methods that declared `emits`, in declaration order; `null` when none did (the common case). */
 	emittingMethods: WidgetMemberKey[] | null
 	events: Map<WidgetMemberKey, ErasedWidgetEventDefinition> | null
+	docs: WidgetPluginDocsDraft
 }
 
-type WidgetPluginSectionName = 'config' | 'slots' | 'state' | 'properties' | 'methods' | 'events'
+interface CapturedConfigDocs {
+	readonly description: string | null
+	readonly raw?: CapturedDocsNode | null
+	readonly resolved?: CapturedDocsNode | null
+}
 
-/** The sections declared with definition objects; Events are declared by name only. */
-type WidgetPluginDefinitionSectionName = Exclude<WidgetPluginSectionName, 'events'>
+interface CapturedMethodDocs {
+	readonly description: string | null
+	readonly params?: readonly (CapturedDocsNode | null)[]
+	readonly returns?: CapturedDocsNode | null
+}
+
+interface CapturedEventDocs {
+	readonly description: string | null
+	readonly payload?: readonly (CapturedDocsNode | null)[]
+}
+
+interface CapturedReasonDocs {
+	readonly description: string | null
+	readonly details?: CapturedDocsNode | null
+}
+
+/** The docs captured so far, by value; serialized into `plugin.docs` by `done()`. */
+interface WidgetPluginDocsDraft {
+	description: string | null
+	config: CapturedConfigDocs | null
+	slots: Map<WidgetMemberKey, string | null> | null
+	state: Map<WidgetMemberKey, CapturedDocsNode> | null
+	properties: Map<WidgetMemberKey, CapturedDocsNode> | null
+	methods: Map<WidgetMemberKey, CapturedMethodDocs> | null
+	events: Map<WidgetMemberKey, CapturedEventDocs> | null
+	reasons: Map<WidgetMemberKey, CapturedReasonDocs> | null
+}
+
+type WidgetPluginSectionName = 'config' | 'slots' | 'state' | 'properties' | 'methods' | 'events' | 'reasons'
+
+/** The sections declared with definition objects; Events and reasons are declared by docs only. */
+type WidgetPluginDefinitionSectionName = Exclude<WidgetPluginSectionName, 'events' | 'reasons'>
 
 type WidgetPluginMemberSectionName = Exclude<WidgetPluginDefinitionSectionName, 'config' | 'slots'>
 
@@ -868,6 +988,61 @@ function captureDefinition(pluginType: string, section: WidgetPluginDefinitionSe
 	return captured
 }
 
+/** The keys of a State or Property definition that hold its docs. */
+const VALUE_DOCS_KEYS = ['description', 'fields', 'items', 'values', 'ref'] as const
+
+const EVENT_DOCS_KEYS: ReadonlySet<string> = new Set(['description', 'payload'])
+
+const REASON_DOCS_KEYS: ReadonlySet<string> = new Set(['description', 'details'])
+
+function docsSubject(pluginType: string, subject: string): string {
+	return `Widget plugin "${pluginType}": ${subject}`
+}
+
+/** The docs of a State member or Property: its description and the nested docs of its value. */
+function captureValueDocs(pluginType: string, subject: string, definition: Readonly<Record<string, unknown>>): CapturedDocsNode {
+	const picked: Record<string, unknown> = {}
+	for (const key of VALUE_DOCS_KEYS) {
+		if (definition[key] !== undefined)
+			picked[key] = definition[key]
+	}
+	return captureDocsNode(picked, docsSubject(pluginType, subject), '', true)!
+}
+
+/** The docs of a Method: its description, `params` and `returns`. */
+function captureMethodDocs(pluginType: string, subject: string, definition: Readonly<Record<string, unknown>>): CapturedMethodDocs {
+	const where = docsSubject(pluginType, subject)
+	const docs: { description: string | null, params?: readonly (CapturedDocsNode | null)[], returns?: CapturedDocsNode | null } = {
+		description: captureDescription(definition.description, where, ''),
+	}
+	if (definition.params !== undefined)
+		docs.params = captureDocsPositions(definition.params, where, 'params')
+	if (definition.returns !== undefined)
+		docs.returns = captureDocsNode(definition.returns, where, 'returns', true)
+	return docs
+}
+
+/** One entry of a docs record (`.events()`, `.reasons()`): `undocumented` or an object with only the `allowed` keys. */
+function captureDocsEntry(where: string, entry: unknown, allowed: ReadonlySet<string>): Readonly<Record<string, unknown>> | null {
+	if (entry === undocumented)
+		return null
+	if (typeof entry !== 'object' || entry === null || Array.isArray(entry))
+		throw new TypeError(`${where} must be a docs object or undocumented, got ${describeValue(entry)}. This is a plugin implementation bug.`)
+	for (const key of Object.keys(entry)) {
+		if (!allowed.has(key))
+			throw new TypeError(`${where} has an unknown docs key "${key}". This is a plugin implementation bug.`)
+	}
+	return entry as Readonly<Record<string, unknown>>
+}
+
+/** The entries of an `.events()` or `.reasons()` record, in declaration order. */
+function readDocsRecord(pluginType: string, section: 'events' | 'reasons', definitions: unknown): readonly (readonly [WidgetMemberKey, unknown])[] {
+	if (typeof definitions !== 'object' || definitions === null || Array.isArray(definitions))
+		throw pluginContractViolation(pluginType, `section "${section}"`, `must be declared with an object of docs keyed by name, got ${describeValue(definitions)}`)
+	return Object.keys(definitions)
+		.map(name => [name, (definitions as Readonly<Record<string, unknown>>)[name]] as const)
+}
+
 /**
  * Runs one section build callback against the section keyed-chain object, registering its members into
  * `members` in declaration order.
@@ -879,11 +1054,14 @@ function captureDefinition(pluginType: string, section: WidgetPluginDefinitionSe
  * the build callback returns or throws: a later registrar call (from a retained section) throws and
  * changes nothing.
  */
-function buildSection(
+function buildSection<Docs>(
 	pluginType: string,
 	sectionName: WidgetPluginMemberSectionName,
 	members: Map<WidgetMemberKey, any>,
 	build: (section: any) => unknown,
+	/** Captures the docs of one member definition (after its callbacks were checked). */
+	captureDocs: (subject: string, definition: Readonly<Record<string, unknown>>) => Docs,
+	docs: Map<WidgetMemberKey, Docs>,
 	/** Called with the name of each member whose definition declares `emits` (only the Methods section passes it). */
 	onDeclaresEmits?: (key: WidgetMemberKey) => void,
 ): void {
@@ -899,7 +1077,9 @@ function buildSection(
 					throw pluginContractViolation(pluginType, subject, 'was declared after the section\'s build callback returned')
 
 				const captured = captureDefinition(pluginType, sectionName, subject, definition)
+				const capturedDocs = captureDocs(subject, captured)
 				members.set(key, captured)
+				docs.set(key, capturedDocs)
 				// Recorded as soon as the member is captured, so the draft's list matches `members` even when
 				// the build callback later throws and the caller carries on.
 				if (onDeclaresEmits !== undefined && captured.emits !== undefined)
@@ -920,13 +1100,14 @@ function buildSection(
 /**
  * Starts the plugin builder for one plugin `type`.
  *
- * Phase order is `interfaces -> config? -> slots? -> structure? -> state? -> properties? -> methods? -> events? -> done()`;
- * a capability phase exists only when its capability is declared, while the optional `structure` phase
- * (the plugin-level structure validator) is available to every plugin. Calling a phase out of order (or
- * repeating it) fails type-checking with an order-specific diagnostic; the runtime builder itself is
- * order-agnostic.
+ * Phase order is `description -> interfaces -> config? -> slots? -> structure? -> state? -> properties? -> methods? -> events? -> reasons? -> done()`;
+ * a capability phase exists only when its capability is declared, the `reasons` phase only when
+ * `Interfaces['reasons']` is declared, while the optional `structure` phase (the plugin-level structure
+ * validator) is available to every plugin. Calling a phase out of order (or repeating it) fails type-checking
+ * with an order-specific diagnostic. At run time `.description()` must come first (`.interfaces()` before it
+ * throws a `TypeError`); the phases after `.interfaces()` are order-agnostic.
  */
-export function createWidgetPlugin<const Type extends string>(type: Type): WidgetPluginInterfacesPhase<Type> {
+export function createWidgetPlugin<const Type extends string>(type: Type): WidgetPluginDescriptionPhase<Type> {
 	const draft: WidgetPluginDraft = {
 		config: null,
 		slots: null,
@@ -936,13 +1117,34 @@ export function createWidgetPlugin<const Type extends string>(type: Type): Widge
 		methods: null,
 		emittingMethods: null,
 		events: null,
+		docs: {
+			description: null,
+			config: null,
+			slots: null,
+			state: null,
+			properties: null,
+			methods: null,
+			events: null,
+			reasons: null,
+		},
 	}
 
 	const builder = {
 		interfaces: () => builder,
 
 		config(definition: ErasedWidgetConfigDefinition) {
-			draft.config = captureDefinition(type, 'config', 'section "config"', definition)
+			const subject = 'section "config"'
+			const captured = captureDefinition(type, 'config', subject, definition) as Readonly<Record<string, unknown>>
+			const where = docsSubject(type, subject)
+			const docs: { description: string | null, raw?: CapturedDocsNode | null, resolved?: CapturedDocsNode | null } = {
+				description: captureDescription(captured.description, where, ''),
+			}
+			if (captured.raw !== undefined)
+				docs.raw = captureDocsNode(captured.raw, where, 'raw', false)
+			if (captured.resolved !== undefined)
+				docs.resolved = captureDocsNode(captured.resolved, where, 'resolved', false)
+			draft.config = captured as unknown as ErasedWidgetConfigDefinition
+			draft.docs.config = docs
 			return builder
 		},
 
@@ -956,8 +1158,16 @@ export function createWidgetPlugin<const Type extends string>(type: Type): Widge
 			if (removedArguments.some(argument => argument !== undefined))
 				throw pluginContractViolation(type, 'section "slots"', 'takes only the slot definitions; declare a plugin-level validateStructure with ".structure()"')
 
-			draft.slots = new Map(Object.entries(definitions)
-				.map(([name, slot]) => [name, captureDefinition(type, 'slots', memberSubject('slots', name), slot)]))
+			const slots = new Map<WidgetMemberKey, ErasedWidgetSlotDefinition>()
+			const docs = new Map<WidgetMemberKey, string | null>()
+			for (const [name, slot] of Object.entries(definitions)) {
+				const subject = memberSubject('slots', name)
+				const captured = captureDefinition(type, 'slots', subject, slot) as Readonly<Record<string, unknown>>
+				docs.set(name, captureDescription(captured.description, docsSubject(type, subject), ''))
+				slots.set(name, captured as ErasedWidgetSlotDefinition)
+			}
+			draft.slots = slots
+			draft.docs.slots = docs
 			return builder
 		},
 
@@ -971,39 +1181,66 @@ export function createWidgetPlugin<const Type extends string>(type: Type): Widge
 
 		state(build: (section: any) => unknown) {
 			const members = new Map<WidgetMemberKey, ErasedWidgetStateMemberDefinition>()
+			const docs = new Map<WidgetMemberKey, CapturedDocsNode>()
 			draft.state = members
-			buildSection(type, 'state', members, build)
+			draft.docs.state = docs
+			buildSection(type, 'state', members, build, (subject, definition) => captureValueDocs(type, subject, definition), docs)
 			return builder
 		},
 
 		properties(build: (section: any) => unknown) {
 			const members = new Map<WidgetMemberKey, ErasedWidgetPropertyDefinition>()
+			const docs = new Map<WidgetMemberKey, CapturedDocsNode>()
 			draft.properties = members
-			buildSection(type, 'properties', members, build)
+			draft.docs.properties = docs
+			buildSection(type, 'properties', members, build, (subject, definition) => captureValueDocs(type, subject, definition), docs)
 			return builder
 		},
 
 		methods(build: (section: any) => unknown) {
 			const members = new Map<WidgetMemberKey, ErasedWidgetMethodDefinition>()
+			const docs = new Map<WidgetMemberKey, CapturedMethodDocs>()
 			draft.methods = members
+			draft.docs.methods = docs
 			draft.emittingMethods = null
-			buildSection(type, 'methods', members, build, (key) => {
+			buildSection(type, 'methods', members, build, (subject, definition) => captureMethodDocs(type, subject, definition), docs, (key) => {
 				(draft.emittingMethods ??= []).push(key)
 			})
 			return builder
 		},
 
-		events(names: readonly WidgetMemberKey[]) {
-			if (!isNameArray(names))
-				throw pluginContractViolation(type, 'section "events"', `must be declared with an array of Event names, got ${describeValue(names)}`)
-
+		events(definitions: Readonly<Record<WidgetMemberKey, unknown>>) {
 			const members = new Map<WidgetMemberKey, ErasedWidgetEventDefinition>()
-			for (const name of names) {
-				if (members.has(name))
-					throw pluginContractViolation(type, memberSubject('events', name), 'is listed more than once')
+			const docs = new Map<WidgetMemberKey, CapturedEventDocs>()
+			for (const [name, entry] of readDocsRecord(type, 'events', definitions)) {
+				const where = docsSubject(type, memberSubject('events', name))
+				const source = captureDocsEntry(where, entry, EVENT_DOCS_KEYS)
+				const captured: { description: string | null, payload?: readonly (CapturedDocsNode | null)[] } = {
+					description: source === null ? null : captureDescription(source.description, where, ''),
+				}
+				if (source !== null && source.payload !== undefined)
+					captured.payload = captureDocsPositions(source.payload, where, 'payload')
 				members.set(name, EVENT_DEFINITION)
+				docs.set(name, captured)
 			}
 			draft.events = members
+			draft.docs.events = docs
+			return builder
+		},
+
+		reasons(definitions: Readonly<Record<WidgetMemberKey, unknown>>) {
+			const docs = new Map<WidgetMemberKey, CapturedReasonDocs>()
+			for (const [name, entry] of readDocsRecord(type, 'reasons', definitions)) {
+				const where = docsSubject(type, memberSubject('reasons', name))
+				const source = captureDocsEntry(where, entry, REASON_DOCS_KEYS)
+				const captured: { description: string | null, details?: CapturedDocsNode | null } = {
+					description: source === null ? null : captureDescription(source.description, where, ''),
+				}
+				if (source !== null && source.details !== undefined)
+					captured.details = captureDocsNode(source.details, where, 'details', false)
+				docs.set(name, captured)
+			}
+			draft.docs.reasons = docs
 			return builder
 		},
 
@@ -1024,6 +1261,8 @@ export function createWidgetPlugin<const Type extends string>(type: Type): Widge
 					}
 				}
 			}
+
+			const docs = serializePluginDocs(type, draft.docs)
 
 			const definition: WidgetPluginDefinition = Object.freeze({
 				type,
@@ -1053,10 +1292,86 @@ export function createWidgetPlugin<const Type extends string>(type: Type): Widge
 			return Object.freeze({
 				type,
 				capabilities,
+				docs,
 				[widgetPluginBrand]: Object.freeze({ definition }),
 			})
 		},
 	}
 
-	return builder as unknown as WidgetPluginInterfacesPhase<Type>
+	const start = {
+		description(description: unknown) {
+			draft.docs.description = captureDescription(description, docsSubject(type, 'phase "description"'), '')
+			return builder
+		},
+		interfaces() {
+			throw pluginContractViolation(type, 'phase "interfaces"', 'was called before ".description()"; the builder starts with ".description(text)" (text or undocumented)')
+		},
+	}
+
+	return start as unknown as WidgetPluginDescriptionPhase<Type>
+}
+
+/** Serializes the captured docs into the plain, frozen `plugin.docs` data. */
+function serializePluginDocs(pluginType: string, docs: WidgetPluginDocsDraft): WidgetPluginDocs {
+	const serializer = new WidgetDocsSerializer(`Widget plugin "${pluginType}": docs`)
+
+	function record<Captured, Serialized>(
+		section: string,
+		members: ReadonlyMap<WidgetMemberKey, Captured> | null,
+		serialize: (captured: Captured, path: string) => Serialized,
+	): { readonly [name: string]: Serialized } | null {
+		if (members === null)
+			return null
+		return createDocsRecord([...members].map(([name, captured]) => [name, serialize(captured, `${section}.${name}`)] as const))
+	}
+
+	let config: WidgetConfigDocsData | null = null
+	if (docs.config !== null) {
+		const data: { description: string | null, raw?: WidgetConfigDocsData['raw'], resolved?: WidgetConfigDocsData['resolved'] } = {
+			description: docs.config.description,
+		}
+		if (docs.config.raw !== undefined)
+			data.raw = serializer.node(docs.config.raw, 'config.raw')
+		if (docs.config.resolved !== undefined)
+			data.resolved = serializer.node(docs.config.resolved, 'config.resolved')
+		config = Object.freeze(data)
+	}
+
+	const slots = record<string | null, WidgetSlotDocsData>('slots', docs.slots, description => Object.freeze({ description }))
+	const state = record('state', docs.state, (captured, path) => serializer.described(captured, path)!)
+	const properties = record('properties', docs.properties, (captured, path) => serializer.described(captured, path)!)
+	const methods = record<CapturedMethodDocs, WidgetMethodDocsData>('methods', docs.methods, (captured, path) => {
+		const data: { description: string | null, params?: WidgetMethodDocsData['params'], returns?: WidgetMethodDocsData['returns'] } = {
+			description: captured.description,
+		}
+		if (captured.params !== undefined)
+			data.params = serializer.positions(captured.params, `${path}.params`)
+		if (captured.returns !== undefined)
+			data.returns = serializer.described(captured.returns, `${path}.returns`)
+		return Object.freeze(data)
+	})
+	const events = record<CapturedEventDocs, WidgetEventDocsData>('events', docs.events, (captured, path) => {
+		const data: { description: string | null, payload?: WidgetEventDocsData['payload'] } = { description: captured.description }
+		if (captured.payload !== undefined)
+			data.payload = serializer.positions(captured.payload, `${path}.payload`)
+		return Object.freeze(data)
+	})
+	const reasons = record<CapturedReasonDocs, WidgetReasonDocsData>('reasons', docs.reasons, (captured, path) => {
+		const data: { description: string | null, details?: WidgetReasonDocsData['details'] } = { description: captured.description }
+		if (captured.details !== undefined)
+			data.details = serializer.node(captured.details, `${path}.details`)
+		return Object.freeze(data)
+	})
+
+	return Object.freeze({
+		description: docs.description,
+		config,
+		slots,
+		state,
+		properties,
+		methods,
+		events,
+		reasons,
+		types: serializer.types(),
+	})
 }

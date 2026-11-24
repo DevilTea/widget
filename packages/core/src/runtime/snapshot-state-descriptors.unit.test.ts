@@ -5,7 +5,7 @@
 
 import type { WidgetChild } from '../types'
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 
 interface KeyedInterfaces {
 	slots: { children: WidgetChild }
@@ -20,13 +20,14 @@ interface KeyedInterfaces {
 const isNumber = (input: unknown): input is number => typeof input === 'number'
 
 const keyed = createWidgetPlugin('keyed')
+	.description(undocumented)
 	.interfaces<KeyedInterfaces>()
-	.slots({ children: {} })
+	.slots({ children: { description: undocumented } })
 	.state(state => state
-		.ordinary({ validate: isNumber, default: () => 1 })
-		.constructor({ validate: isNumber, default: () => 2 })
-		.toString({ validate: isNumber, default: () => 3 })
-		.valueOf({ validate: isNumber, default: () => 4 }))
+		.ordinary({ description: undocumented, validate: isNumber, default: () => 1 })
+		.constructor({ description: undocumented, validate: isNumber, default: () => 2 })
+		.toString({ description: undocumented, validate: isNumber, default: () => 3 })
+		.valueOf({ description: undocumented, validate: isNumber, default: () => 4 }))
 	.done()
 
 const system = createWidgetSystem({ plugins: [keyed] })

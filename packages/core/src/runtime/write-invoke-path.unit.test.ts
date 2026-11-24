@@ -6,7 +6,7 @@
 
 import type { WidgetInterfaces } from '../index'
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 import { inspectRuntime } from '../inspection'
 
 interface PathInterfaces extends WidgetInterfaces {
@@ -21,14 +21,17 @@ let thenableValue = false
 const thenable = { then: () => {} }
 
 const path = createWidgetPlugin('path')
+	.description(undocumented)
 	.interfaces<PathInterfaces>()
 	.state(state => state.count({
+		description: undocumented,
 		validate: (input): input is number => thenableValue ? (thenable as never) : typeof input === 'number',
 		default: () => 0,
 	}))
-	.properties(properties => properties.thenableProperty({ compute: () => thenable as never }))
+	.properties(properties => properties.thenableProperty({ description: undocumented, compute: () => thenable as never }))
 	.methods(methods => methods
 		.echo({
+			description: undocumented,
 			validateArgs: (args): args is number[] => {
 				validatedArgs = args
 				return true
@@ -38,7 +41,7 @@ const path = createWidgetPlugin('path')
 				return args
 			},
 		})
-		.thenableMethod({ validateArgs: (args): args is [] => args.length === 0, execute: () => thenable as never }))
+		.thenableMethod({ description: undocumented, validateArgs: (args): args is [] => args.length === 0, execute: () => thenable as never }))
 	.done()
 
 const system = createWidgetSystem({ plugins: [path] })

@@ -8,7 +8,7 @@
 
 import type { ValidWidgetSystemBlueprint } from '../index'
 import { describe, expect, it, vi } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 
 interface CounterInterfaces {
 	state: {
@@ -31,8 +31,10 @@ function createCounterBlueprint(params: {
 	default?: (ctx: unknown) => unknown
 }): ValidWidgetSystemBlueprint {
 	const plugin = createWidgetPlugin('counter')
+		.description(undocumented)
 		.interfaces<CounterInterfaces>()
 		.state(section => section.count({
+			description: undocumented,
 			validate: (input): input is number => params.validate(input),
 			...(params.default === undefined ? {} : { default: params.default as (ctx: unknown) => number }),
 		}))
@@ -153,12 +155,15 @@ describe('runtime initialization — state precedence (diagnostic #10 §7 / §11
 	it('the default callback receives the resolved config, not the raw config', () => {
 		let capturedConfig: unknown
 		const plugin = createWidgetPlugin('configured')
+			.description(undocumented)
 			.interfaces<ConfiguredInterfaces>()
 			.config({
+				description: undocumented,
 				validate: (input): input is { multiplier: number } => typeof input === 'object' && input !== null && typeof (input as any).multiplier === 'number',
 				resolve: raw => raw === null ? { multiplier: 1 } : raw,
 			})
 			.state(section => section.count({
+				description: undocumented,
 				validate: (input): input is number => typeof input === 'number',
 				default: (ctx: any) => {
 					capturedConfig = ctx.config

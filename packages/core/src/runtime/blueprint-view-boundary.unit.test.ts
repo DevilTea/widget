@@ -18,7 +18,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 
 interface BlueprintViewInterfaces {
 	properties: {
@@ -31,8 +31,10 @@ interface BlueprintViewInterfaces {
 
 function createHarness() {
 	const plugin = createWidgetPlugin('blueprint-view-probe')
+		.description(undocumented)
 		.interfaces<BlueprintViewInterfaces>()
 		.properties(properties => properties.probeProperty({
+			description: undocumented,
 			compute: (ctx) => {
 				const blueprintAny = ctx.blueprint as unknown as Record<string, unknown>
 				return {
@@ -52,6 +54,7 @@ function createHarness() {
 			},
 		}))
 		.methods(methods => methods.probeMethod({
+			description: undocumented,
 			validateArgs: (args): args is [] => args.length === 0,
 			execute: (ctx) => {
 				const blueprintAny = ctx.blueprint as unknown as Record<string, unknown>
@@ -135,8 +138,10 @@ describe('ctx.blueprint is a real restricted BlueprintRuntimeView facade, not th
 		const { widget } = createHarness()
 
 		const plugin = createWidgetPlugin('navigation-check')
+			.description(undocumented)
 			.interfaces<{ properties: { self: unknown } }>()
 			.properties(properties => properties.self({
+				description: undocumented,
 				compute: ctx => ctx.blueprint.getWidget('root')?.id ?? null,
 			}))
 			.done()

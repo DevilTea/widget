@@ -16,7 +16,7 @@ import type {
 } from '../index'
 import type { WidgetChild } from '../types'
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem, EMPTY_DIAGNOSTICS } from '../index'
+import { createWidgetPlugin, createWidgetSystem, EMPTY_DIAGNOSTICS, undocumented } from '../index'
 import { inspectBlueprint } from '../inspection'
 
 // -------------------------------------------------------------------------------------------------
@@ -26,6 +26,7 @@ import { inspectBlueprint } from '../inspection'
 interface LeafInterfaces {}
 
 const leafPlugin = createWidgetPlugin('leaf')
+	.description(undocumented)
 	.interfaces<LeafInterfaces>()
 	.done()
 
@@ -34,9 +35,10 @@ interface ContainerInterfaces {
 }
 
 const containerPlugin = createWidgetPlugin('container')
+	.description(undocumented)
 	.interfaces<ContainerInterfaces>()
 	.slots({
-		children: {},
+		children: { description: undocumented },
 	})
 	.done()
 

@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 import { inspectBlueprint } from './index'
 
 const PROTO_KEY = '__proto__' as const
@@ -66,10 +66,11 @@ function applyAllMembers(section: unknown, definitionFor: (key: string) => unkno
 }
 
 const orderedPlugin = createWidgetPlugin('ordered-members')
+	.description(undocumented)
 	.interfaces<OrderedInterfaces>()
-	.state(state => applyAllMembers(state, () => ({ validate: (input: unknown): input is number => typeof input === 'number' })) as any)
-	.properties(properties => applyAllMembers(properties, () => ({ compute: () => 0 })) as any)
-	.methods(methods => applyAllMembers(methods, () => ({ validateArgs: (args: readonly unknown[]): args is [] => args.length === 0, execute: () => 0 })) as any)
+	.state(state => applyAllMembers(state, () => ({ description: undocumented, validate: (input: unknown): input is number => typeof input === 'number' })) as any)
+	.properties(properties => applyAllMembers(properties, () => ({ description: undocumented, compute: () => 0 })) as any)
+	.methods(methods => applyAllMembers(methods, () => ({ description: undocumented, validateArgs: (args: readonly unknown[]): args is [] => args.length === 0, execute: () => 0 })) as any)
 	.done()
 
 const system = createWidgetSystem({ plugins: [orderedPlugin] })

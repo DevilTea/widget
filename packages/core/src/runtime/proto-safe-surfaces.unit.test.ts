@@ -16,7 +16,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 
 const PROTO_KEY = '__proto__' as const
 
@@ -34,18 +34,22 @@ interface ProtoInterfaces {
 }
 
 const plugin = createWidgetPlugin('proto-widget')
+	.description(undocumented)
 	.interfaces<ProtoInterfaces>()
 	.state(state => state[PROTO_KEY]({
+		description: undocumented,
 		validate: (input): input is number => typeof input === 'number',
 		default: () => 1,
 	}))
 	.properties(properties => properties[PROTO_KEY]({
+		description: undocumented,
 		compute: () => 2,
 	})
 		// Depends on the state member named "__proto__" through the ordinary `dep.self.state.get(key)`
 		// path — `key` is a `Map` lookup, so this exercises the dependency-operation location rather
 		// than the deps-container-key hazard.
 		.viaProtoState({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ value: dep.self.state.get(PROTO_KEY) }),
 			compute: ({ deps }) => {
 				const result = deps.value()
@@ -53,6 +57,7 @@ const plugin = createWidgetPlugin('proto-widget')
 			},
 		}))
 	.methods(methods => methods.constructor({
+		description: undocumented,
 		validateArgs: (args): args is [] => args.length === 0,
 		execute: () => 3,
 	}))

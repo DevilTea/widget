@@ -15,7 +15,7 @@
 
 import type { PrimitiveRegistryEntry } from './deps'
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem, WidgetSystemRuntimeDisposedError } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented, WidgetSystemRuntimeDisposedError } from '../index'
 import { createRuntimeWidgetDiagnosticsAggregate } from './aggregate'
 import { createRuntimeContext } from './context'
 
@@ -33,14 +33,17 @@ interface CounterInterfaces {
 
 function createCounterPlugin() {
 	return createWidgetPlugin('counter')
+		.description(undocumented)
 		.interfaces<CounterInterfaces>()
 		.state(section => section
 			.count({
+				description: undocumented,
 				validate: (input): input is number => typeof input === 'number',
 				default: () => 0,
 			}))
 		.properties(section => section
 			.doubled({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ count: dep.self.state.get('count') }),
 				compute: ({ deps }) => {
 					const result = deps.count()
@@ -49,6 +52,7 @@ function createCounterPlugin() {
 			}))
 		.methods(section => section
 			.increment({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({
 					count: dep.self.state.get('count'),
 					setCount: dep.self.state.set('count'),

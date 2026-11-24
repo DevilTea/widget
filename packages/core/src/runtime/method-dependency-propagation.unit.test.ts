@@ -15,7 +15,7 @@
 import type { ExecutionResult } from '../index'
 import type { WidgetChild } from '../types'
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 
 interface NodeConfig {
 	/** A Property dependency on the `out` of this widget. */
@@ -50,13 +50,16 @@ function numberOf(result: ExecutionResult<unknown, unknown> | null): number {
 const readerComputes = { count: 0 }
 
 const nodePlugin = createWidgetPlugin('node')
+	.description(undocumented)
 	.interfaces<NodeInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input): input is NodeConfig => typeof input === 'object' && input !== null,
 		resolve: raw => raw!,
 	})
-	.state(state => state.s({ validate: isNumber, default: () => 1 }))
+	.state(state => state.s({ description: undocumented, validate: isNumber, default: () => 1 }))
 	.properties(properties => properties.out({
+		description: undocumented,
 		registerDeps: ({ dep, config }) => ({
 			s: dep.self.state.get('s'),
 			prev: dep.widget(config.prev ?? 'absent')
@@ -85,6 +88,7 @@ const nodePlugin = createWidgetPlugin('node')
 	}))
 	.methods(methods => methods
 		.peek({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ out: dep.self.properties.get('out') }),
 			validateArgs: (args): args is [] => args.length === 0,
 			execute: ({ deps, config }) => {
@@ -95,11 +99,13 @@ const nodePlugin = createWidgetPlugin('node')
 			},
 		})
 		.peekState({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ s: dep.self.state.get('s') }),
 			validateArgs: (args): args is [] => args.length === 0,
 			execute: ({ deps }) => numberOf(deps.s()),
 		})
 		.setBoth({
+			description: undocumented,
 			registerDeps: ({ dep, config }) => ({
 				own: dep.self.state.set('s'),
 				partner: dep.widget(config.partner ?? 'absent')
@@ -117,8 +123,9 @@ const nodePlugin = createWidgetPlugin('node')
 	.done()
 
 const graphPlugin = createWidgetPlugin('graph')
+	.description(undocumented)
 	.interfaces<{ slots: { nodes: WidgetChild } }>()
-	.slots({ nodes: {} })
+	.slots({ nodes: { description: undocumented } })
 	.done()
 
 const system = createWidgetSystem({ plugins: [nodePlugin, graphPlugin] })

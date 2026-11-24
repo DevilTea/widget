@@ -5,7 +5,7 @@
 
 import type { WidgetInterfaces } from '../index'
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 
 interface ConfiguredInterfaces extends WidgetInterfaces {
 	config: { raw: { factor: number }, resolved: { factor: number } }
@@ -28,12 +28,15 @@ function record(site: string, ctx: unknown): void {
 const isNumber = (input: unknown): input is number => typeof input === 'number'
 
 const configured = createWidgetPlugin('configured')
+	.description(undocumented)
 	.interfaces<ConfiguredInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input): input is { factor: number } => typeof input === 'object' && input !== null,
 		resolve: raw => raw ?? { factor: 1 },
 	})
 	.state(state => state.value({
+		description: undocumented,
 		validate: (input, ctx): input is number => {
 			record('configured.validate', ctx)
 			return isNumber(input)
@@ -44,12 +47,14 @@ const configured = createWidgetPlugin('configured')
 		},
 	}))
 	.properties(properties => properties.scaled({
+		description: undocumented,
 		compute: (ctx) => {
 			record('configured.compute', ctx)
 			return ctx.config.factor
 		},
 	}))
 	.methods(methods => methods.scale({
+		description: undocumented,
 		validateArgs: (args, ctx): args is [number] => {
 			record('configured.validateArgs', ctx)
 			return args.length === 1
@@ -62,8 +67,10 @@ const configured = createWidgetPlugin('configured')
 	.done()
 
 const bare = createWidgetPlugin('bare')
+	.description(undocumented)
 	.interfaces<BareInterfaces>()
 	.state(state => state.value({
+		description: undocumented,
 		validate: (input, ctx): input is number => {
 			record('bare.validate', ctx)
 			return isNumber(input)
@@ -74,12 +81,14 @@ const bare = createWidgetPlugin('bare')
 		},
 	}))
 	.properties(properties => properties.scaled({
+		description: undocumented,
 		compute: (ctx) => {
 			record('bare.compute', ctx)
 			return 1
 		},
 	}))
 	.methods(methods => methods.scale({
+		description: undocumented,
 		validateArgs: (args, ctx): args is [number] => {
 			record('bare.validateArgs', ctx)
 			return args.length === 1

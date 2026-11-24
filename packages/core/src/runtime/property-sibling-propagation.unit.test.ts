@@ -21,7 +21,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 
 interface HostInterfaces {
 	state: {
@@ -65,26 +65,32 @@ interface HostInterfaces {
 
 function createHarness() {
 	const plugin = createWidgetPlugin('host')
+		.description(undocumented)
 		.interfaces<HostInterfaces>()
 		.state(state => state
 			.answer({
+				description: undocumented,
 				validate: (input): input is string | null => input === null || typeof input === 'string',
 				default: () => null,
 			})
 			.evenOnly({
+				description: undocumented,
 				validate: (input): input is number => typeof input === 'number' && input % 2 === 0,
 				default: () => 0,
 			})
 			.poison({
+				description: undocumented,
 				validate: (input): input is number => typeof input === 'number',
 				default: () => 1,
 			})
 			.other({
+				description: undocumented,
 				validate: (input): input is number => typeof input === 'number',
 				default: () => 1,
 			}))
 		.properties(properties => properties
 			.upstream({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ answer: dep.self.state.get('answer') }),
 				compute: ({ deps, addDiagnostic }) => {
 					const answer = deps.answer()
@@ -96,6 +102,7 @@ function createHarness() {
 				},
 			})
 			.dependentA({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ upstream: dep.self.properties.get('upstream') }),
 				compute: ({ deps }) => {
 					const upstream = deps.upstream()
@@ -103,6 +110,7 @@ function createHarness() {
 				},
 			})
 			.dependentB({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ upstream: dep.self.properties.get('upstream') }),
 				compute: ({ deps }) => {
 					const upstream = deps.upstream()
@@ -110,6 +118,7 @@ function createHarness() {
 				},
 			})
 			.dependentC({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ upstream: dep.self.properties.get('upstream') }),
 				compute: ({ deps }) => {
 					const upstream = deps.upstream()
@@ -117,6 +126,7 @@ function createHarness() {
 				},
 			})
 			.midstream({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ upstream: dep.self.properties.get('upstream') }),
 				compute: ({ deps }) => {
 					const upstream = deps.upstream()
@@ -124,6 +134,7 @@ function createHarness() {
 				},
 			})
 			.leafA({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ midstream: dep.self.properties.get('midstream') }),
 				compute: ({ deps }) => {
 					const midstream = deps.midstream()
@@ -131,6 +142,7 @@ function createHarness() {
 				},
 			})
 			.leafB({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ midstream: dep.self.properties.get('midstream') }),
 				compute: ({ deps }) => {
 					const midstream = deps.midstream()
@@ -138,6 +150,7 @@ function createHarness() {
 				},
 			})
 			.methodBacked({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ probe: dep.self.methods.invoke('probe') }),
 				compute: ({ deps }) => {
 					const probe = deps.probe()
@@ -145,6 +158,7 @@ function createHarness() {
 				},
 			})
 			.methodLeafA({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ methodBacked: dep.self.properties.get('methodBacked') }),
 				compute: ({ deps }) => {
 					const methodBacked = deps.methodBacked()
@@ -152,6 +166,7 @@ function createHarness() {
 				},
 			})
 			.methodLeafB({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ methodBacked: dep.self.properties.get('methodBacked') }),
 				compute: ({ deps }) => {
 					const methodBacked = deps.methodBacked()
@@ -159,6 +174,7 @@ function createHarness() {
 				},
 			})
 			.stateLeafA({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ answer: dep.self.state.get('answer') }),
 				compute: ({ deps }) => {
 					const answer = deps.answer()
@@ -166,6 +182,7 @@ function createHarness() {
 				},
 			})
 			.stateLeafB({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ answer: dep.self.state.get('answer') }),
 				compute: ({ deps }) => {
 					const answer = deps.answer()
@@ -173,6 +190,7 @@ function createHarness() {
 				},
 			})
 			.poisoned({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ poison: dep.self.state.get('poison') }),
 				compute: ({ deps }) => {
 					// Reads the dependency *before* throwing, so the throw happens with the dependency edge
@@ -186,6 +204,7 @@ function createHarness() {
 				},
 			})
 			.healthy({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ other: dep.self.state.get('other') }),
 				compute: ({ deps, addDiagnostic }) => {
 					const other = deps.other()
@@ -199,6 +218,7 @@ function createHarness() {
 			}))
 		.methods(methods => methods
 			.probe({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ answer: dep.self.state.get('answer') }),
 				validateArgs: (args): args is [] => args.length === 0,
 				// Write-free, so a Property is allowed to depend on it (a writeful Method would make the
@@ -213,6 +233,7 @@ function createHarness() {
 				},
 			})
 			.setPoison({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ setPoison: dep.self.state.set('poison') }),
 				validateArgs: (args): args is [number] => typeof args[0] === 'number',
 				// The whole invocation is one alien batch, so this write's propagation is still queued when

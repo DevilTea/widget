@@ -10,7 +10,7 @@
 import type { WidgetInterfaces } from '../index'
 import type { WidgetChild } from '../types'
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem, WidgetSystemRuntimeDisposedError } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented, WidgetSystemRuntimeDisposedError } from '../index'
 
 interface ResetInterfaces extends WidgetInterfaces {
 	state: {
@@ -30,15 +30,18 @@ let validateCalls = 0
 let summaryComputes = 0
 
 const resetPlugin = createWidgetPlugin('reset')
+	.description(undocumented)
 	.interfaces<ResetInterfaces>()
 	.state(state => state
 		.plain({
+			description: undocumented,
 			validate: (input): input is string => {
 				validateCalls++
 				return typeof input === 'string'
 			},
 		})
 		.withDefault({
+			description: undocumented,
 			validate: (input): input is number => {
 				validateCalls++
 				return typeof input === 'number'
@@ -46,6 +49,7 @@ const resetPlugin = createWidgetPlugin('reset')
 			default: () => 1,
 		})
 		.badDefault({
+			description: undocumented,
 			validate: (input, ctx): input is number => {
 				validateCalls++
 				if (typeof input !== 'number' || input < 0) {
@@ -57,6 +61,7 @@ const resetPlugin = createWidgetPlugin('reset')
 			default: () => -1,
 		}))
 	.properties(properties => properties.summary({
+		description: undocumented,
 		registerDeps: ({ dep }) => ({
 			plain: dep.self.state.get('plain'),
 			withDefault: dep.self.state.get('withDefault'),
@@ -69,6 +74,7 @@ const resetPlugin = createWidgetPlugin('reset')
 		},
 	}))
 	.methods(methods => methods.fail({
+		description: undocumented,
 		validateArgs: (_args, ctx): _args is [] => {
 			ctx.addDiagnostic({ message: 'always fails' })
 			return false
@@ -208,8 +214,9 @@ describe('resetState', () => {
 
 describe('runtimeWidget.resetState', () => {
 	const group = createWidgetPlugin('group')
+		.description(undocumented)
 		.interfaces<{ slots: { children: WidgetChild } }>()
-		.slots({ children: {} })
+		.slots({ children: { description: undocumented } })
 		.done()
 	const groupSystem = createWidgetSystem({ plugins: [resetPlugin, group] })
 	const compiledGroup = groupSystem.createBlueprint({

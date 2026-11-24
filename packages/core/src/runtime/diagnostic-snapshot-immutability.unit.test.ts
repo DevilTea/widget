@@ -14,7 +14,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 
 interface SnapshotInterfaces {
 	state: {
@@ -34,13 +34,16 @@ function createHarness() {
 	let methodShouldFail = false
 
 	const plugin = createWidgetPlugin('counter')
+		.description(undocumented)
 		.interfaces<SnapshotInterfaces>()
 		.state(state => state.count({
+			description: undocumented,
 			validate: (input): input is number => typeof input === 'number',
 			default: () => 0,
 		}))
 		.properties(properties => properties
 			.flaky({
+				description: undocumented,
 				compute: ({ addDiagnostic }) => {
 					if (propertyShouldFail)
 						addDiagnostic({ message: 'property flaky failed' })
@@ -52,6 +55,7 @@ function createHarness() {
 			// `RuntimePrimitiveDiagnosticLocation` array) — the two structural fields round-3 finding 3773890357
 			// covers beyond the plain shallow `Object.freeze(diagnostic)`.
 			.viaFlaky({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ flaky: dep.self.properties.get('flaky') }),
 				compute: ({ deps }) => {
 					const result = deps.flaky()
@@ -59,6 +63,7 @@ function createHarness() {
 				},
 			}))
 		.methods(methods => methods.flakyMethod({
+			description: undocumented,
 			validateArgs: (args): args is [] => args.length === 0,
 			execute: ({ addDiagnostic }) => {
 				if (methodShouldFail)
@@ -302,15 +307,18 @@ describe('dependency-call diagnostic snapshots are frozen before both collector 
 		}
 
 		const plugin = createWidgetPlugin('mutate-probe')
+			.description(undocumented)
 			.interfaces<MutateProbeInterfaces>()
 			.properties(properties => properties
 				.flaky({
+					description: undocumented,
 					compute: ({ addDiagnostic }) => {
 						addDiagnostic({ message: 'flaky failed' })
 						return 0
 					},
 				})
 				.viaFlakyMutating({
+					description: undocumented,
 					registerDeps: ({ dep }) => ({ flaky: dep.self.properties.get('flaky') }),
 					compute: ({ deps }) => {
 						const depResult = deps.flaky()
@@ -366,8 +374,10 @@ describe('runtime.getDiagnostics() exposes an immutable runtime-level snapshot (
 
 	it('a malformed overrideStateDefaults produces non-empty runtime-level diagnostics that reject mutation and stay canonical', () => {
 		const plugin = createWidgetPlugin('override-probe')
+			.description(undocumented)
 			.interfaces<OverrideProbeInterfaces>()
 			.state(state => state.count({
+				description: undocumented,
 				validate: (input): input is number => typeof input === 'number',
 				default: () => 0,
 			}))
@@ -404,8 +414,10 @@ describe('runtime.getDiagnostics() exposes an immutable runtime-level snapshot (
 
 	it('a normal best-effort path (unknown widget id, valid top-level record) also produces a frozen runtime-level snapshot (round-4 finding 3774140630)', () => {
 		const plugin = createWidgetPlugin('override-probe-normal')
+			.description(undocumented)
 			.interfaces<OverrideProbeInterfaces>()
 			.state(state => state.count({
+				description: undocumented,
 				validate: (input): input is number => typeof input === 'number',
 				default: () => 0,
 			}))
@@ -437,8 +449,10 @@ describe('runtime.getDiagnostics() exposes an immutable runtime-level snapshot (
 
 	it('an unknown state key on a known widget (also the final-return path) produces a frozen runtime-level snapshot too', () => {
 		const plugin = createWidgetPlugin('override-probe-unknown-key')
+			.description(undocumented)
 			.interfaces<OverrideProbeInterfaces>()
 			.state(state => state.count({
+				description: undocumented,
 				validate: (input): input is number => typeof input === 'number',
 				default: () => 0,
 			}))
@@ -474,8 +488,10 @@ describe('deepFreezeDiagnostic freezes the Blueprint dependency-diagnostic `memb
 
 	it('(diagnostic.member as any).name = "forged" throws, and `member` stays canonical', () => {
 		const plugin = createWidgetPlugin('member-freeze-prober')
+			.description(undocumented)
 			.interfaces<MemberProbeInterfaces>()
 			.properties(properties => properties.probe({
+				description: undocumented,
 				// `dep.parent` with no parent on the root widget: a required dependency with target
 				// cardinality 0, producing a Blueprint `dependency` diagnostic owned by this Property member.
 				registerDeps: ({ dep }) => ({ probe: dep.parent.properties.get('anything') }),
@@ -538,13 +554,16 @@ describe('a Property\'s cached ExecutionResult wrapper is frozen (round-4 findin
 
 	function createHarness() {
 		const plugin = createWidgetPlugin('cached-result-probe')
+			.description(undocumented)
 			.interfaces<CachedResultInterfaces>()
 			.state(state => state.count({
+				description: undocumented,
 				validate: (input): input is number => typeof input === 'number',
 				default: () => 5,
 			}))
 			.properties(properties => properties
 				.doubled({
+					description: undocumented,
 					registerDeps: ({ dep }) => ({ count: dep.self.state.get('count') }),
 					compute: ({ deps }) => {
 						const result = deps.count()
@@ -552,6 +571,7 @@ describe('a Property\'s cached ExecutionResult wrapper is frozen (round-4 findin
 					},
 				})
 				.viaDoubled({
+					description: undocumented,
 					registerDeps: ({ dep }) => ({ doubled: dep.self.properties.get('doubled') }),
 					compute: ({ deps }) => {
 						const result = deps.doubled()
@@ -607,8 +627,10 @@ describe('a Property\'s cached ExecutionResult wrapper is frozen (round-4 findin
 		}
 
 		const plugin = createWidgetPlugin('cached-failure-probe')
+			.description(undocumented)
 			.interfaces<FlakyInterfaces>()
 			.properties(properties => properties.flaky({
+				description: undocumented,
 				compute: ({ addDiagnostic }) => {
 					addDiagnostic({ message: 'flaky failed' })
 					return 0

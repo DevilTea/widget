@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem, WidgetSystemRuntimeDisposedError } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented, WidgetSystemRuntimeDisposedError } from '../index'
 import { inspectBlueprint, inspectRuntime } from './index'
 
 interface EventInspectionInterfaces {
@@ -13,18 +13,22 @@ interface EventInspectionInterfaces {
 }
 
 const plugin = createWidgetPlugin('inspection-events')
+	.description(undocumented)
 	.interfaces<EventInspectionInterfaces>()
 	.methods(methods => methods.fire({
+		description: undocumented,
 		validateArgs: (args): args is [string] => args.length === 1 && typeof args[0] === 'string',
 		emits: ['change'],
 		execute: ({ args, emit }) => emit.change(args[0]),
 	}))
-	.events(['change', 'ping'])
+	.events({ change: undocumented, ping: undocumented })
 	.done()
 
 const noEventsPlugin = createWidgetPlugin('inspection-no-events')
+	.description(undocumented)
 	.interfaces<{ state: { value: number } }>()
 	.state(state => state.value({
+		description: undocumented,
 		validate: (input): input is number => typeof input === 'number',
 	}))
 	.done()

@@ -14,7 +14,7 @@
 
 import type { ExecutionResult } from '../index'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem, WidgetSystemRuntimeDisposedError } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented, WidgetSystemRuntimeDisposedError } from '../index'
 import { inspectRuntime } from '../inspection'
 
 type Callable = (...args: never[]) => unknown
@@ -89,12 +89,14 @@ function numberOf(result: ExecutionResult<number | null, unknown>): number {
 }
 
 const plugin = createWidgetPlugin('host')
+	.description(undocumented)
 	.interfaces<HostInterfaces>()
 	.state(state => state
-		.n({ validate: (input): input is number => typeof input === 'number', default: () => 0 })
-		.other({ validate: (input): input is number => typeof input === 'number', default: () => 0 }))
+		.n({ description: undocumented, validate: (input): input is number => typeof input === 'number', default: () => 0 })
+		.other({ description: undocumented, validate: (input): input is number => typeof input === 'number', default: () => 0 }))
 	.properties(properties => properties
 		.twice({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ n: dep.self.state.get('n') }),
 			compute: ({ deps }) => {
 				computeRuns++
@@ -102,6 +104,7 @@ const plugin = createWidgetPlugin('host')
 			},
 		})
 		.leaky({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ n: dep.self.state.get('n') }),
 			compute: ({ deps }) => {
 				const n = numberOf(deps.n())
@@ -111,10 +114,12 @@ const plugin = createWidgetPlugin('host')
 			},
 		})
 		.viaProbe({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ probe: dep.self.methods.invoke('probe') }),
 			compute: ({ deps }) => numberOf(deps.probe()),
 		})
 		.capturesOwnDeps({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ n: dep.self.state.get('n') }),
 			compute: (ctx) => {
 				retained.compute = ctx as unknown as Retained['compute']
@@ -123,6 +128,7 @@ const plugin = createWidgetPlugin('host')
 		}))
 	.methods(methods => methods
 		.capture({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({
 				getN: dep.self.state.get('n'),
 				setN: dep.self.state.set('n'),
@@ -139,6 +145,7 @@ const plugin = createWidgetPlugin('host')
 			},
 		})
 		.noop({
+			description: undocumented,
 			validateArgs: (args): args is [] => args.length === 0,
 			execute: () => {
 				noopRuns++
@@ -146,6 +153,7 @@ const plugin = createWidgetPlugin('host')
 			},
 		})
 		.probe({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ n: dep.self.state.get('n') }),
 			validateArgs: (args): args is [] => args.length === 0,
 			// Write-free, so a Property may depend on it; it calls a smuggled setter when armed.
@@ -155,6 +163,7 @@ const plugin = createWidgetPlugin('host')
 			},
 		})
 		.callEscaped({
+			description: undocumented,
 			validateArgs: (args): args is [] => args.length === 0,
 			execute: () => {
 				escapedSetter?.('not-a-number' as unknown as number)
@@ -162,6 +171,7 @@ const plugin = createWidgetPlugin('host')
 			},
 		})
 		.writeThenReadLeaky({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ setOther: dep.self.state.set('other'), leaky: dep.self.properties.get('leaky') }),
 			validateArgs: (args): args is [] => args.length === 0,
 			emits: ['changed'],
@@ -172,6 +182,7 @@ const plugin = createWidgetPlugin('host')
 			},
 		})
 		.writeThenReadViaProbe({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ setOther: dep.self.state.set('other'), viaProbe: dep.self.properties.get('viaProbe') }),
 			validateArgs: (args): args is [] => args.length === 0,
 			execute: ({ deps }) => {
@@ -180,6 +191,7 @@ const plugin = createWidgetPlugin('host')
 			},
 		})
 		.countdown({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({
 				countdown: dep.self.methods.invoke('countdown'),
 				setN: dep.self.state.set('n'),
@@ -198,6 +210,7 @@ const plugin = createWidgetPlugin('host')
 			},
 		})
 		.emitChanged({
+			description: undocumented,
 			validateArgs: (args): args is [number] => typeof args[0] === 'number',
 			emits: ['changed'],
 			execute: ({ args: [value], emit }) => {
@@ -206,6 +219,7 @@ const plugin = createWidgetPlugin('host')
 			},
 		})
 		.setOther({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ setOther: dep.self.state.set('other'), twice: dep.self.properties.get('twice') }),
 			validateArgs: (args): args is [number] => typeof args[0] === 'number',
 			execute: ({ args: [value], deps }) => {
@@ -214,6 +228,7 @@ const plugin = createWidgetPlugin('host')
 			},
 		})
 		.asyncTail({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ setN: dep.self.state.set('n') }),
 			validateArgs: (args): args is [] => args.length === 0,
 			execute: ({ deps }) => {
@@ -227,7 +242,7 @@ const plugin = createWidgetPlugin('host')
 				return tail as unknown as string
 			},
 		}))
-	.events(['changed'])
+	.events({ changed: undocumented })
 	.done()
 
 const system = createWidgetSystem({ plugins: [plugin] })

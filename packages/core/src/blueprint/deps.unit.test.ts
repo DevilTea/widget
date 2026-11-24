@@ -22,7 +22,7 @@ import type {
 } from '../index'
 import type { WidgetChild } from '../types'
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 
 // -------------------------------------------------------------------------------------------------
 // Fixtures
@@ -33,8 +33,9 @@ interface ContainerInterfaces {
 }
 
 const containerPlugin = createWidgetPlugin('container')
+	.description(undocumented)
 	.interfaces<ContainerInterfaces>()
-	.slots({ child: {} })
+	.slots({ child: { description: undocumented } })
 	.done()
 
 interface LeafInterfaces {
@@ -51,14 +52,18 @@ interface LeafInterfaces {
 
 /** A target with every capability, used for "missing member" (capability present, member absent). */
 const leafPlugin = createWidgetPlugin('leaf')
+	.description(undocumented)
 	.interfaces<LeafInterfaces>()
 	.state(state => state.count({
+		description: undocumented,
 		validate: (input): input is number => typeof input === 'number',
 	}))
 	.properties(properties => properties.double({
+		description: undocumented,
 		compute: () => null,
 	}))
 	.methods(methods => methods.bump({
+		description: undocumented,
 		registerDeps: ({ dep }) => ({ setCount: dep.self.state.set('count') }),
 		validateArgs: (args): args is [number] => args.length === 1 && typeof args[0] === 'number',
 		execute: () => null,
@@ -96,12 +101,15 @@ function pickProberTarget(
  * every parent/widget resolution scenario below is just a different raw `config` payload.
  */
 const proberPlugin = createWidgetPlugin('prober')
+	.description(undocumented)
 	.interfaces<ProberInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input): input is ProbeRawConfig => typeof input === 'object' && input !== null,
 		resolve: raw => raw ?? { widgetId: null, optional: false, op: 'property', key: '__missing__' },
 	})
 	.properties(properties => properties.probe({
+		description: undocumented,
 		registerDeps: ({ dep, config }) => {
 			const target = pickProberTarget(dep, config)
 			if (config.op === 'state')
@@ -509,15 +517,19 @@ describe('dependency expression shape', () => {
 	it('exposes `validate` only on readable expressions, string keys before the brand, and chains refinements', () => {
 		const seen: { readable: object, refined: object, writable: object }[] = []
 		const shapePlugin = createWidgetPlugin('shape')
+			.description(undocumented)
 			.interfaces<ShapeInterfaces>()
 			.state(state => state.count({
+				description: undocumented,
 				validate: (input): input is number => typeof input === 'number',
 			}))
 			.properties(properties => properties.shape({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({ read: dep.self.state.get('count') }),
 				compute: () => null,
 			}))
 			.methods(methods => methods.bump({
+				description: undocumented,
 				registerDeps: ({ dep }) => {
 					const readable = dep.self.state.get('count')
 					const refined = readable.validate((_value): _value is number => true)

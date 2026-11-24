@@ -6,7 +6,7 @@
 
 import type { WidgetChild } from './types'
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from './index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from './index'
 import { inspectPlugin } from './inspection/index'
 
 interface CountInterfaces {
@@ -44,10 +44,11 @@ function runtimeStateKeys(plugin: ReturnType<typeof countPlugin>): string[] {
 
 function countPlugin(type: string, probe: (section: unknown) => void = () => {}) {
 	return createWidgetPlugin(type)
+		.description(undocumented)
 		.interfaces<CountInterfaces>()
 		.state((state) => {
 			probe(state)
-			return state.count({ validate: (input): input is number => typeof input === 'number', default: () => 0 })
+			return state.count({ description: undocumented, validate: (input): input is number => typeof input === 'number', default: () => 0 })
 		})
 		.done()
 }
@@ -82,41 +83,52 @@ describe('section builders register only real member declarations', () => {
 
 		for (const value of notObjects) {
 			expectContractViolation(capture(() => createWidgetPlugin('state-arg')
+				.description(undocumented)
 				.interfaces<{ state: { a: number } }>()
 				.state(state => state.a(value as never))), ['state-arg', 'state', '"a"'])
 			expectContractViolation(capture(() => createWidgetPlugin('properties-arg')
+				.description(undocumented)
 				.interfaces<{ properties: { a: number } }>()
 				.properties(properties => properties.a(value as never))), ['properties-arg', 'properties', '"a"'])
 			expectContractViolation(capture(() => createWidgetPlugin('methods-arg')
+				.description(undocumented)
 				.interfaces<{ methods: { a: () => void } }>()
 				.methods(methods => methods.a(value as never))), ['methods-arg', 'methods', '"a"'])
 		}
 	})
 
-	it('rejects an events declaration that is not a dense array of names, and a repeated name', () => {
-		// eslint-disable-next-line no-sparse-arrays
-		const notNameLists: readonly unknown[] = [undefined, null, 'a', { 0: 'a', length: 1 }, () => ['a'], [1], ['a', , 'b']]
+	it('rejects an events declaration that is not an object of Event docs, and a malformed entry', () => {
+		const notRecords: readonly unknown[] = [undefined, null, 'a', ['a'], 1]
 
-		for (const value of notNameLists) {
+		for (const value of notRecords) {
 			expectContractViolation(capture(() => createWidgetPlugin('events-arg')
+				.description(undocumented)
 				.interfaces<{ events: { a: [] } }>()
 				.events(value as never)), ['events-arg', 'events'])
 		}
-		expectContractViolation(capture(() => createWidgetPlugin('events-repeat')
-			.interfaces<{ events: { a: [] } }>()
-			.events(['a', 'a'] as never)), ['events-repeat', 'events', '"a"'])
+		const badEntries: readonly unknown[] = [null, 'prose', 1, [], { description: 1 }, {}, { description: 'a', payload: {} }, { description: 'a', paylod: [] }]
+		for (const entry of badEntries) {
+			expectContractViolation(capture(() => createWidgetPlugin('events-entry')
+				.description(undocumented)
+				.interfaces<{ events: { a: [] } }>()
+				.events({ a: entry } as never)), ['events-entry', 'events', '"a"'])
+		}
 	})
 
-	it('captures the events list by value', () => {
-		const names: ['a', 'b'] = ['a', 'b']
+	it('captures the events record by value', () => {
+		const definitions: { a: { description: string }, b: typeof undocumented } = { a: { description: 'A.' }, b: undocumented }
 		const plugin = createWidgetPlugin('events-captured')
+			.description(undocumented)
 			.interfaces<{ events: { a: [], b: [] } }>()
-			.events(names)
+			.events(definitions)
 			.done()
-		;(names as string[]).length = 0
+		definitions.a.description = 'changed'
+		delete (definitions as Partial<typeof definitions>).b
 
 		expect([...inspectPlugin(plugin).events!.keys()])
 			.toEqual(['a', 'b'])
+		expect(plugin.docs.events)
+			.toEqual({ a: { description: 'A.' }, b: { description: null } })
 	})
 
 	it('keeps JavaScript-special member names legal when they are declared with a definition object', () => {
@@ -126,12 +138,13 @@ describe('section builders register only real member declarations', () => {
 		const validate = (input: unknown): input is number => typeof input === 'number'
 
 		const plugin = createWidgetPlugin('special-names')
+			.description(undocumented)
 			.interfaces<SpecialInterfaces>()
 			.state(state => state
-				.then({ validate })
-				.toJSON({ validate })
-				.toString({ validate })
-				.constructor({ validate }))
+				.then({ description: undocumented, validate })
+				.toJSON({ description: undocumented, validate })
+				.toString({ description: undocumented, validate })
+				.constructor({ description: undocumented, validate }))
 			.done()
 
 		expect([...inspectPlugin(plugin).state!.keys()])
@@ -146,7 +159,7 @@ describe('a section is sealed once its build callback returns', () => {
 			retained = section
 		})
 
-		const error = capture(() => retained.injected({ validate: () => true, default: () => 'surprise' }))
+		const error = capture(() => retained.injected({ description: undocumented, validate: () => true, default: () => 'surprise' }))
 
 		expectContractViolation(error, ['retained', 'state', 'injected'])
 		expect([...inspectPlugin(plugin).state!.keys()])
@@ -173,6 +186,7 @@ describe('a section is sealed once its build callback returns', () => {
 	it('seals the section even when the build callback throws', () => {
 		let retained: any
 		const builder = createWidgetPlugin('throwing-build')
+			.description(undocumented)
 			.interfaces<CountInterfaces>()
 
 		expect(capture(() => builder.state((state) => {
@@ -180,7 +194,7 @@ describe('a section is sealed once its build callback returns', () => {
 			throw new Error('build failed')
 		})))
 			.toEqual(new Error('build failed'))
-		expectContractViolation(capture(() => retained.count({ validate: () => true })), ['throwing-build', 'state', 'count'])
+		expectContractViolation(capture(() => retained.count({ description: undocumented, validate: () => true })), ['throwing-build', 'state', 'count'])
 	})
 })
 
@@ -190,10 +204,11 @@ describe('member definitions are captured by value at registration', () => {
 			slots: { body: WidgetChild }
 			state: { count: number }
 		}
-		const countDefinition = { validate: (input: unknown): input is number => typeof input === 'number', default: () => 1 }
-		const bodyDefinition: { validateStructure?: () => void } = {}
+		const countDefinition = { description: undocumented, validate: (input: unknown): input is number => typeof input === 'number', default: () => 1 }
+		const bodyDefinition: { description: typeof undocumented, validateStructure?: () => void } = { description: undocumented }
 
 		const plugin = createWidgetPlugin('captured')
+			.description(undocumented)
 			.interfaces<Interfaces>()
 			.slots({ body: bodyDefinition })
 			.state(state => state.count(countDefinition))
@@ -221,6 +236,7 @@ describe('declared member shapes are validated before done() returns', () => {
 	/** The builder as an untyped (JavaScript / dynamically loaded) author sees it. */
 	function untyped(type: string): any {
 		return createWidgetPlugin(type)
+			.description(undocumented)
 			.interfaces()
 	}
 	const fn = () => true
@@ -232,13 +248,13 @@ describe('declared member shapes are validated before done() returns', () => {
 			[() => untyped('u2')
 				.properties((p: any) => p.label({})), ['u2', 'properties', 'label', 'compute']],
 			[() => untyped('u3')
-				.methods((m: any) => m.run({ execute: fn })), ['u3', 'methods', 'run', 'validateArgs']],
+				.methods((m: any) => m.run({ description: undocumented, execute: fn })), ['u3', 'methods', 'run', 'validateArgs']],
 			[() => untyped('u4')
-				.methods((m: any) => m.run({ validateArgs: fn })), ['u4', 'methods', 'run', 'execute']],
+				.methods((m: any) => m.run({ description: undocumented, validateArgs: fn })), ['u4', 'methods', 'run', 'execute']],
 			[() => untyped('u8')
 				.config({ resolve: fn }), ['u8', 'config', 'validate']],
 			[() => untyped('u9')
-				.config({ validate: fn }), ['u9', 'config', 'resolve']],
+				.config({ description: undocumented, validate: fn }), ['u9', 'config', 'resolve']],
 		]
 
 		for (const [run, names] of cases)
@@ -248,30 +264,30 @@ describe('declared member shapes are validated before done() returns', () => {
 	it('type-checks optional fields only when they are present', () => {
 		const cases: ReadonlyArray<readonly [run: () => unknown, names: readonly string[]]> = [
 			[() => untyped('o1')
-				.state((s: any) => s.count({ validate: fn, default: 1 })), ['o1', 'state', 'count', 'default']],
+				.state((s: any) => s.count({ description: undocumented, validate: fn, default: 1 })), ['o1', 'state', 'count', 'default']],
 			[() => untyped('o2')
-				.state((s: any) => s.count({ validate: fn, authorWritable: 'yes' })), ['o2', 'state', 'count', 'authorWritable']],
+				.state((s: any) => s.count({ description: undocumented, validate: fn, authorWritable: 'yes' })), ['o2', 'state', 'count', 'authorWritable']],
 			[() => untyped('o3')
-				.properties((p: any) => p.label({ compute: fn, registerDeps: {} })), ['o3', 'properties', 'label', 'registerDeps']],
+				.properties((p: any) => p.label({ description: undocumented, compute: fn, registerDeps: {} })), ['o3', 'properties', 'label', 'registerDeps']],
 			[() => untyped('o4')
-				.properties((p: any) => p.label({ compute: fn, valueContract: 'x' })), ['o4', 'properties', 'label', 'valueContract']],
+				.properties((p: any) => p.label({ description: undocumented, compute: fn, valueContract: 'x' })), ['o4', 'properties', 'label', 'valueContract']],
 			[() => untyped('o5')
-				.properties((p: any) => p.label({ compute: fn, valueContract: {} })), ['o5', 'properties', 'label', 'valueContract']],
+				.properties((p: any) => p.label({ description: undocumented, compute: fn, valueContract: {} })), ['o5', 'properties', 'label', 'valueContract']],
 			[() => untyped('o6')
-				.methods((m: any) => m.run({ validateArgs: fn, execute: fn, registerDeps: 1 })), ['o6', 'methods', 'run', 'registerDeps']],
+				.methods((m: any) => m.run({ description: undocumented, validateArgs: fn, execute: fn, registerDeps: 1 })), ['o6', 'methods', 'run', 'registerDeps']],
 			[() => untyped('o7')
-				.slots({ body: { validateStructure: 1 } }), ['o7', 'slots', 'body', 'validateStructure']],
+				.slots({ body: { description: undocumented, validateStructure: 1 } }), ['o7', 'slots', 'body', 'validateStructure']],
 		]
 
 		for (const [run, names] of cases)
 			expectContractViolation(capture(run), names)
 
 		const plugin = untyped('optional-undefined')
-			.config({ validate: fn, resolve: () => ({}) })
-			.slots({ body: { validateStructure: undefined }, bare: {} })
-			.state((s: any) => s.count({ validate: fn, default: undefined, authorWritable: undefined }))
-			.properties((p: any) => p.label({ compute: fn, registerDeps: undefined, valueContract: undefined }))
-			.methods((m: any) => m.run({ validateArgs: fn, execute: fn, registerDeps: undefined }))
+			.config({ description: undocumented, validate: fn, resolve: () => ({}) })
+			.slots({ body: { description: undocumented, validateStructure: undefined }, bare: { description: undocumented } })
+			.state((s: any) => s.count({ description: undocumented, validate: fn, default: undefined, authorWritable: undefined }))
+			.properties((p: any) => p.label({ description: undocumented, compute: fn, registerDeps: undefined, valueContract: undefined }))
+			.methods((m: any) => m.run({ description: undocumented, validateArgs: fn, execute: fn, registerDeps: undefined }))
 			.done()
 		expect(plugin.capabilities)
 			.toEqual({ config: true, slots: true, state: true, properties: true, methods: true, events: false })
@@ -304,6 +320,7 @@ describe('declared member shapes are validated before done() returns', () => {
 describe('the optional `.structure()` phase', () => {
 	function leafPlugin(type: string, withStructure: boolean) {
 		const afterInterfaces = createWidgetPlugin(type)
+			.description(undocumented)
 			.interfaces<CountInterfaces>()
 		const afterStructure = withStructure
 			? afterInterfaces.structure((ctx) => {
@@ -312,7 +329,7 @@ describe('the optional `.structure()` phase', () => {
 				})
 			: afterInterfaces
 		return afterStructure
-			.state(state => state.count({ validate: (input): input is number => typeof input === 'number', default: () => 0 }))
+			.state(state => state.count({ description: undocumented, validate: (input): input is number => typeof input === 'number', default: () => 0 }))
 			.done()
 	}
 
@@ -344,9 +361,10 @@ describe('the optional `.structure()` phase', () => {
 
 	it('rejects a non-function validator, and a validator still passed to `.slots()`, with a TypeError', () => {
 		const untyped: any = createWidgetPlugin('structure-arg')
+			.description(undocumented)
 			.interfaces()
 
 		expectContractViolation(capture(() => untyped.structure(42)), ['structure-arg', 'structure'])
-		expectContractViolation(capture(() => untyped.slots({ body: {} }, () => {})), ['structure-arg', 'slots', 'structure'])
+		expectContractViolation(capture(() => untyped.slots({ body: { description: undocumented } }, () => {})), ['structure-arg', 'slots', 'structure'])
 	})
 })

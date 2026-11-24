@@ -17,7 +17,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '../index'
 
 /** Asserts `caught` is a plain implementation exception: never an Diagnostic, never an ExecutionResult. */
 function expectPlainException(caught: unknown): void {
@@ -51,8 +51,10 @@ describe('state.validate returning a thenable (async validator) is a sync-bounda
 
 	function createRuntime() {
 		const plugin = createWidgetPlugin('async-validate')
+			.description(undocumented)
 			.interfaces<AsyncValidateInterfaces>()
 			.state(state => state.count({
+				description: undocumented,
 				// `validate()`'s return type is `boolean`, but nothing stops a misbehaving async
 				// validator implementation from returning a `Promise` (itself truthy) at runtime.
 				validate: (input): input is number => {
@@ -101,8 +103,10 @@ describe('method.validateArgs returning a thenable (async validator) is a sync-b
 		let executeCount = 0
 
 		const plugin = createWidgetPlugin('async-args')
+			.description(undocumented)
 			.interfaces<AsyncArgsInterfaces>()
 			.methods(methods => methods.run({
+				description: undocumented,
 				validateArgs: (args): args is [number] => {
 					if (args[0] === -1)
 						return Promise.resolve(true) as unknown as boolean
@@ -149,8 +153,10 @@ describe('state.default returning a thenable is a sync-boundary violation at Run
 
 	it('makes blueprint.createRuntime() itself throw synchronously', () => {
 		const plugin = createWidgetPlugin('default-thenable')
+			.description(undocumented)
 			.interfaces<DefaultThenableInterfaces>()
 			.state(state => state.count({
+				description: undocumented,
 				validate: (input): input is number => typeof input === 'number',
 				default: () => Promise.resolve(1) as unknown as number,
 			}))
@@ -178,8 +184,10 @@ describe('an accepted thenable candidate must not become the live State value', 
 
 	function createRuntime() {
 		const plugin = createWidgetPlugin('accepts-anything')
+			.description(undocumented)
 			.interfaces<AcceptsAnythingInterfaces>()
 			.state(state => state.anything({
+				description: undocumented,
 				// Accepts every candidate — including a thenable — so acceptance alone cannot be relied
 				// upon to keep thenables out of the live value.
 				validate: (_input): _input is unknown => true,
@@ -223,8 +231,10 @@ describe('an accepted thenable candidate must not become the live State value', 
 			typeof input === 'object' && input !== null && typeof (input as { then?: unknown }).then === 'function'
 
 		const plugin = createWidgetPlugin('rejects-thenable')
+			.description(undocumented)
 			.interfaces<RejectsThenableInterfaces>()
 			.state(state => state.value({
+				description: undocumented,
 				validate: (input): input is unknown => !isThenable(input),
 			}))
 			.done()
@@ -293,8 +303,10 @@ describe('a function-valued thenable is a sync-boundary violation too (round-2 f
 
 	it('an accepted callable-thenable candidate must not become the live State value', () => {
 		const plugin = createWidgetPlugin('accepts-anything-fn')
+			.description(undocumented)
 			.interfaces<AcceptsAnythingInterfaces>()
 			.state(state => state.anything({
+				description: undocumented,
 				validate: (_input): _input is unknown => true,
 			}))
 			.done()
@@ -327,8 +339,10 @@ describe('a function-valued thenable is a sync-boundary violation too (round-2 f
 		}
 
 		const plugin = createWidgetPlugin('callable-thenable-execute')
+			.description(undocumented)
 			.interfaces<CallableThenableMethodInterfaces>()
 			.methods(methods => methods.run({
+				description: undocumented,
 				validateArgs: (args): args is [] => args.length === 0,
 				execute: () => makeCallableThenable() as unknown,
 			}))
@@ -364,12 +378,15 @@ describe('a dependency .validate() refinement returning a thenable is a sync-bou
 
 	it('throws synchronously via the consuming Property\'s .get(), instead of treating the truthy Promise as an accepted refinement', () => {
 		const plugin = createWidgetPlugin('async-refinement')
+			.description(undocumented)
 			.interfaces<RefinementInterfaces>()
 			.state(state => state.count({
+				description: undocumented,
 				validate: (input): input is number => typeof input === 'number',
 				default: () => 5,
 			}))
 			.properties(properties => properties.viaAsyncRefinement({
+				description: undocumented,
 				registerDeps: ({ dep }) => ({
 					count: dep.self.state.get('count')
 						// A `Promise` is truthy, so `if (!refine(value))` alone would read this as an

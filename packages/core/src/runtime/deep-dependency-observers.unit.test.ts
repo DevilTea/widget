@@ -12,7 +12,7 @@
 import type { ExecutionResult } from '../index'
 import type { WidgetChild } from '../types'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createWidgetPlugin, createWidgetSystem, WidgetSystemRuntimeDisposedError } from '../index'
+import { createWidgetPlugin, createWidgetSystem, undocumented, WidgetSystemRuntimeDisposedError } from '../index'
 import { inspectRuntime } from '../inspection'
 
 interface NodeConfig {
@@ -60,13 +60,16 @@ const env = {
 }
 
 const nodePlugin = createWidgetPlugin('node')
+	.description(undocumented)
 	.interfaces<NodeInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input): input is NodeConfig => typeof input === 'object' && input !== null,
 		resolve: raw => raw!,
 	})
-	.state(state => state.n({ validate: isNumber, default: () => 1 }))
+	.state(state => state.n({ description: undocumented, validate: isNumber, default: () => 1 }))
 	.properties(properties => properties.out({
+		description: undocumented,
 		registerDeps: ({ dep, config }) => ({
 			n: dep.self.state.get('n'),
 			prev: dep.widget(config.prev ?? 'absent')
@@ -133,6 +136,7 @@ const nodePlugin = createWidgetPlugin('node')
 	}))
 	.methods(methods => methods
 		.peek({
+			description: undocumented,
 			registerDeps: ({ dep }) => ({ out: dep.self.properties.get('out') }),
 			validateArgs: (args): args is [] => args.length === 0,
 			execute: ({ deps }) => numberOf(deps.out()),
@@ -140,8 +144,9 @@ const nodePlugin = createWidgetPlugin('node')
 	.done()
 
 const listPlugin = createWidgetPlugin('list')
+	.description(undocumented)
 	.interfaces<{ slots: { items: WidgetChild } }>()
-	.slots({ items: {} })
+	.slots({ items: { description: undocumented } })
 	.done()
 
 const system = createWidgetSystem({ plugins: [nodePlugin, listPlugin] })
