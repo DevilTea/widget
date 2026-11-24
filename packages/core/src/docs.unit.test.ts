@@ -429,6 +429,20 @@ describe('defineTypeDocs and ref', () => {
 			.done()), ['same-name', 'state.b.ref', '"Pair"'])
 	})
 
+	it('keeps a spread copy of type docs plain prose, which `ref` rejects', () => {
+		const pairDocs = defineTypeDocs<Pair>('Pair', { description: 'Two numbers.', fields: { left: { description: 'L.' }, right: { description: 'R.' } } })
+		const copy = { ...pairDocs }
+
+		expect(Object.keys(copy)
+			.sort())
+			.toEqual(['description', 'fields', 'name'])
+		expectContractViolation(capture(() => createWidgetPlugin('spread-ref')
+			.description(undocumented)
+			.interfaces<{ state: { pair: Pair } }>()
+			.state(state => state.pair({ description: 'A pair.', ref: copy, validate: (input): input is Pair => input !== null }))
+			.done()), ['spread-ref', 'ref', 'defineTypeDocs'])
+	})
+
 	it('lists one entry per name, also for a type referenced many times and from its own docs', () => {
 		const docs = surveyPlugin().docs
 

@@ -136,7 +136,7 @@ export interface ErasedWidgetMethodDefinition {
 	readonly execute: (ctx: any) => unknown
 }
 
-/** A declared Event carries no definition of its own: its name is the whole declaration. */
+/** A declared Event carries no semantic definition: its name is the declaration (its docs live on `plugin.docs`). */
 export type ErasedWidgetEventDefinition = Readonly<Record<never, never>>
 
 /**

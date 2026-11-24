@@ -418,8 +418,8 @@ function readTypeDocs(value: unknown): CapturedTypeDocs | undefined {
 
 /**
  * Captures one docs value by value: `undocumented` (`null`), or an object whose keys are among `description`,
- * `fields`, `items`, `values` and `ref`. A `ref` is shared
- * type docs or a thunk; it cannot be combined with inline nested docs.
+ * `fields`, `items`, `values` and `ref`. A `ref` is shared type docs or a thunk; it cannot be combined with inline
+ * nested docs.
  */
 export function captureDocsNode(
 	value: unknown,
@@ -509,7 +509,8 @@ export function defineTypeDocs<T>(name: string, docs: TypeDocsInput<T>): TypeDoc
 	if (node === null)
 		throw docsViolation(subject, '', 'must be a docs object, got undocumented')
 	const captured: CapturedTypeDocs = Object.freeze({ name, node })
-	return Object.freeze({ ...docs, name, [typeDocsCaptured]: captured }) as unknown as TypeDocs<T>
+	// The captured docs sit under a non-enumerable brand: a spread copy of the value is plain prose, not type docs.
+	return Object.freeze(Object.defineProperty({ ...docs, name }, typeDocsCaptured, { value: captured })) as unknown as TypeDocs<T>
 }
 
 // -------------------------------------------------------------------------------------------------
