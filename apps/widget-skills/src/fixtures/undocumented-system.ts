@@ -6,7 +6,7 @@
  */
 
 import type { WidgetChild, WidgetContract, WidgetInterfaces } from '@deviltea/widget-core'
-import { createWidgetPlugin, createWidgetSystem } from '@deviltea/widget-core'
+import { createWidgetPlugin, createWidgetSystem, undocumented } from '@deviltea/widget-core'
 
 /** A counter. */
 export interface CounterInterfaces extends WidgetInterfaces {
@@ -51,21 +51,25 @@ export interface CounterInterfaces extends WidgetInterfaces {
 const isNumber = (input: unknown): input is number => typeof input === 'number'
 
 export const CounterPlugin = createWidgetPlugin('Counter')
+	.description(undocumented)
 	.interfaces<CounterInterfaces>()
 	.config({
+		description: undocumented,
 		validate: (input): input is { start?: number } | null => input === null || typeof input === 'object',
 		resolve: raw => ({ start: raw?.start ?? 0 }),
 	})
-	.slots({ items: {}, labelled: {} })
+	.slots({ items: { description: undocumented }, labelled: { description: undocumented } })
 	.state(state => state
-		.count({ validate: isNumber, default: () => 0 })
-		.step({ validate: isNumber, default: () => 1 })
-		.limit({ validate: isNumber, default: () => 10 }))
+		.count({ description: undocumented, validate: isNumber, default: () => 0 })
+		.step({ description: undocumented, validate: isNumber, default: () => 1 })
+		.limit({ description: undocumented, validate: isNumber, default: () => 10 }))
 	.methods(methods => methods
 		.add({
+			description: undocumented,
 			validateArgs: (args): args is [number, { silent: boolean }] => args.length === 2 && typeof args[0] === 'number',
 			execute: ({ args: [by] }) => by,
 		}))
+	.reasons({ 'too-large': undocumented })
 	.done()
 
 export const undocumentedSystem = createWidgetSystem({ plugins: [CounterPlugin] as const })
