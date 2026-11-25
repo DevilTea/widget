@@ -66,7 +66,7 @@ pnpm --filter @deviltea/widget-docs-generator check:example
 
 - `.`: the build-time API (extraction, emitters, `--check`, the docs cache). It loads `typescript` and `tsx`.
 - `./runtime`: `createFlatConverter` and `FlatConversionError`, the run-time half an application bundles. It imports
-  nothing else.
+  nothing else. `.` exports them too, so build-time code that already imports `.` needs no second import.
 - `./vite`: `widgetDocs`.
 - `./docs`: the `WidgetDocs` and `WidgetDocsSlim` types (and `WIDGET_DOCS_VERSION`); `./virtual-widget-docs` and
   `./virtual-widget-docs-slim`: the virtual-module declarations.
