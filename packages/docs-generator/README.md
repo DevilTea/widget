@@ -1,6 +1,6 @@
-# @deviltea/widget-skills
+# @deviltea/widget-docs-generator
 
-Private prototype. It reads a Widget System's TypeScript types (the shape) and each plugin's `plugin.docs` (Core 0.4: the
+The Widget documentation generator (built, not released yet). It reads a Widget System's TypeScript types (the shape) and each plugin's `plugin.docs` (Core 0.4: the
 descriptions written in the builder; JSDoc is not read) and produces:
 
 - a docs object per System, served by a Vite plugin as `virtual:widget-docs/<name>`;
@@ -12,8 +12,8 @@ descriptions written in the builder; JSDoc is not read) and produces:
 ## Vite plugin
 
 ```text
-// vite.config.ts (or a Vitest config): import by relative path
-import { widgetDocs } from '../widget-skills/src/vite'
+// vite.config.ts (or a Vitest config)
+import { widgetDocs } from '@deviltea/widget-docs-generator/vite'
 
 export default defineConfig({
 	plugins: [widgetDocs({ systems: { survey: { module: 'src/survey-system.ts', export: 'surveySystem' } } })],
@@ -27,14 +27,14 @@ docs.plugins.Survey.slots.questions.summary
 Pass each System's `tsconfig` (the one that compiles the module, for an application `tsconfig.app.json`): a tsconfig that
 does not include the module, such as a solution file with `"files": []`, or one without `strictNullChecks` is refused.
 
-A config file must import the plugin by relative path, not by its package name: Vite hands a bare specifier to Node,
-which cannot load the plugin's TypeScript sources (`ERR_MODULE_NOT_FOUND ... src/check`).
+`vite` is an optional peer dependency, needed only for `./vite`. The package is ESM only, so the config must be an ES module
+(a `"type": "module"` project or a `.mts` config).
 
-For the module's type, add `@deviltea/widget-skills/virtual-widget-docs` to `compilerOptions.types`.
+For the module's type, add `@deviltea/widget-docs-generator/virtual-widget-docs` to `compilerOptions.types`.
 
 `widgetDocs({ slim: true, ... })` serves `WidgetDocsSlim` instead: the summary and remarks of each plugin, its config, slots
 and Events, and the config schema, without the `types` section, printed types or tags (for an app that bundles the docs).
-Its module type is `@deviltea/widget-skills/virtual-widget-docs-slim`.
+Its module type is `@deviltea/widget-docs-generator/virtual-widget-docs-slim`.
 
 Generating **imports the System's module and runs its top-level code** to read each `plugin.docs` and to cross-check the types against
 `system.catalog` and `inspectPlugin` (`runtime: false` turns that off, and the docs then carry no prose). The result is cached in
@@ -46,25 +46,45 @@ to clear the cache; `WIDGET_DOCS_CACHE=off` bypasses it, and a cache that cannot
 
 ## Command line
 
-```bash
-pnpm --filter @deviltea/widget-skills generate:example   # the fixture System -> examples/survey
-pnpm --filter @deviltea/widget-skills check:example
-```
-
-For another System:
+The bin `widget-docs-generator` runs with plain Node; it imports the System through tsx in a worker thread.
 
 ```bash
-tsx src/cli.ts --module <path/to/system.ts> --export <name> --tsconfig <its tsconfig> --out <dir>
-tsx src/cli.ts --check --module <path/to/system.ts> --export <name> --tsconfig <its tsconfig>
+widget-docs-generator --module <path/to/system.ts> --export <name> --tsconfig <its tsconfig> --out <dir>
+widget-docs-generator --check --module <path/to/system.ts> --export <name> --tsconfig <its tsconfig>
 ```
 
-As a library:
+`--source-tsconfig <path>` adds a tsconfig's `paths` for the type checker and the import, `--example <json>` adds a
+document (compiled and checked first) to the authoring skill, `--root <dir>` is what printed paths are relative to, and
+`--no-runtime` skips importing the System. In this repository (after `pnpm build`):
+
+```bash
+pnpm --filter @deviltea/widget-docs-generator generate:example   # the fixture System -> examples/survey
+pnpm --filter @deviltea/widget-docs-generator check:example
+```
+
+## Subpaths
+
+- `.`: the build-time API (extraction, emitters, `--check`, the docs cache). It loads `typescript` and `tsx`.
+- `./runtime`: `createFlatConverter` and `FlatConversionError`, the run-time half an application bundles. It imports
+  nothing else.
+- `./vite`: `widgetDocs`.
+- `./docs`: the `WidgetDocs` and `WidgetDocsSlim` types (and `WIDGET_DOCS_VERSION`); `./virtual-widget-docs` and
+  `./virtual-widget-docs-slim`: the virtual-module declarations.
+
+At build time:
 
 ```text
-import { createFlatConverter, emitLlmSchema, extractIr, loadRuntimeFacts } from '@deviltea/widget-skills'
+import { emitLlmSchema, extractIr, importRuntimeFacts } from '@deviltea/widget-docs-generator'
 
-const ir = extractIr({ modulePath, exportName: 'mySystem', runtime: await loadRuntimeFacts(modulePath, 'mySystem') })
+const ir = extractIr({ modulePath, exportName: 'mySystem', runtime: await importRuntimeFacts(modulePath, 'mySystem') })
 const schema = emitLlmSchema(ir)
+```
+
+At run time, with the `ir.json` the generator wrote:
+
+```text
+import { createFlatConverter } from '@deviltea/widget-docs-generator/runtime'
+
 const { flatToTree } = createFlatConverter(ir)
 const blueprint = mySystem.createBlueprint(flatToTree(modelOutput))
 // blueprint.status and blueprint.diagnostics decide, not the schema.

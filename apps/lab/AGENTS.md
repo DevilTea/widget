@@ -858,21 +858,22 @@ names and capabilities only. JSDoc on the Interfaces is an ordinary comment that
   plugin-type union, or a `WidgetContract<Shape, Types>` where the parent reads its children's members (`Onboarding.steps`,
   `Survey.questions`, the two `Quote` slots), so `createWidgetSystem` checks each child plugin against that shape; the reads
   themselves stay on `dep.widget(id)` with the existing `.validate()` refinements. `registry.unit.test.ts` fails when a
-  plugin, config, slot or Event of a showcase has no documentation. `widget-skills --check` (see `apps/widget-skills/README.md`)
+  plugin, config, slot or Event of a showcase has no documentation. `widget-docs-generator --check` (see `packages/docs-generator/README.md`)
   reports 0 problems for every showcase. `quote-rules` writes its raw config types by hand in `raw-config.ts`, and the field
   prose in `docs.ts` repeats its Valibot schemas' `v.description()` and states the schema constraints in words; `schemas.ts`
   (`RawConfigsMatchSchemas`) asserts that each type is exactly the schema's `InferInput`, so a shape drift fails `vue-tsc` (the
   prose is not checked: change both sides together).
-- **The docs reach the Lab through `widgetDocs()`.** `widget-docs.ts` (`labWidgetDocs()`) configures the widget-skills Vite
+- **The docs reach the Lab through `widgetDocs()`.** `widget-docs.ts` (`labWidgetDocs()`) configures the docs generator's Vite
   plugin for the seven showcase Systems with `tsconfig.app.json`; `vite.config.ts`, `vitest.config.ts` and the root
-  `vitest.config.ts` (project `lab`) all load it, importing the plugin by relative path (`../widget-skills/src/vite`): Vite hands
-  a bare `@deviltea/widget-skills/vite` to Node, which cannot load its TypeScript sources. `virtual:widget-docs/<showcase id>`
+  `vitest.config.ts` (project `lab`) all load it. It imports `@deviltea/widget-docs-generator/vite` by package name (a
+  `workspace:*` dev dependency), which Node loads from the generator's built `dist`: build the generator first (`pnpm build`,
+  or `pnpm --filter widget-lab... build`, which builds it before the Lab). `virtual:widget-docs/<showcase id>`
   is that showcase's docs, imported by `showcases/registry.ts` as `ShowcaseEntry.docs`. The Lab loads them with `slim: true`
   (`WidgetDocsSlim`: the summary and remarks of each plugin, its config, slots and Events, and the config schema; no `types`
   section, printed types or tags), because they sit in the eager shell chunk (`tutorial-theme-*.js`: 877 KB, gzip 200 KB with the
   full docs and the hand-written schema maps; 615 KB, gzip 176 KB with the slim docs, measured with `pnpm build`). `src/virtual-widget-docs.d.ts`
-  declares the modules as `WidgetDocsSlim` (the Lab has no dependency on the private package; `author/widget-docs.ts` takes the types from the
-  virtual module, because importing the generator's `docs-types.ts` from a Lab source is TS6307 in this composite project).
+  declares the modules as `WidgetDocsSlim`, imported from `@deviltea/widget-docs-generator/docs`; `author/widget-docs.ts` takes the types from the
+  virtual module.
   Generating imports each System module in a worker thread (that import is also where the prose comes from); the result is
   cached in `node_modules/.cache/widget-docs/` of this app (delete it to clear it). Documentation problems are Vite warnings, a
   name mismatch between types and runtime fails the load. A showcase file never imports a virtual module
