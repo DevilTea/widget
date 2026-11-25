@@ -52,6 +52,34 @@ describe('the skills the packages ship', () => {
 		}
 	})
 
+	// The `skills` CLI parses the frontmatter as YAML and skips a skill it cannot parse, so a spelling it may reject has
+	// to fail here: an unquoted value holding `: ` is invalid YAML, and a block scalar is not a description on one line.
+	it.each([
+		['an unquoted description that holds a colon', 'description: Write a plugin: the Interfaces', ['description: Write a plugin: the Interfaces']],
+		['a block scalar', 'description: |\n  Write a plugin.', ['description: |', '  Write a plugin.']],
+		['a single-quoted description', 'description: \'Write a plugin.\'', ['description: \'Write a plugin.\'']],
+	])('the check refuses %s, which the skills CLI may not parse', (_label, line, rejected) => {
+		const root = mkdtempSync(join(tmpdir(), 'widget-package-skills-'))
+		try {
+			const skill = join(root, 'skills/widget-plugin-authoring')
+			mkdirSync(skill, { recursive: true })
+			writeFileSync(join(root, 'package.json'), JSON.stringify({ name: '@deviltea/widget-core', files: ['dist', 'skills'] }))
+			writeFileSync(join(skill, 'SKILL.md'), `---\nname: widget-plugin-authoring\n${line}\n---\n\n# Skill\n`)
+			const result = spawnSync(process.execPath, [check, root], { encoding: 'utf8' })
+			expect(result.status)
+				.toBe(1)
+			expect(result.stderr.trim()
+				.split('\n'))
+				.toEqual([
+					...rejected.map(text => `@deviltea/widget-core: skills/widget-plugin-authoring/SKILL.md has a frontmatter line other than \`name: <lowercase-kebab>\` and \`description: "<JSON string>"\`: ${text}`),
+					'@deviltea/widget-core: skills/widget-plugin-authoring/SKILL.md has no description',
+				])
+		}
+		finally {
+			rmSync(root, { recursive: true, force: true })
+		}
+	})
+
 	it('are what skills.sh.json lists for `npx skills add`: every skills folder of a package, and nothing else', () => {
 		const config = JSON.parse(read(join(workspaceRoot, 'skills.sh.json'))) as { $schema: string, paths: string[] }
 		const containers = readdirSync(join(workspaceRoot, 'packages'))

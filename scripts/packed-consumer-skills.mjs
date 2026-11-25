@@ -2,7 +2,8 @@
  * Verifies the Agent Skills the packages ship: `@deviltea/widget-core` ships exactly `skills/widget-plugin-authoring`
  * and `@deviltea/widget-vue` exactly `skills/widget-vue-renderer`, the Inspector and the documentation generator ship
  * none. Each skill is `skills/<name>/SKILL.md` (the layout `npx skills experimental_sync` reads from `node_modules`)
- * with frontmatter whose `name` is the folder's name and whose `description` is not empty, and every
+ * with frontmatter whose `name` is the folder's name and whose `description` is a non-empty JSON double-quoted
+ * string (the one spelling accepted, see `readFrontmatter`), and every
  * `references/<file>` its `SKILL.md` names exists beside it.
  *
  * Usage: `node packed-consumer-skills.mjs [<package directory>...]`. Without arguments it checks the four packages
@@ -20,32 +21,38 @@ const expectedSkills = {
 	'@deviltea/widget-docs-generator': [],
 }
 
-/** The `key: value` lines of a YAML frontmatter block; a value may be a JSON string, a single-quoted string or plain. */
+/**
+ * The frontmatter of a package skill, held to one spelling that is always valid YAML: exactly the lines
+ * `name: <lowercase letters, digits and hyphens>` and `description: "<one JSON double-quoted string>"`, the spelling the
+ * generator writes. The `skills` CLI parses the frontmatter as YAML and skips a skill it cannot parse, so a looser
+ * spelling (a plain scalar holding `: `, a block scalar) could pass here and then silently not install.
+ */
 function readFrontmatter(text) {
-	const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n/.exec(text)
+	const match = /^---\n([\s\S]*?)\n---\n/.exec(text)
 	if (match === null)
-		return null
+		return { fields: {}, problems: ['has no frontmatter block (`---` lines)'] }
 	const fields = {}
-	for (const line of match[1].split(/\r?\n/)) {
-		const entry = /^([\w-]+):(.*)$/.exec(line)
-		if (entry === null)
+	const problems = []
+	for (const line of match[1].split('\n')) {
+		const name = /^name: ([a-z0-9-]+)$/.exec(line)
+		const description = /^description: (".*")$/.exec(line)
+		if (name !== null && !('name' in fields)) {
+			fields.name = name[1]
 			continue
-		let value = entry[2].trim()
-		if (value.startsWith('"')) {
+		}
+		if (description !== null && !('description' in fields)) {
 			try {
-				value = JSON.parse(value)
+				const value = JSON.parse(description[1])
+				if (typeof value === 'string') {
+					fields.description = value
+					continue
+				}
 			}
-			catch {
-				return null
-			}
+			catch {}
 		}
-		else if (value.startsWith('\'') && value.endsWith('\'') && value.length >= 2) {
-			value = value.slice(1, -1)
-				.replaceAll('\'\'', '\'')
-		}
-		fields[entry[1]] = value
+		problems.push(`has a frontmatter line other than \`name: <lowercase-kebab>\` and \`description: "<JSON string>"\`: ${line}`)
 	}
-	return fields
+	return { fields, problems }
 }
 
 function checkPackage(directory) {
@@ -73,11 +80,9 @@ function checkPackage(directory) {
 			continue
 		}
 		const text = readFileSync(skillFile, 'utf8')
-		const frontmatter = readFrontmatter(text)
-		if (frontmatter === null) {
-			problems.push(`${manifest.name}: skills/${name}/SKILL.md has no readable frontmatter`)
-			continue
-		}
+		const { fields: frontmatter, problems: frontmatterProblems } = readFrontmatter(text)
+		for (const problem of frontmatterProblems)
+			problems.push(`${manifest.name}: skills/${name}/SKILL.md ${problem}`)
 		if (frontmatter.name !== name)
 			problems.push(`${manifest.name}: skills/${name}/SKILL.md names itself ${JSON.stringify(frontmatter.name)}, expected ${JSON.stringify(name)}`)
 		if (typeof frontmatter.description !== 'string' || frontmatter.description.trim() === '')
