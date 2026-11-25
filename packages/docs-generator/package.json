@@ -4,7 +4,7 @@
 	"publishConfig": {
 		"access": "public"
 	},
-	"version": "0.3.0",
+	"version": "0.4.0",
 	"description": "Turns a Widget System's TypeScript types (the shape) and its plugins' builder docs (the prose) into documentation and AI-facing artifacts: a docs object served by a Vite plugin, an IR, JSON Schemas, flat/tree converters and Agent Skills.",
 	"author": "DevilTea <ch19980814@gmail.com>",
 	"license": "MIT",
