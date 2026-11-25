@@ -283,6 +283,26 @@ code path, flag, or hydration guarantee. Mount `WidgetRenderer` on the client on
 [Server rendering](https://deviltea.github.io/widget/packages/widget-vue#server-rendering)
 in the full guide for the reasoning and open prerequisites.
 
+## Agent Skills
+
+> **New in 0.4.0.**
+
+The package ships the Agent Skill `widget-vue-renderer` in `skills/widget-vue-renderer/`: how to write renderers
+(registration with `createWidgetVueRenderer`, mounting the root renderer, the `useWidget()` surface, slots and
+`WidgetSlot`, `@deviltea/widget-vue/testing`, the integration errors). It describes the version it is installed with,
+and its code samples are compiled, and run where they can, against the package before each release. Install it with
+the [`skills` CLI](https://github.com/vercel-labs/skills):
+
+```bash
+# Links the skills of your installed packages into .agents/skills/ and your agents' folders; they update with the package.
+npx skills experimental_sync
+# Or installs them from the release tag (with @deviltea/widget-core's widget-plugin-authoring), e.g. DevilTea/widget@v0.4.0.
+npx skills add DevilTea/widget@v<version>
+```
+
+`experimental_sync` is experimental in `skills` 1.9.0, so its name and options may change; `skills add` is the stable
+path. Use the tag of the version you installed.
+
 ## License
 
 [MIT](https://github.com/DevilTea/widget/blob/main/LICENSE) License © 2023-PRESENT [DevilTea](https://github.com/DevilTea)

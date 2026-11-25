@@ -556,6 +556,28 @@ A future SSR design would need, and this guide does not decide:
 - conformance tests under `@vue/server-renderer`, including subscription-count
   assertions across repeated renders against one Runtime.
 
+## Agent Skills
+
+> **New in 0.4.0.**
+
+The package ships the Agent Skill `widget-vue-renderer` in `skills/widget-vue-renderer/`. It teaches an agent what
+this guide covers: registration with `createWidgetVueRenderer`, mounting the root renderer, the `useWidget()` surface,
+slots and `WidgetSlot`, `@deviltea/widget-vue/testing` and the integration errors. It describes the version it is
+installed with: its code samples are compiled, and run where they can, against the package before each release.
+Install it with the [`skills` CLI](https://github.com/vercel-labs/skills):
+
+```bash
+# Links the skills of your installed packages into .agents/skills/ and your agents' folders; they update with the package.
+npx skills experimental_sync
+# Or installs them from the release tag (with @deviltea/widget-core's widget-plugin-authoring), e.g. DevilTea/widget@v0.4.0.
+npx skills add DevilTea/widget@v<version>
+```
+
+`experimental_sync` is experimental in `skills` 1.9.0, so its name and options may change; `skills add` is the stable
+path. Use the tag of the version you installed. The `<system>-renderer-implementation` skill that
+[`@deviltea/widget-docs-generator`](./widget-docs-generator#agent-skills) writes for a System lists that System's
+types and refers to this skill for the API.
+
 ## Design constraints
 
 - **No domain widgets.** Lab showcase (or any other) domain

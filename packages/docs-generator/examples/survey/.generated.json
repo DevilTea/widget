@@ -14,9 +14,6 @@
 		"skills/survey-system-source-json-authoring/references/document.schema.json",
 		"skills/survey-system-source-json-authoring/references/note.md",
 		"skills/survey-system-source-json-authoring/references/rating.md",
-		"skills/survey-system-source-json-authoring/references/survey.md",
-		"skills/widget-plugin-authoring/SKILL.md",
-		"skills/widget-plugin-authoring/references/example-interfaces.md",
-		"skills/widget-plugin-authoring/references/plugin-docs.md"
+		"skills/survey-system-source-json-authoring/references/survey.md"
 	]
 }

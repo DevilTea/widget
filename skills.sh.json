@@ -1,0 +1,7 @@
+{
+	"$schema": "https://skills.sh/schemas/skills.sh.schema.json",
+	"paths": [
+		"./packages/core/skills",
+		"./packages/vue/skills"
+	]
+}

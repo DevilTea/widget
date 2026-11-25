@@ -42,6 +42,13 @@ const expectations: Record<string, DocumentExpectation> = {
 	'docs/site/packages/widget-inspector.md': { before: 0, after: 0, run: 0, unmarked: 2 },
 	'packages/vue/README.md': { before: 0, after: 0, run: 0, unmarked: 2 },
 	'packages/inspector/README.md': { before: 0, after: 0, run: 0, unmarked: 5 },
+	// The Agent Skills the packages ship (`packages/*/skills/**/*.md`) follow the same rules: every TypeScript fence
+	// is marked, and an API change that breaks a sample fails here. A skill sample cannot import another sample, so
+	// each one is complete; the renderer testing sample needs a DOM and is type-checked only.
+	'packages/core/skills/widget-plugin-authoring/SKILL.md': { before: 0, after: 0, run: 1, unmarked: 0 },
+	'packages/core/skills/widget-plugin-authoring/references/example-interfaces.md': { before: 0, after: 1, run: 0, unmarked: 0 },
+	'packages/core/skills/widget-plugin-authoring/references/plugin-docs.md': { before: 0, after: 1, run: 2, unmarked: 0 },
+	'packages/vue/skills/widget-vue-renderer/SKILL.md': { before: 0, after: 1, run: 1, unmarked: 0 },
 	'docs/architecture/widget-api-conventions.md': { before: 0, after: 0, run: 0, unmarked: 2 },
 }
 
@@ -156,6 +163,14 @@ describe('extractSamples', () => {
 		const documents = discoverDocuments(workspaceRoot)
 		expect(documents)
 			.toEqual(expect.arrayContaining(['docs/site/migration/0.1.md', 'docs/site/packages/widget-core.md', 'packages/core/README.md']))
+		// The skills the packages ship, references included, are documents like the others.
+		expect(documents)
+			.toEqual(expect.arrayContaining([
+				'packages/core/skills/widget-plugin-authoring/SKILL.md',
+				'packages/core/skills/widget-plugin-authoring/references/example-interfaces.md',
+				'packages/core/skills/widget-plugin-authoring/references/plugin-docs.md',
+				'packages/vue/skills/widget-vue-renderer/SKILL.md',
+			]))
 		expect(documents.some(path => path.includes('node_modules')))
 			.toBe(false)
 	})
@@ -342,12 +357,12 @@ describe.skipIf(missingBuild !== null)('documentation samples', () => {
 			.join('\n'))
 			.toBe('')
 		// The samples state their output in comments; they were compared, not skipped. Raise this when comments are
-		// added; a drop means output stopped being compared. The floor is the measured count (104: 69 in the Core guide,
-		// 10 in its README, 23 in the 0.4 migration guide and 2 in the generator's page). It was 90 until the 0.1
-		// migration guide's samples became historical (written against 0.1, no longer compiled, marked `skip`), which
-		// removed their compared output.
+		// added; a drop means output stopped being compared. The floor is the measured count (113: 69 in the Core guide,
+		// 10 in its README, 23 in the 0.4 migration guide, 2 in the generator's page, 8 in Core's plugin-authoring skill
+		// and 1 in Vue's renderer skill). It was 90 until the 0.1 migration guide's samples became historical (written
+		// against 0.1, no longer compiled, marked `skip`), which removed their compared output.
 		expect(result.compared.length)
-			.toBeGreaterThanOrEqual(104)
+			.toBeGreaterThanOrEqual(113)
 		// An exemption that is no longer needed has to be removed.
 		const used = new Set(result.exempted.map(claim => `${claim.document}\n${claim.sample}\n${claim.text}`))
 		expect(exemptComments.filter(entry => !used.has(`${entry.document}\n${entry.sample}\n${entry.comment}`)))

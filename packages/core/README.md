@@ -641,6 +641,26 @@ covers the dependency grammar, the compile pipeline, every Runtime primitive,
 the complete diagnostic and error tables, and guides for async work, persisted
 documents, generic plugin factories and renderer adapters.
 
+## Agent Skills
+
+> **New in 0.4.0.**
+
+The package ships the Agent Skill `widget-plugin-authoring` in `skills/widget-plugin-authoring/`: how to write a
+plugin (the Interfaces type, the builder phases with their docs, synchronous callbacks, diagnostics and reasons, why a
+failing Method is not rolled back, async work at the host, registering plugins in a System). It describes the version
+it is installed with, and its code samples are compiled and run against the package before each release. Install it
+with the [`skills` CLI](https://github.com/vercel-labs/skills):
+
+```bash
+# Links the skills of your installed packages into .agents/skills/ and your agents' folders; they update with the package.
+npx skills experimental_sync
+# Or installs them from the release tag (with @deviltea/widget-vue's widget-vue-renderer), e.g. DevilTea/widget@v0.4.0.
+npx skills add DevilTea/widget@v<version>
+```
+
+`experimental_sync` is experimental in `skills` 1.9.0, so its name and options may change; `skills add` is the stable
+path. Use the tag of the version you installed.
+
 ## License
 
 [MIT](https://github.com/DevilTea/widget/blob/main/LICENSE) License © 2023-PRESENT [DevilTea](https://github.com/DevilTea)
