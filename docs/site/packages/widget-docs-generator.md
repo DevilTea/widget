@@ -252,7 +252,26 @@ widget-reference sentence, a structural note).
 
 ## Agent Skills
 
-The generated System skills are written under `<out>/skills/`.
+The generator writes two skills for a System, each as `<out>/skills/<name>/SKILL.md` with its `references/`, the
+layout the [`skills` CLI](https://github.com/vercel-labs/skills) reads (`<system>` is the System's export name in
+kebab case):
+
+| Skill | For |
+| --- | --- |
+| `<system>-source-json-authoring` | Writing or repairing a document: the node grammar, one reference per widget type (config, slots, diagnostic reasons), both schemas, the flat node list and how to turn it into a tree, and repairing with Blueprint diagnostics. `--example` adds a complete document. |
+| `<system>-renderer-implementation` | Writing Vue renderers: the registration chain of the System and one reference per widget type (resolved config, State, Properties, Methods, Events, slots, reasons). It refers to the `widget-vue-renderer` skill for the API. |
+
+Install them in a project with the `skills` CLI, or ship them in a System package's `skills/` folder, where
+`npx skills experimental_sync` links them from `node_modules` for the package's users:
+
+```bash
+npx skills add ./generated/widgets   # the generator's --out
+```
+
+The skills that describe an API and no System are not generated: `widget-plugin-authoring` ships with
+[`@deviltea/widget-core`](./widget-core#agent-skills) and `widget-vue-renderer` with
+[`@deviltea/widget-vue`](./widget-vue#agent-skills), versioned with the package. Before `0.4.0` the generator also
+wrote `widget-plugin-authoring`; it no longer does.
 
 ## Known limits
 

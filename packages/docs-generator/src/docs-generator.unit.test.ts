@@ -880,27 +880,25 @@ describe('the committed example output', () => {
 			.toContain(JSON.stringify(example, null, 2))
 	})
 
-	it('does not send readers to the private package, and describes the 0.4 builder: descriptions beside each definition, no JSDoc and no constraint tags', () => {
+	it('does not send readers to the private package, refers to the Vue adapter\'s skill for the API, and writes no JSDoc or constraint tags', () => {
 		const files = generateFiles(ir)
 		const authoring = files['skills/survey-system-source-json-authoring/SKILL.md']!
 		expect(authoring).not.toContain('@deviltea/widget-docs-generator')
 		expect(authoring).not.toContain('flatToTree')
 		const renderer = files['skills/survey-system-renderer-implementation/SKILL.md']!
 		expect(renderer)
-			.toContain('createWidgetVueRenderer(system, renderers => renderers')
+			.toContain('createWidgetVueRenderer(system, renderers => renderers\n\t.Survey(SurveyRenderer)\n\t.Rating(RatingRenderer)\n\t.Choice(ChoiceRenderer)\n\t.Note(NoteRenderer))')
 		expect(renderer)
-			.toContain('returns the Method\'s value on success and `null` on failure')
+			.toContain('`widget-vue-renderer` skill, which ships with `@deviltea/widget-vue` in `skills/widget-vue-renderer/`')
+		// The API itself (the accessor table, the rules) lives in that skill, versioned with the adapter.
+		expect(renderer).not.toContain('| Accessor |')
 		expect(renderer).not.toContain('packages/vue/src')
-		const plugin = files['skills/widget-plugin-authoring/SKILL.md']!
-		expect(plugin)
-			.toContain('.description(')
-		for (const term of ['.events({', '.reasons({', 'WidgetRef<', 'defineTypeDocs', 'undocumented']) {
-			expect(`${plugin}\n${files['skills/widget-plugin-authoring/references/plugin-docs.md']!}`, term)
-				.toContain(term)
+		for (const type of ['survey', 'rating', 'choice', 'note']) {
+			expect(renderer)
+				.toContain(`\`references/${type}.md\``)
+			expect(files[`skills/survey-system-renderer-implementation/references/${type}.md`], type)
+				.toBeDefined()
 		}
-		expect(plugin).not.toContain('Upcoming')
-		expect(plugin)
-			.toContain('`description → interfaces → config? → slots? → structure? → state? → properties? → methods? → events? → reasons? → done`')
 		for (const [path, content] of Object.entries(files)) {
 			expect(content).not.toContain('writes nothing and emits nothing')
 			if (!path.endsWith('.json')) {
@@ -931,19 +929,24 @@ describe('the committed example output', () => {
 })
 
 describe('generateFiles', () => {
-	it('writes the IR, both schemas and three skills with frontmatter', () => {
+	it('writes the IR, both schemas and the two System skills, each as skills/<name>/SKILL.md with frontmatter', () => {
 		const files = generateFiles(ir)
 		const skills = Object.keys(files)
 			.filter(path => path.endsWith('/SKILL.md'))
+		// `widget-plugin-authoring` ships with @deviltea/widget-core since 0.4.0; the generator no longer writes it.
 		expect(skills)
 			.toEqual([
 				'skills/survey-system-source-json-authoring/SKILL.md',
 				'skills/survey-system-renderer-implementation/SKILL.md',
-				'skills/widget-plugin-authoring/SKILL.md',
 			])
+		expect(Object.keys(files)
+			.filter(path => path.startsWith('skills/widget-')))
+			.toEqual([])
 		for (const path of skills) {
+			// The layout the `skills` CLI discovers: the frontmatter name is the folder's name.
+			const name = path.split('/')[1]!
 			expect(files[path])
-				.toMatch(/^---\nname: [a-z0-9-]+\ndescription: ".+"\n---\n/)
+				.toMatch(new RegExp(`^---\\nname: ${name}\\ndescription: ".+"\\n---\\n`))
 		}
 		expect(JSON.parse(files['ir.json']!))
 			.toEqual(ir)

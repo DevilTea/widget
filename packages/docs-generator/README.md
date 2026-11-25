@@ -11,7 +11,10 @@ The Widget documentation generator. It reads a Widget System's TypeScript types 
 - `ir.json`: every plugin's config, slots, State, Properties, Methods, Events and reasons with their documentation;
 - `schema/document.schema.json`: JSON Schema 2020-12 of the document tree;
 - `schema/document.llm.schema.json`: a conservative flat node-list schema for non-strict structured output;
-- `skills/`: Agent Skills for the System.
+- `skills/`: two Agent Skills for the System, `<system>-source-json-authoring` and `<system>-renderer-implementation`,
+  each as `skills/<name>/SKILL.md`. Install them with `npx skills add <out>`, or ship them in a System package's
+  `skills/` folder for `npx skills experimental_sync`. The API skills ship with their packages: `widget-plugin-authoring`
+  with `@deviltea/widget-core`, `widget-vue-renderer` with `@deviltea/widget-vue`.
 
 ## Installation
 
