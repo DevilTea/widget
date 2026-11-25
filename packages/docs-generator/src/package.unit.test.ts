@@ -147,8 +147,9 @@ describe('the package boundary', () => {
 	})
 
 	it('packs the build and the virtual-module declarations, never the sources, tests, fixtures or examples', () => {
-		expect(pkg.files)
-			.toEqual(['dist', 'virtual-widget-docs.d.ts', 'virtual-widget-docs-slim.d.ts'])
+		// Sorted: the repository's lint sorts the manifest's `files`.
+		expect([...pkg.files].sort())
+			.toEqual(['dist', 'virtual-widget-docs-slim.d.ts', 'virtual-widget-docs.d.ts'])
 		const result = spawnSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], { cwd: packageRoot, encoding: 'utf8', timeout: CHILD_TIMEOUT })
 		expect(result.status, result.stderr)
 			.toBe(0)
