@@ -44,7 +44,7 @@ and Runtimes by brands private to one loaded copy of the module, so an
 application must load exactly one copy. A library that ships plugins or a
 renderer adapter must declare `@deviltea/widget-core` as a **peer dependency**
 (not a regular dependency) and must not bundle it; `@deviltea/widget-vue` and
-`@deviltea/widget-inspector` do the same. The three packages are released together under one version, and a dependent at `0.1.1` accepts Core `>=0.1.1 <0.2.0`.
+`@deviltea/widget-inspector` (and the build-time `@deviltea/widget-docs-generator`) do the same. The four packages are released together under one version, and a dependent at `0.1.1` accepts Core `>=0.1.1 <0.2.0`.
 
 ## Core model
 

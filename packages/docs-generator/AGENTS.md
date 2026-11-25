@@ -2,7 +2,7 @@
 
 ## Scope
 
-`@deviltea/widget-docs-generator` (`packages/docs-generator`) turns a Widget System's TypeScript types (the shape) and its plugins' builder docs (the prose, `plugin.docs`) into documentation and AI-facing artifacts: an IR, a JSON docs object served by a Vite plugin, two JSON Schemas, flat/tree converters, and three Agent Skills. It is built with tsdown like the published packages, but it is `private` and not released yet: it is not part of the release scripts or `check:versions` (the Discussion #12 amendment "`@deviltea/widget-docs-generator` is a published package" makes it the fourth lockstep package).
+`@deviltea/widget-docs-generator` (`packages/docs-generator`) turns a Widget System's TypeScript types (the shape) and its plugins' builder docs (the prose, `plugin.docs`) into documentation and AI-facing artifacts: an IR, a JSON docs object served by a Vite plugin, two JSON Schemas, flat/tree converters, and three Agent Skills. It is the fourth published package (Discussion #12 amendment "`@deviltea/widget-docs-generator` is a published package", from `0.4.0`), built with tsdown and released in lockstep with Core, the Inspector and the Vue adapter (see "Release and version policy").
 
 It implements the tooling side of `DevilTea/widget` Discussion #12, "Descriptions live in the plugin builder; JSON Schema is inferred from the types (0.4.0)" (which amends "Interfaces are the single source of a plugin's shape and documentation (0.3.0)"), and the amendment "typed child reads for plugin-type slots": the shape comes from a plugin's `Interfaces` type, and every description from `plugin.docs`, the plain data Core keeps of the docs written in the builder (`.description()`, the config's field docs, each member's `description`, `.events({…})`, `.reasons({…})`, `defineTypeDocs`). JSDoc is not read. The runtime also has the semantic facts the cross-check uses: `system.catalog` (type, capabilities, slot names) and `inspectPlugin` (State with `authorWritable`, Properties, Events).
 
@@ -34,6 +34,15 @@ It implements the tooling side of `DevilTea/widget` Discussion #12, "Description
 | `tsdown.config.ts` | The build: the entries above plus `cli` and the internal `runtime-facts`, the worker copied as written, Core never bundled. |
 
 The Lab's showcases write their documentation in the builder (0.4) and load it through this plugin (`apps/lab/widget-docs.ts`); the fixture System stays the example and the test subject.
+
+## Release and version policy
+
+- One version with the other three packages, one tag, one release (root `AGENTS.md`, "Releasing"): `check:versions`, `pnpm release`, `pnpm release:tag` and `publish.yml` cover this package, which is published last, after Core. Never run the release commands without an explicit instruction to release.
+- While `0.x`, a breaking change in any of the four packages bumps the minor of all four, and a patch release contains none. Here a breaking change is one to the library API (`.`, `./runtime`, `./docs`, `./vite`), the bin's options or exit codes, the docs object (`WIDGET_DOCS_VERSION`), either schema profile, the IR, or the files the generator writes.
+- `@deviltea/widget-core` is a `workspace:^` peer (packed as `^<version>`), never a dependency and never bundled: the System's own Core must read its plugins. `typescript` and `tsx` are dependencies (build time only; `./runtime` reaches neither). `vite` is an optional peer, `^6.0.0 || ^7.0.0 || ^8.0.0`: `watchChange` reads `server.environments`, which Vite 6 added, and a packed install was checked on Vite 6, 7 and 8 (build, and dev with invalidation on an edit).
+- `files` publishes `dist` and the two virtual-module declarations; never `src`, `fixtures`, `examples` or tests (`package.unit.test.ts` packs it with `npm pack --dry-run`). `sideEffects: false`: no public entry does anything when imported (the bin, `dist/cli.mjs`, is run, not imported).
+- The npm Trusted Publisher names `DevilTea/widget` and `publish.yml`; the owner publishes a `0.0.0` placeholder once, by hand, to create the package (`docs/migration/release-cutover.md`). It is not a release.
+- CI's "Packed packages (Node 22.14)" job installs the tarball in a consumer and checks the subpath list, the Core peer range, the installed `./runtime` chunk graph (no external import), the bin against a small System (tsx and the built worker), `./runtime` with the IR it wrote, and the public types under `NodeNext` (`scripts/packed-consumer-*.m{js,ts}`).
 
 ## Commands
 
