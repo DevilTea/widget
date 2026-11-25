@@ -216,7 +216,7 @@ export async function runPublish(packages: readonly ReleasePackage[], deps: Publ
 	if (missing.length > 0) {
 		const names = missing.map(pkg => pkg.name)
 			.join(', ')
-		throw new PublishError(`${names} ${missing.length === 1 ? 'does' : 'do'} not exist on the registry, and npm Trusted Publishing cannot create a package. Publish a 0.0.0 placeholder of each by hand and configure its Trusted Publisher (repository DevilTea/widget, workflow publish.yml), as ${PACKAGE_CREATION_GUIDE} describes, then re-run the workflow. Nothing was published.`, outcomes)
+		throw new PublishError(`${names} ${missing.length === 1 ? 'does' : 'do'} not exist on the registry, and npm Trusted Publishing cannot create a package. Publish a 0.0.0 placeholder of each by hand and configure its Trusted Publisher (repository DevilTea/widget, workflow publish.yml), as ${PACKAGE_CREATION_GUIDE} describes, then re-run the workflow (if the placeholder was published moments ago, the registry may still answer from a cached 404: wait a few minutes before re-running). Nothing was published.`, outcomes)
 	}
 
 	for (const pkg of ordered) {

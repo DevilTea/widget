@@ -82,6 +82,11 @@ describe('publishOrder and tarballName', () => {
 		expect(registryVersionUrl('@deviltea/widget-core', '0.1.1'))
 			.toBe('https://registry.npmjs.org/@deviltea%2Fwidget-core/0.1.1')
 	})
+
+	it('asks the registry for the package document of a scoped package', () => {
+		expect(registryPackageUrl('@deviltea/widget-docs-generator'))
+			.toBe('https://registry.npmjs.org/@deviltea%2Fwidget-docs-generator')
+	})
 })
 
 describe('interpretRegistryResponse', () => {
@@ -413,10 +418,16 @@ describe('runPublish', () => {
 	})
 
 	it('names every missing package at once, and stops a dry run the same way', async () => {
-		const { deps, events } = harness({ registry: everyPackage(published, { 'widget-inspector': { kind: 'missing-package' }, 'widget-docs-generator': { kind: 'missing-package' } }) })
+		const { deps, events, lines } = harness({ registry: everyPackage(published, { 'widget-inspector': { kind: 'missing-package' }, 'widget-docs-generator': { kind: 'missing-package' } }) })
 		const error = await runPublish(release('0.4.0'), deps, { ...options, dryRun: true })
 			.catch((caught: unknown) => caught)
+		expect(error)
+			.toBeInstanceOf(PublishError)
 		expect(events)
+			.toEqual([])
+		expect((error as PublishError).outcomes)
+			.toEqual([])
+		expect(lines.filter(line => line.startsWith('Dry run: would publish')))
 			.toEqual([])
 		expect((error as PublishError).message)
 			.toContain('@deviltea/widget-inspector, @deviltea/widget-docs-generator do not exist on the registry')
