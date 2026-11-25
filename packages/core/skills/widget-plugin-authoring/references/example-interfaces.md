@@ -1,7 +1,7 @@
 # Example Interfaces
 
-The Interfaces of a small survey System. Together they use every capability, the three slot forms, a widget
-reference, an omittable config, named types and reasons with and without `details`. The descriptions belong in each
+The Interfaces of a small survey System. Together they use every capability, every slot form (a plain union
+of plugin types, `WidgetContract<Shape, Types>`, `WidgetContract<Shape>` and `WidgetChild`), a widget reference, an omittable config, named types and reasons with and without `details`. The descriptions belong in each
 plugin's builder (`plugin.docs`), not here.
 
 <!-- sample: example-interfaces after -->
@@ -38,6 +38,8 @@ export interface SurveyInterfaces {
 		header: WidgetChild
 		// Ratings and choices, read through the contract's Shape by the parent's Properties.
 		questions: WidgetContract<{ properties: { answered: boolean } }, 'Rating' | 'Choice'>
+		// Any widget that has an `answered` Property, whatever its type (a contract without `Types`).
+		extras: WidgetContract<{ properties: { answered: boolean } }>
 		// A plain union of plugin types.
 		footer: 'Note'
 	}

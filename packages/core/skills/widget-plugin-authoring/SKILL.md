@@ -73,6 +73,7 @@ export const Counter = createWidgetPlugin('Counter')
 				mirrorOf: { description: 'The mirrored counter, or null for none.' },
 			},
 		},
+		// An authoritative predicate: it checks every field and rejects unknown keys.
 		validate: (input, ctx): input is CounterRawConfig | null => {
 			if (input === null)
 				return true
@@ -80,12 +81,15 @@ export const Counter = createWidgetPlugin('Counter')
 				ctx.addDiagnostic({ message: 'The config must be an object or null.' })
 				return false
 			}
-			const { step } = input as Record<string, unknown>
-			if (step !== undefined && !(typeof step === 'number' && Number.isInteger(step) && step >= 1)) {
+			const { step, mirrorOf, ...unknown } = input as Record<string, unknown>
+			for (const key of Object.keys(unknown))
+				ctx.addDiagnostic({ message: `Unknown config key "${key}".`, path: [key] })
+			if (step !== undefined && !(typeof step === 'number' && Number.isInteger(step) && step >= 1))
 				ctx.addDiagnostic({ message: 'step must be a whole number of at least 1.', path: ['step'], reason: 'invalid-step', details: { min: 1 } })
-				return false
-			}
-			return true
+			if (mirrorOf !== undefined && typeof mirrorOf !== 'string')
+				ctx.addDiagnostic({ message: 'mirrorOf must be the id of a widget.', path: ['mirrorOf'] })
+			// Any reported diagnostic fails the validation, whatever `validate` returns.
+			return !ctx.hasAnyDiagnostic()
 		},
 		resolve: raw => ({ step: raw?.step ?? 1, mirrorOf: raw?.mirrorOf ?? null }),
 	})
@@ -139,6 +143,11 @@ const system = createWidgetSystem({ plugins: [Counter, Label] as const })
 
 const refused = system.createBlueprint({ id: 'counter', type: 'Counter', config: { step: 0 } })
 console.log(refused.status, refused.diagnostics.map(diagnostic => diagnostic.code)) // invalid [ 'invalid-widget-config' ]
+
+// A wrongly typed field and an unknown key are refused too, each at its path.
+const mistyped = system.createBlueprint({ id: 'counter', type: 'Counter', config: { step: 2, mirrorOf: 42, typo: 1 } })
+console.log(mistyped.status, mistyped.diagnostics.map(diagnostic => diagnostic.code === 'invalid-widget-config' ? diagnostic.path : null))
+// invalid [ [ 'typo' ], [ 'mirrorOf' ] ]
 
 const blueprint = system.createBlueprint({
 	id: 'counter',
@@ -195,7 +204,9 @@ runtime.dispose()
   member and field docs for every field, so nothing is left undocumented by accident.
 - `.config({ description, raw, resolved, validate, resolve })`: `validate` always runs and reports problems with
   `ctx.addDiagnostic({ message, path, reason, details })`; `resolve` turns the raw config into the resolved one (and is
-  called with `null` when validation failed). A rejected config is the Blueprint diagnostic `invalid-widget-config`.
+  called with `null` when validation failed). Validation fails when `validate` returns `false` or reports any
+  diagnostic, even if it then returns `true`: a diagnostic is never a warning. A rejected config is the Blueprint
+  diagnostic `invalid-widget-config`.
 - `.slots({ name: { description, validateStructure? } })`: one complete map, every declared slot present.
 - `.structure(validateStructure)`: the plugin-level structure check. It is not a capability.
 - `.state`: each member has `description`, `validate` and `default`. `authorWritable: true` is passive metadata
@@ -257,8 +268,15 @@ It is a type error when a slot names an unregistered plugin type, or when a plug
 library declares `@deviltea/widget-core` as a peer dependency and never bundles it.
 
 The documentation generator (`@deviltea/widget-docs-generator`, its bin `widget-docs-generator --check`) checks the
-documentation of a System: it fails on an `undocumented` marker,
-on a name the types, the runtime and the docs disagree on, and on a named type documented two different ways.
+documentation of a System. Every problem it reports is an error:
+
+- `undocumented`: an `undocumented` marker, with its plugin and docs path;
+- `missing-doc`: docs an untyped plugin left out, or a plugin without `plugin.docs`;
+- `name-mismatch`: a name the types, the runtime and the docs disagree on;
+- `docs-conflict`: a named type documented two different ways;
+- `unused-doc`: a description no output can show (at `raw`, `resolved` or a reason's `details` of a value that is not
+  one named type);
+- `no-docs`: the System was not imported (`--no-runtime`), so no prose was read.
 
 See `references/plugin-docs.md` for the documentation rules and `references/example-interfaces.md` for the
 Interfaces of a small System that uses every capability and every slot form.

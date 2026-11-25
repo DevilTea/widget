@@ -357,12 +357,12 @@ describe.skipIf(missingBuild !== null)('documentation samples', () => {
 			.join('\n'))
 			.toBe('')
 		// The samples state their output in comments; they were compared, not skipped. Raise this when comments are
-		// added; a drop means output stopped being compared. The floor is the measured count (112: 69 in the Core guide,
-		// 10 in its README, 23 in the 0.4 migration guide, 2 in the generator's page, 7 in Core's plugin-authoring skill
+		// added; a drop means output stopped being compared. The floor is the measured count (113: 69 in the Core guide,
+		// 10 in its README, 23 in the 0.4 migration guide, 2 in the generator's page, 8 in Core's plugin-authoring skill
 		// and 1 in Vue's renderer skill). It was 90 until the 0.1 migration guide's samples became historical (written
 		// against 0.1, no longer compiled, marked `skip`), which removed their compared output.
 		expect(result.compared.length)
-			.toBeGreaterThanOrEqual(112)
+			.toBeGreaterThanOrEqual(113)
 		// An exemption that is no longer needed has to be removed.
 		const used = new Set(result.exempted.map(claim => `${claim.document}\n${claim.sample}\n${claim.text}`))
 		expect(exemptComments.filter(entry => !used.has(`${entry.document}\n${entry.sample}\n${entry.comment}`)))

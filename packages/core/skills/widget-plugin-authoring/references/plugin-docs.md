@@ -81,6 +81,8 @@ const step = createWidgetPlugin('Step')
 				completeWhen: { description: 'The completion rule.', ref: conditionDocs },
 			},
 		},
+		// Deliberately simplified: this example is about the docs. A real `validate` is an authoritative predicate that
+		// checks every field (here each Condition, recursively) and rejects unknown keys, as in SKILL.md's example.
 		validate: (input): input is StepConfig => typeof input === 'object' && input !== null,
 		resolve: raw => raw ?? { completeWhen: { op: 'all', conditions: [] } },
 	})
