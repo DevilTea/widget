@@ -295,7 +295,7 @@ describe('build output', () => {
 	it('names the missing files and the command to run when the packages are not built', () => {
 		const root = mkdtempSync(join(tmpdir(), 'widget-docs-samples-root-'))
 		try {
-			for (const directory of ['packages/core', 'packages/vue', 'packages/inspector']) {
+			for (const directory of ['packages/core', 'packages/vue', 'packages/inspector', 'packages/docs-generator']) {
 				mkdirSync(join(root, directory), { recursive: true })
 				writeFileSync(join(root, directory, 'package.json'), JSON.stringify({ exports: { '.': { types: './dist/index.d.mts', import: './dist/index.mjs' } } }))
 			}
@@ -304,6 +304,8 @@ describe('build output', () => {
 				.toContain('packages/core/dist/index.mjs')
 			expect(message)
 				.toContain('packages/inspector/dist/index.d.mts')
+			expect(message)
+				.toContain('packages/docs-generator/dist/index.mjs')
 			expect(message)
 				.toContain('pnpm build')
 		}
