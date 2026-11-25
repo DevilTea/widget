@@ -1,7 +1,7 @@
 /**
  * The documentation of the document-repair plugins' config and value types, referenced from the builders
  * (`defineTypeDocs` + `ref` for a named type, `defineFieldDocs` for a config). Core keeps it on `plugin.docs`; the
- * widget-skills generator reads it from there.
+ * docs generator (`@deviltea/widget-docs-generator`) reads it from there.
  */
 
 import type { TypeDocs } from '@deviltea/widget-core'

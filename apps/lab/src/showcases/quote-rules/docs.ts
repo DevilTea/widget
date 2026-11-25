@@ -1,7 +1,7 @@
 /**
  * The documentation of the quote-rules plugins' config and value types, written once and referenced from the builders
  * (`defineTypeDocs` + `ref` for a type several members use, `defineFieldDocs` for a config). Core keeps it on
- * `plugin.docs`; the widget-skills generator reads it from there.
+ * `plugin.docs`; the docs generator (`@deviltea/widget-docs-generator`) reads it from there.
  *
  * The raw config descriptions repeat the text of each Valibot schema's `v.description()` (`./schemas.ts`), and state the
  * schema's constraints in words; nothing checks that the two agree, so change both together.

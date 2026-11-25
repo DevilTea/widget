@@ -36,6 +36,7 @@
 	},
 	"devDependencies": {
 		"@deviltea/tsconfig": "catalog:",
+		"@deviltea/widget-docs-generator": "workspace:*",
 		"@iconify-json/lucide": "catalog:",
 		"@playwright/test": "catalog:",
 		"@types/node": "catalog:",

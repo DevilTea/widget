@@ -1,8 +1,10 @@
 import Vue from 'unplugin-vue/vite'
-import { defineConfig } from 'vitest/config'
+import { configDefaults, defineConfig } from 'vitest/config'
 import { labNuxtUi } from './apps/lab/nuxt-ui'
 import { labWidgetDocs } from './apps/lab/widget-docs'
-import { widgetDocs } from './apps/widget-skills/src/vite'
+// The generator's own tests load its plugin from source (bundled into this config by relative path), so they test the
+// sources they import next to it, with or without a fresh build. Consumers (the Lab) load the built package by name.
+import { widgetDocs } from './packages/docs-generator/src/vite'
 
 export default defineConfig({
 	plugins: [Vue()],
@@ -11,15 +13,15 @@ export default defineConfig({
 		execArgv: ['--expose-gc'],
 		// Three projects share everything above and below (plugins, `execArgv`, coverage, typecheck). Only the Lab's
 		// realm loads its Nuxt UI and widget docs plugins and offline-icons setup, so a Lab or Iconify break cannot fail the
-		// package tests or the widget-skills tests at setup.
+		// package tests or the docs-generator tests at setup.
 		projects: [
 			{
 				extends: true,
-				// The generator's tests import `virtual:widget-docs/survey` (see apps/widget-skills/vitest.config.ts).
-				plugins: [widgetDocs({ systems: { survey: { module: 'apps/widget-skills/fixtures/survey-system.ts', export: 'surveySystem', tsconfig: 'apps/widget-skills/tsconfig.json' } } })],
+				// The generator's tests import `virtual:widget-docs/survey` (see packages/docs-generator/vitest.config.ts).
+				plugins: [widgetDocs({ systems: { survey: { module: 'packages/docs-generator/fixtures/survey-system.ts', export: 'surveySystem', tsconfig: 'packages/docs-generator/tsconfig.json' } } })],
 				test: {
-					name: 'widget-skills',
-					include: ['apps/widget-skills/src/**/*.unit.test.ts'],
+					name: 'docs-generator',
+					include: ['packages/docs-generator/src/**/*.unit.test.ts'],
 				},
 			},
 			{
@@ -27,6 +29,8 @@ export default defineConfig({
 				test: {
 					name: 'packages',
 					include: ['packages/**/src/**/*.unit.test.ts', 'scripts/**/*.unit.test.ts'],
+					// The generator has its own project above (with its Vite plugin).
+					exclude: [...configDefaults.exclude, 'packages/docs-generator/**'],
 				},
 			},
 			{
