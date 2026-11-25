@@ -150,13 +150,31 @@ describe('the package boundary', () => {
 		// Sorted: the repository's lint sorts the manifest's `files`.
 		expect([...pkg.files].sort())
 			.toEqual(['dist', 'virtual-widget-docs-slim.d.ts', 'virtual-widget-docs.d.ts'])
-		const result = spawnSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], { cwd: packageRoot, encoding: 'utf8', timeout: CHILD_TIMEOUT })
-		expect(result.status, result.stderr)
-			.toBe(0)
-		const packed = (JSON.parse(result.stdout) as [{ files: { path: string }[] }])[0].files.map(file => file.path)
+		// A real `pnpm pack`, as the release and CI make it, read back from the tarball: `pnpm pack --dry-run` and its
+		// `--json` list leave out the repository's LICENSE, which pnpm adds to the tarball.
+		const destination = mkdtempSync(join(tmpdir(), 'widget-docs-pack-'))
+		let packed: string[]
+		try {
+			const pack = spawnSync('pnpm', ['pack', '--pack-destination', destination], { cwd: packageRoot, encoding: 'utf8', timeout: CHILD_TIMEOUT })
+			expect(pack.status, pack.stderr)
+				.toBe(0)
+			const tarball = readdirSync(destination)
+				.filter(name => name.endsWith('.tgz'))
+			expect(tarball)
+				.toHaveLength(1)
+			const list = spawnSync('tar', ['-tzf', join(destination, tarball[0]!)], { encoding: 'utf8', timeout: CHILD_TIMEOUT })
+			expect(list.status, list.stderr)
+				.toBe(0)
+			packed = list.stdout.split('\n')
+				.filter(line => line !== '')
+				.map(line => line.replace(/^package\//, ''))
+		}
+		finally {
+			rmSync(destination, { recursive: true, force: true })
+		}
 		expect(packed.filter(path => !path.startsWith('dist/'))
 			.sort())
-			.toEqual(['README.md', 'package.json', 'virtual-widget-docs-slim.d.ts', 'virtual-widget-docs.d.ts'])
+			.toEqual(['LICENSE', 'README.md', 'package.json', 'virtual-widget-docs-slim.d.ts', 'virtual-widget-docs.d.ts'])
 		expect(packed.filter(path => /\.unit\.test\.|(?:^|\/)(?:fixtures|examples|src)\//.test(path)))
 			.toEqual([])
 		// Every file a subpath or the bin names is in the tarball, and so is the worker the bin starts by URL.
