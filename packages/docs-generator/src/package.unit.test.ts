@@ -216,6 +216,43 @@ describe('the bin', () => {
 			.toMatch(/^Usage: widget-docs-generator --module <path> --export <name> /)
 	})
 
+	it('imports a System that only tsx can load, resolving Core through --source-tsconfig paths alone', () => {
+		// In the OS temporary directory: no `node_modules` resolves Core, only the source tsconfig's `paths` (to Core's
+		// sources, whose extensionless imports Node cannot load either), and the module imports a sibling without an
+		// extension. Node's own type stripping loads neither; the worker's tsx does.
+		const directory = mkdtempSync(join(tmpdir(), 'widget-docs-bin-system-'))
+		try {
+			const coreSource = resolve(packageRoot, '../core/src')
+			writeFileSync(join(directory, 'package.json'), '{ "type": "module" }\n')
+			writeFileSync(join(directory, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true, module: 'esnext', moduleResolution: 'bundler', target: 'esnext', skipLibCheck: true, types: [] }, include: ['./*.ts'] }))
+			writeFileSync(join(directory, 'tsconfig.source.json'), JSON.stringify({ compilerOptions: { paths: {
+				'@deviltea/widget-core': [join(coreSource, 'index.ts')],
+				'@deviltea/widget-core/inspection': [join(coreSource, 'inspection/index.ts')],
+			} } }))
+			writeFileSync(join(directory, 'badge.ts'), [
+				'import { createWidgetPlugin } from \'@deviltea/widget-core\'',
+				'interface BadgeInterfaces { state: { count: number } }',
+				'export const Badge = createWidgetPlugin(\'Badge\')',
+				'\t.description(\'A badge.\')',
+				'\t.interfaces<BadgeInterfaces>()',
+				'\t.state(state => state.count({ description: \'The count.\', validate: (input): input is number => typeof input === \'number\', default: () => 0, authorWritable: true }))',
+				'\t.done()',
+				'',
+			].join('\n'))
+			writeFileSync(join(directory, 'system.ts'), 'import { createWidgetSystem } from \'@deviltea/widget-core\'\nimport { Badge } from \'./badge\'\n\nexport const system = createWidgetSystem({ plugins: [Badge] as const })\n')
+			const result = spawnSync(process.execPath, [join(dist, 'cli.mjs'), '--check', '--module', join(directory, 'system.ts'), '--export', 'system', '--tsconfig', join(directory, 'tsconfig.json'), '--source-tsconfig', join(directory, 'tsconfig.source.json')], { cwd: directory, encoding: 'utf8' })
+			expect(result.stderr)
+				.toBe('')
+			expect(result.stdout)
+				.toBe('2/2 descriptions documented, 0 error(s), 0 warning(s).\n')
+			expect(result.status)
+				.toBe(0)
+		}
+		finally {
+			rmSync(directory, { recursive: true, force: true })
+		}
+	}, 120_000)
+
 	it('checks the fixture System with plain node', () => {
 		const result = spawnSync(process.execPath, [join(dist, 'cli.mjs'), '--check', '--module', fixture, '--export', 'surveySystem', '--tsconfig', tsconfig], { cwd: packageRoot, encoding: 'utf8' })
 		expect(result.stderr)
