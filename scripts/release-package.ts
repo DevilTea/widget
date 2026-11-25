@@ -6,21 +6,31 @@ import { fileURLToPath } from 'node:url'
 export const workspaceRoot = fileURLToPath(new URL('..', import.meta.url))
 
 /**
- * The published packages, in publish order: Core first, because the other two declare it as a peer
- * dependency, then the Inspector and the Vue adapter. They always carry one and the same version.
+ * The published packages, in publish order: Core first, because the other three declare it as a peer
+ * dependency, then the Inspector, the Vue adapter and the documentation generator. They always carry one and
+ * the same version. `legacyTags` marks the packages that were released with per-package tags
+ * (`widget-core@0.1.0`) before the versions were unified; the generator joined the release after that.
  */
 const packages = {
 	'widget-core': {
 		directory: 'packages/core',
 		name: '@deviltea/widget-core',
+		legacyTags: true,
 	},
 	'widget-inspector': {
 		directory: 'packages/inspector',
 		name: '@deviltea/widget-inspector',
+		legacyTags: true,
 	},
 	'widget-vue': {
 		directory: 'packages/vue',
 		name: '@deviltea/widget-vue',
+		legacyTags: true,
+	},
+	'widget-docs-generator': {
+		directory: 'packages/docs-generator',
+		name: '@deviltea/widget-docs-generator',
+		legacyTags: false,
 	},
 } as const
 
@@ -77,7 +87,7 @@ export function sharedVersion(versions: Readonly<Record<string, string>>) {
  * What stops the published packages from being released together at `versions` (package id to version), or
  * `null` when they can. Pure: takes the versions.
  *
- * The packages share one version. `widget-vue` and `widget-inspector` declare Core as a `workspace:^` peer,
+ * The packages share one version. Every package but Core declares Core as a `workspace:^` peer,
  * which packs as `^<version>`; on `0.0.x` that caret is an exact pin (`^0.0.6` is `0.0.6`), so a `0.0.x`
  * release is refused as well.
  */
@@ -97,7 +107,7 @@ export function unifiedVersionProblem(versions: Readonly<Record<string, string>>
 	if (parsed === null)
 		return `"${version}" is not a plain \`major.minor.patch[-prerelease]\` version.`
 	if (parsed.major === 0 && parsed.minor === 0)
-		return `Version ${version} is \`0.0.x\`, where the \`^${version}\` Core peer range of \`widget-vue\` and \`widget-inspector\` would pin exactly that patch. Release \`0.1.0\` or later.`
+		return `Version ${version} is \`0.0.x\`, where the \`^${version}\` Core peer range of the other packages would pin exactly that patch. Release \`0.1.0\` or later.`
 	return null
 }
 
@@ -131,9 +141,13 @@ export function releaseCommitMessage(version: string) {
 	return `chore: release ${releaseTag(version)}`
 }
 
-/** The per-package tags (`widget-core@0.1.0`) of the releases made before the versions were unified. */
+/**
+ * The per-package tags (`widget-core@0.1.0`) of the releases made before the versions were unified. Only the
+ * packages released that way have them: the documentation generator was only ever tagged `v<version>`.
+ */
 export function legacyPackageTags(version: string) {
-	return packageIds.map(id => `${id}@${version}`)
+	return packageIds.filter(id => packages[id].legacyTags)
+		.map(id => `${id}@${version}`)
 }
 
 /**

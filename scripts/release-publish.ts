@@ -9,7 +9,7 @@ import { assertUnifiedVersion, distTagFor, fail, packageEntry, packageIds, packa
 /**
  * Publishes the packed Widget packages for one release (run by `.github/workflows/publish.yml`).
  *
- * The three packages are published in dependency order, Core first. A package whose exact version is
+ * The four packages are published in dependency order, Core first. A package whose exact version is
  * already on the registry is skipped, so re-running the workflow after a partial failure finishes the
  * release. The registry is asked about the exact version (`GET /<name>/<version>`), which is not served from
  * the cached package document that lags behind a publish; an answer that is neither a clear "present" nor a

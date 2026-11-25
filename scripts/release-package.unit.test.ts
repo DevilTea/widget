@@ -55,6 +55,14 @@ describe('unifiedVersionProblem', () => {
 			.toContain('widget-vue 0.1.0')
 	})
 
+	it('refuses a documentation generator at another version than the other three', () => {
+		const problem = unifiedVersionProblem({ ...same('0.4.0'), 'widget-docs-generator': '0.3.0' })
+		expect(problem)
+			.toContain('share one version')
+		expect(problem)
+			.toContain('widget-docs-generator 0.3.0')
+	})
+
 	it('refuses a prerelease that differs only in its prerelease part', () => {
 		expect(unifiedVersionProblem({ ...same('0.1.1-beta.0'), 'widget-inspector': '0.1.1' }))
 			.toContain('share one version')
@@ -65,6 +73,10 @@ describe('unifiedVersionProblem', () => {
 		delete versions['widget-inspector']
 		expect(unifiedVersionProblem(versions as Record<string, string>))
 			.toContain('widget-inspector')
+		const withoutGenerator = same('0.1.1') as Record<string, string | undefined>
+		delete withoutGenerator['widget-docs-generator']
+		expect(unifiedVersionProblem(withoutGenerator as Record<string, string>))
+			.toBe('No version for widget-docs-generator.')
 	})
 
 	it.each(['0.0.0', '0.0.6', '0.0.7-beta.1'])('refuses %s, where the `^` Core peer range of the dependents pins one exact patch', (version) => {
@@ -91,7 +103,7 @@ describe('release names', () => {
 			.toBe('chore: release v0.1.1')
 	})
 
-	it('also treats the old per-package tags of the same version as "already released"', () => {
+	it('also treats the old per-package tags of the same version as "already released", which the generator never had', () => {
 		expect(legacyPackageTags('0.1.0'))
 			.toEqual(['widget-core@0.1.0', 'widget-inspector@0.1.0', 'widget-vue@0.1.0'])
 		expect(releaseTagNames('0.1.0'))
@@ -170,9 +182,11 @@ describe('workspace manifests', () => {
 			.toBe(packageVersions()['widget-core'])
 	})
 
-	it('publishes Core first because the other packages peer-depend on it', () => {
-		expect(packageIds[0])
-			.toBe('widget-core')
+	it('releases the four packages, Core first because the other packages peer-depend on it', () => {
+		expect(packageIds)
+			.toEqual(['widget-core', 'widget-inspector', 'widget-vue', 'widget-docs-generator'])
+		expect(packageEntry('widget-docs-generator'))
+			.toMatchObject({ directory: 'packages/docs-generator', name: '@deviltea/widget-docs-generator' })
 		for (const id of packageIds.slice(1)) {
 			const manifest = JSON.parse(readFileSync(`${workspaceRoot}${packageEntry(id).directory}/package.json`, 'utf8')) as { peerDependencies?: Record<string, string> }
 			expect(manifest.peerDependencies?.['@deviltea/widget-core'])

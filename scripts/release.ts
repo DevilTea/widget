@@ -141,7 +141,7 @@ async function openReleasePullRequest(release: string, autoConfirm: boolean) {
 		`Release candidate for \`${tag}\`: ${packageNames.map(name => `\`${name}\``)
 			.join(', ')} all move from \`${previousVersion}\` to \`${version}\`.`,
 		'',
-		`After this pull request is merged, run \`pnpm release:tag\` to push the annotated tag \`${tag}\` and trigger the publish workflow, which publishes all three packages (Core first).`,
+		`After this pull request is merged, run \`pnpm release:tag\` to push the annotated tag \`${tag}\` and trigger the publish workflow, which publishes all of them (Core first).`,
 	].join('\n')
 
 	const url = (await $`gh pr create --base main --head ${branch} --title ${title} --body ${body}`).stdout.trim()
@@ -174,7 +174,7 @@ async function pushReleaseTag(autoConfirm: boolean) {
 
 	log.step(`${packageNames.join(', ')} ${version} → tag \`${tag}\``)
 	log.info(`main is at ${head} (${subject}).`)
-	log.warn('Pushing this tag publishes all three packages to npm.')
+	log.warn('Pushing this tag publishes all the Widget packages to npm.')
 
 	await askToProceed(`Push \`${tag}\` and publish ${version}?`, autoConfirm)
 
