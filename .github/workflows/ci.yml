@@ -61,8 +61,6 @@ jobs:
           core_tarball="$(find "$GITHUB_WORKSPACE/package-tarballs" -maxdepth 1 -name 'deviltea-widget-core-*.tgz' -print -quit)"
           inspector_tarball="$(find "$GITHUB_WORKSPACE/package-tarballs" -maxdepth 1 -name 'deviltea-widget-inspector-*.tgz' -print -quit)"
           vue_tarball="$(find "$GITHUB_WORKSPACE/package-tarballs" -maxdepth 1 -name 'deviltea-widget-vue-*.tgz' -print -quit)"
-          test -n "$core_tarball"
-          test -n "$inspector_tarball"
           docs_generator_tarball="$(find "$GITHUB_WORKSPACE/package-tarballs" -maxdepth 1 -name 'deviltea-widget-docs-generator-*.tgz' -print -quit)"
           test -n "$core_tarball"
           test -n "$inspector_tarball"
