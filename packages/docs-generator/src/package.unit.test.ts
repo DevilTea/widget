@@ -19,6 +19,11 @@ const fixture = join(packageRoot, 'fixtures/survey-system.ts')
 const tsconfig = join(packageRoot, 'tsconfig.json')
 
 interface PackageJson {
+	readonly private?: boolean
+	readonly version: string
+	readonly publishConfig?: { readonly access?: string }
+	readonly files: readonly string[]
+	readonly sideEffects?: boolean
 	readonly exports: Record<string, { readonly types: string, readonly import?: string }>
 	readonly bin: Record<string, string>
 	readonly dependencies: Record<string, string>
@@ -115,8 +120,9 @@ describe('the package boundary', () => {
 			.toBe('workspace:^')
 		expect(pkg.devDependencies['@deviltea/widget-core'])
 			.toBe('workspace:*')
+		// The majors whose plugin API `widgetDocs` uses (Vite 6 added `server.environments`, which `watchChange` reads).
 		expect(pkg.peerDependencies.vite)
-			.toBeDefined()
+			.toBe('^6.0.0 || ^7.0.0 || ^8.0.0')
 		expect(pkg.peerDependenciesMeta?.vite?.optional)
 			.toBe(true)
 		expect(Object.keys(pkg.dependencies)
@@ -125,6 +131,39 @@ describe('the package boundary', () => {
 		expect(pkg.engines?.node)
 			.toBe('>=22.14.0')
 	})
+
+	it('is published at the version of the other released packages, with no side effects', () => {
+		expect(pkg.private)
+			.toBeUndefined()
+		expect(pkg.publishConfig)
+			.toEqual({ access: 'public' })
+		for (const sibling of ['core', 'inspector', 'vue']) {
+			const manifest = JSON.parse(readFileSync(join(packageRoot, '..', sibling, 'package.json'), 'utf8')) as PackageJson
+			expect(pkg.version, sibling)
+				.toBe(manifest.version)
+		}
+		expect(pkg.sideEffects)
+			.toBe(false)
+	})
+
+	it('packs the build and the virtual-module declarations, never the sources, tests, fixtures or examples', () => {
+		expect(pkg.files)
+			.toEqual(['dist', 'virtual-widget-docs.d.ts', 'virtual-widget-docs-slim.d.ts'])
+		const result = spawnSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], { cwd: packageRoot, encoding: 'utf8', timeout: CHILD_TIMEOUT })
+		expect(result.status, result.stderr)
+			.toBe(0)
+		const packed = (JSON.parse(result.stdout) as [{ files: { path: string }[] }])[0].files.map(file => file.path)
+		expect(packed.filter(path => !path.startsWith('dist/'))
+			.sort())
+			.toEqual(['README.md', 'package.json', 'virtual-widget-docs-slim.d.ts', 'virtual-widget-docs.d.ts'])
+		expect(packed.filter(path => /\.unit\.test\.|(?:^|\/)(?:fixtures|examples|src)\//.test(path)))
+			.toEqual([])
+		// Every file a subpath or the bin names is in the tarball, and so is the worker the bin starts by URL.
+		const targets = [...Object.values(pkg.exports)
+			.flatMap(entry => Object.values(entry)), ...Object.values(pkg.bin)].map(target => target.replace(/^\.\//, ''))
+		expect(packed)
+			.toEqual(expect.arrayContaining([...targets, 'dist/runtime-worker.mjs', 'dist/runtime-facts.mjs']))
+	}, TEST_TIMEOUT)
 
 	it('never bundles Core', () => {
 		for (const file of readdirSync(dist)
