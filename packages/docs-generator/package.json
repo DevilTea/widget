@@ -1,0 +1,68 @@
+{
+	"name": "@deviltea/widget-docs-generator",
+	"type": "module",
+	"version": "0.0.0",
+	"private": true,
+	"description": "Turns a Widget System's TypeScript types (the shape) and its plugins' builder docs (the prose) into documentation and AI-facing artifacts: a docs object served by a Vite plugin, an IR, JSON Schemas, flat/tree converters and Agent Skills.",
+	"license": "MIT",
+	"sideEffects": false,
+	"exports": {
+		".": {
+			"types": "./dist/index.d.mts",
+			"import": "./dist/index.mjs"
+		},
+		"./docs": {
+			"types": "./dist/docs.d.mts",
+			"import": "./dist/docs.mjs"
+		},
+		"./runtime": {
+			"types": "./dist/runtime.d.mts",
+			"import": "./dist/runtime.mjs"
+		},
+		"./virtual-widget-docs": {
+			"types": "./virtual-widget-docs.d.ts"
+		},
+		"./virtual-widget-docs-slim": {
+			"types": "./virtual-widget-docs-slim.d.ts"
+		},
+		"./vite": {
+			"types": "./dist/vite.d.mts",
+			"import": "./dist/vite.mjs"
+		}
+	},
+	"bin": {
+		"widget-docs-generator": "./dist/cli.mjs"
+	},
+	"engines": {
+		"node": ">=22.14.0"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"dev": "tsdown --watch",
+		"generate:example": "node ./dist/cli.mjs --module ./fixtures/survey-system.ts --export surveySystem --tsconfig ./tsconfig.json --root ../.. --example ./fixtures/survey-example.json --out ./examples/survey",
+		"check:example": "node ./dist/cli.mjs --check --module ./fixtures/survey-system.ts --export surveySystem --tsconfig ./tsconfig.json --root ../..",
+		"test": "vitest run --config vitest.config.ts",
+		"typecheck": "tsc --project ./tsconfig.json --noEmit"
+	},
+	"peerDependencies": {
+		"@deviltea/widget-core": "workspace:^",
+		"vite": "catalog:"
+	},
+	"peerDependenciesMeta": {
+		"vite": {
+			"optional": true
+		}
+	},
+	"dependencies": {
+		"tsx": "catalog:",
+		"typescript": "catalog:"
+	},
+	"devDependencies": {
+		"@deviltea/tsconfig": "catalog:",
+		"@deviltea/widget-core": "workspace:*",
+		"@types/node": "catalog:",
+		"tsdown": "catalog:",
+		"vite": "catalog:",
+		"vitest": "catalog:"
+	}
+}

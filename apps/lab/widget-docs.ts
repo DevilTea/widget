@@ -1,7 +1,5 @@
 import { fileURLToPath } from 'node:url'
-// A relative path, not `@deviltea/widget-skills/vite`: a Vite config bundles its relative imports, while a bare specifier
-// is left to Node, which cannot load the plugin's TypeScript sources (apps/widget-skills/AGENTS.md, "The Vite plugin").
-import { widgetDocs } from '../widget-skills/src/vite'
+import { widgetDocs } from '@deviltea/widget-docs-generator/vite'
 
 /** Showcase id (as in `src/showcases/registry.ts`) to the module and export of its System. */
 const SYSTEMS = {

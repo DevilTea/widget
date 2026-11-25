@@ -65,7 +65,7 @@ export type WidgetRefAccessor = (path: ConfigPath) => readonly string[] | null
 
 /**
  * The annotation `widgetDocs()` writes in the full-profile config schema on a value typed `WidgetRef<'A' | 'B'>`
- * (`apps/widget-skills/src/schema.ts`): the plugin types it names, in the order they are written (`"x-widgetRef": ["A", "B"]`).
+ * (`packages/docs-generator/src/schema.ts`): the plugin types it names, in the order they are written (`"x-widgetRef": ["A", "B"]`).
  */
 export const WIDGET_REF_KEYWORD = 'x-widgetRef'
 

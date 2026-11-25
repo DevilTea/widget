@@ -366,6 +366,8 @@ describe('a deep read of a chain alien-signals tore down (its last subscriber un
 		}
 	})
 
+	// CPU-bound (a 400-link chain read twice with unlimited stack traces): about 3 s alone, and it timed out at the 5 s
+	// default beside the other test files.
 	it('nests no deeper than the first cold read did', () => {
 		// The deepest engine stack any compute runs on, for the first cold read of a 400-link chain and for
 		// the cold read again once the chain was torn down. Unbounded, the second would grow with the chain.
@@ -395,7 +397,7 @@ describe('a deep read of a chain alien-signals tore down (its last subscriber un
 		finally {
 			Error.stackTraceLimit = stackTraceLimit
 		}
-	})
+	}, 30_000)
 })
 
 // A `compute` that reads, through a Runtime it holds by closure, a Property whose evaluation is in progress (or

@@ -1,6 +1,6 @@
 /**
  * The plugin documentation the Lab shows. A plugin's prose is written in its builder and kept on `plugin.docs` (Core 0.4); the
- * shape comes from its `Interfaces` type. `widgetDocs()` (`apps/widget-skills`, wired in `widget-docs.ts` at the app root) turns both into one
+ * shape comes from its `Interfaces` type. `widgetDocs()` (`@deviltea/widget-docs-generator/vite`, wired in `widget-docs.ts` at the app root) turns both into one
  * `WidgetDocs` object per showcase System, imported as `virtual:widget-docs/<showcase id>` by `showcases/registry.ts`.
  *
  * The readers here never throw for a type or member the documentation does not name: an undocumented one reads as `''`, and

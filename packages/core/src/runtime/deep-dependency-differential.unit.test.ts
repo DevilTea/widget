@@ -247,6 +247,8 @@ function causeChainLength(diagnostic: DiagnosticRecord | undefined): number {
 	return length
 }
 const SEEDS = Array.from({ length: 15 }, (_, index) => index + 1)
+/** Per-test timeout of the deepest graphs: CPU-bound, so their time grows with the machine's load. */
+const HEAVY_TEST_TIMEOUT = 30_000
 
 describe('deep dependency graphs read cold from their heads', () => {
 	it('cover depths both below and far above the internal nesting limit', () => {
@@ -259,6 +261,7 @@ describe('deep dependency graphs read cold from their heads', () => {
 			.toBeGreaterThan(3_000)
 	})
 
+	// The largest seeds take about 2.3 s alone and timed out at the 5 s default beside the other test files.
 	it.each(SEEDS)('end exactly as a dependency-ordered evaluation (seed %i)', (seed) => {
 		const size = SIZES[seed % SIZES.length]!
 		const graph = generateGraph(seed, size)
@@ -376,7 +379,7 @@ describe('deep dependency graphs read cold from their heads', () => {
 			for (const diagnostic of nodeOf(a, head).properties.out.getDiagnostics())
 				longestCauseChain = Math.max(longestCauseChain, causeChainLength(diagnostic as DiagnosticRecord))
 		}
-	})
+	}, HEAVY_TEST_TIMEOUT)
 
 	// Runs after every seed above: the failing chains compared there include ones far longer than V8 nests.
 	it('include failing chains far longer than the engine could nest', () => {
