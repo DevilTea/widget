@@ -24,6 +24,9 @@ features:
     details: A renderer registry and lazy Vue-native projections over the authoritative core runtime.
   - title: Read-only Inspector
     details: A versioned Inspector protocol, client, DOM agent, and transports for observing a running widget tree without changing it (0.x experimental).
+  - title: Documentation generator
+    details: Docs objects for a Vite app, JSON Schemas, a converter for a model's output, and Agent Skills, generated from a System's types and its plugins' builder docs.
+    link: /packages/widget-docs-generator
   - title: Interactive Lab
     details: Authoring workbench, preview, inspectors, dependency graph, implementation explorer, and product-shaped showcases.
 ---
