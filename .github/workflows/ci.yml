@@ -72,6 +72,7 @@ jobs:
           cp "$GITHUB_WORKSPACE/scripts/packed-consumer-runtime.mjs" ./packed-consumer-runtime.mjs
           cp "$GITHUB_WORKSPACE/scripts/packed-consumer-negative.mjs" ./packed-consumer-negative.mjs
           cp "$GITHUB_WORKSPACE/scripts/packed-consumer-boundary.mjs" ./packed-consumer-boundary.mjs
+          cp "$GITHUB_WORKSPACE/scripts/packed-consumer-skills.mjs" ./packed-consumer-skills.mjs
           cp "$GITHUB_WORKSPACE/scripts/packed-consumer-types.mts" ./packed-consumer-types.mts
           cp "$GITHUB_WORKSPACE/scripts/packed-consumer-types-slim.mts" ./packed-consumer-types-slim.mts
 
@@ -79,6 +80,7 @@ jobs:
           node ./packed-consumer-runtime.mjs
           node ./packed-consumer-negative.mjs
           node ./packed-consumer-boundary.mjs
+          node ./packed-consumer-skills.mjs
 
           # Two programs: the full and the slim virtual-module declarations type the same module pattern.
           tsc_options="--noEmit --strict --noUnusedLocals --noUnusedParameters --target ES2022 --module NodeNext --moduleResolution NodeNext --lib ES2022,DOM,DOM.Iterable"
