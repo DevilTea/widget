@@ -4,7 +4,7 @@
  * loader, no Vite transform). Run `pnpm build` (or `pnpm --filter @deviltea/widget-docs-generator... build`) first.
  */
 
-import { execFileSync, spawnSync } from 'node:child_process'
+import { spawnSync } from 'node:child_process'
 import { appendFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -35,14 +35,53 @@ afterAll(() => rmSync(scripts, { recursive: true, force: true }))
 let scriptCount = 0
 
 /**
- * Runs an ES module script with plain `node` in `cwd` and returns its standard output. The script is a file, not
- * `--eval`: a worker thread inherits the process's `execArgv`, and `--input-type` is not allowed there.
+ * How long one child process may run. Every test that starts one has a timeout above this, so a hung child is killed
+ * and fails its test with a message instead of blocking the Vitest worker (a synchronous call ignores the test timeout).
  */
-function runNode(script: string, cwd: string = packageRoot): string {
+const CHILD_TIMEOUT = 45_000
+const TEST_TIMEOUT = 60_000
+
+interface ChildResult {
+	status: number | null
+	stdout: string
+	stderr: string
+}
+
+/** Runs `node <args>` in `cwd`; throws when the child cannot start or outlives `timeout`. */
+function runChild(args: readonly string[], cwd: string, timeout: number = CHILD_TIMEOUT): ChildResult {
+	const result = spawnSync(process.execPath, args, { cwd, encoding: 'utf8', timeout, killSignal: 'SIGKILL' })
+	if (result.error !== undefined) {
+		const reason = (result.error as NodeJS.ErrnoException).code === 'ETIMEDOUT' ? `did not finish within ${String(timeout)} ms and was killed` : `failed to run (${result.error.message})`
+		throw new Error(`node ${args.join(' ')} ${reason}.\nstdout: ${result.stdout}\nstderr: ${result.stderr}`)
+	}
+	return { status: result.status, stdout: result.stdout, stderr: result.stderr }
+}
+
+/**
+ * Runs an ES module script with plain `node` in `cwd` and returns its standard output; throws on a non-zero exit or a
+ * timeout. The script is a file, not `--eval`: a worker thread inherits the process's `execArgv`, and `--input-type`
+ * is not allowed there.
+ */
+function runNode(script: string, { cwd = packageRoot, timeout = CHILD_TIMEOUT }: { cwd?: string, timeout?: number } = {}): string {
 	const file = join(scripts, `script-${String(scriptCount++)}.mjs`)
 	writeFileSync(file, script)
-	return execFileSync(process.execPath, [file], { cwd, encoding: 'utf8' })
+	const result = runChild([file], cwd, timeout)
+	if (result.status !== 0)
+		throw new Error(`node ${file} exited with ${String(result.status)}:\n${result.stderr}`)
+	return result.stdout
 }
+
+/** Runs the built bin in `cwd`. */
+function runBin(args: readonly string[], cwd: string = packageRoot): ChildResult {
+	return runChild([join(dist, 'cli.mjs'), ...args], cwd)
+}
+
+describe('the child-process helpers', () => {
+	it('kill a child that outlives its timeout and fail with a message that says so', () => {
+		expect(() => runNode('await new Promise(resolve => setTimeout(resolve, 30_000))', { timeout: 300 }))
+			.toThrow(/did not finish within 300 ms and was killed/)
+	})
+})
 
 beforeAll(() => {
 	if (!existsSync(join(dist, 'index.mjs')))
@@ -152,7 +191,7 @@ describe('the ./runtime subpath', () => {
 			.toEqual({ nodes: expect.any(Number), roundTrip: true, thrown: true })
 		expect((JSON.parse(output) as { nodes: number }).nodes)
 			.toBeGreaterThan(1)
-	})
+	}, TEST_TIMEOUT)
 })
 
 describe('the run-time worker from dist', () => {
@@ -165,7 +204,7 @@ describe('the run-time worker from dist', () => {
 		`)
 		expect(JSON.parse(output))
 			.toEqual({ types: ['Survey', 'Rating', 'Choice', 'Note'], state: [{ name: 'value', authorWritable: true }], described: 'string' })
-	}, 60_000)
+	}, TEST_TIMEOUT)
 })
 
 describe('the docs cache from dist', () => {
@@ -178,18 +217,7 @@ describe('the docs cache from dist', () => {
 	})
 	afterAll(() => rmSync(scratch, { recursive: true, force: true }))
 
-	/** The cache key of the fixture System, generated (no disk cache, no runtime) by the `dist` in `directory`. */
-	function keyFrom(directory: string): string {
-		return runNode(`
-			import { createDocsCache } from ${JSON.stringify(pathToFileURL(join(directory, 'index.mjs')).href)}
-			const cache = createDocsCache({ cacheDir: null, root: ${JSON.stringify(packageRoot)}, runtime: false })
-			const result = await cache.load('survey', { module: ${JSON.stringify(fixture)}, export: 'surveySystem', tsconfig: ${JSON.stringify(tsconfig)} })
-			console.log(result.key)
-		`)
-			.trim()
-	}
-
-	it('hashes the built generator: an identical copy keeps the key, a changed chunk changes it', () => {
+	it('hashes the built generator: an identical copy hits the cache, a changed chunk misses it', () => {
 		const same = join(scratch, 'same')
 		const changed = join(scratch, 'changed')
 		cpSync(dist, same, { recursive: true })
@@ -198,28 +226,42 @@ describe('the docs cache from dist', () => {
 			.find(name => name.startsWith('flat-') && name.endsWith('.mjs'))!
 		appendFileSync(join(changed, chunk), '\n// a change to the generator\n')
 
-		const original = keyFrom(dist)
+		// One process and one cache directory (no runtime import): each copy is its own module graph, so each computes
+		// its own generator hash; the identical copy is then a hit, which builds no program.
+		const output = runNode(`
+			const results = []
+			for (const entry of ${JSON.stringify([dist, same, changed].map(directory => pathToFileURL(join(directory, 'index.mjs')).href))}) {
+				const { createDocsCache } = await import(entry)
+				const cache = createDocsCache({ cacheDir: ${JSON.stringify(join(scratch, 'cache'))}, root: ${JSON.stringify(packageRoot)}, runtime: false })
+				const { key, hit } = await cache.load('survey', { module: ${JSON.stringify(fixture)}, export: 'surveySystem', tsconfig: ${JSON.stringify(tsconfig)} })
+				results.push({ key, hit })
+			}
+			console.log(JSON.stringify(results))
+		`, { timeout: 90_000 })
+		const [original, copy, edited] = JSON.parse(output) as { key: string, hit: boolean }[]
 		expect(original)
-			.toMatch(/^[0-9a-f]{64}$/)
-		expect(keyFrom(same))
-			.toBe(original)
-		expect(keyFrom(changed)).not.toBe(original)
+			.toEqual({ key: expect.stringMatching(/^[0-9a-f]{64}$/), hit: false })
+		expect(copy)
+			.toEqual({ key: original!.key, hit: true })
+		expect(edited!.hit)
+			.toBe(false)
+		expect(edited!.key).not.toBe(original!.key)
 	}, 120_000)
 })
 
 describe('the bin', () => {
 	it('prints its usage under its own name without the required options', () => {
-		const result = spawnSync(process.execPath, [join(dist, 'cli.mjs')], { cwd: packageRoot, encoding: 'utf8' })
+		const result = runBin([])
 		expect(result.status)
 			.toBe(2)
 		expect(result.stderr)
 			.toMatch(/^Usage: widget-docs-generator --module <path> --export <name> /)
-	})
+	}, TEST_TIMEOUT)
 
-	it('imports a System that only tsx can load, resolving Core through --source-tsconfig paths alone', () => {
+	it('checks a System that only tsx can load, resolving Core through --source-tsconfig paths alone', () => {
 		// In the OS temporary directory: no `node_modules` resolves Core, only the source tsconfig's `paths` (to Core's
-		// sources, whose extensionless imports Node cannot load either), and the module imports a sibling without an
-		// extension. Node's own type stripping loads neither; the worker's tsx does.
+		// sources, whose extensionless imports need tsx as well), and the module imports a sibling without an extension. A plain
+		// in-process import loads neither; the worker's tsx does.
 		const directory = mkdtempSync(join(tmpdir(), 'widget-docs-bin-system-'))
 		try {
 			const coreSource = resolve(packageRoot, '../core/src')
@@ -240,7 +282,7 @@ describe('the bin', () => {
 				'',
 			].join('\n'))
 			writeFileSync(join(directory, 'system.ts'), 'import { createWidgetSystem } from \'@deviltea/widget-core\'\nimport { Badge } from \'./badge\'\n\nexport const system = createWidgetSystem({ plugins: [Badge] as const })\n')
-			const result = spawnSync(process.execPath, [join(dist, 'cli.mjs'), '--check', '--module', join(directory, 'system.ts'), '--export', 'system', '--tsconfig', join(directory, 'tsconfig.json'), '--source-tsconfig', join(directory, 'tsconfig.source.json')], { cwd: directory, encoding: 'utf8' })
+			const result = runBin(['--check', '--module', join(directory, 'system.ts'), '--export', 'system', '--tsconfig', join(directory, 'tsconfig.json'), '--source-tsconfig', join(directory, 'tsconfig.source.json')], directory)
 			expect(result.stderr)
 				.toBe('')
 			expect(result.stdout)
@@ -251,26 +293,20 @@ describe('the bin', () => {
 		finally {
 			rmSync(directory, { recursive: true, force: true })
 		}
-	}, 120_000)
+	}, TEST_TIMEOUT)
 
-	it('checks the fixture System with plain node', () => {
-		const result = spawnSync(process.execPath, [join(dist, 'cli.mjs'), '--check', '--module', fixture, '--export', 'surveySystem', '--tsconfig', tsconfig], { cwd: packageRoot, encoding: 'utf8' })
-		expect(result.stderr)
-			.toBe('')
-		expect(result.stdout)
-			.toBe('69/69 descriptions documented, 0 error(s), 0 warning(s).\n')
-		expect(result.status)
-			.toBe(0)
-	}, 60_000)
-
-	it('writes the committed example output byte for byte, with the example compiled in its worker', () => {
+	it('writes the committed example output byte for byte from the fixture System, with the example compiled in its worker', () => {
+		// The `generate:example` run. It also checks the fixture (`check:example` runs the same extraction and `checkIr`;
+		// the `--check` output path is the test above).
 		const out = mkdtempSync(join(tmpdir(), 'widget-docs-bin-'))
 		try {
-			const result = spawnSync(process.execPath, [join(dist, 'cli.mjs'), '--module', './fixtures/survey-system.ts', '--export', 'surveySystem', '--tsconfig', './tsconfig.json', '--root', '../..', '--example', './fixtures/survey-example.json', '--out', out], { cwd: packageRoot, encoding: 'utf8' })
+			const result = runBin(['--module', './fixtures/survey-system.ts', '--export', 'surveySystem', '--tsconfig', './tsconfig.json', '--root', '../..', '--example', './fixtures/survey-example.json', '--out', out])
 			expect(result.stderr)
 				.toBe('')
 			expect(result.status)
 				.toBe(0)
+			expect(result.stdout)
+				.toMatch(/\n69\/69 descriptions documented; --check would report 0 error\(s\) and 0 warning\(s\)\.\n$/)
 			const committed = join(packageRoot, 'examples/survey')
 			const manifest = JSON.parse(readFileSync(join(out, '.generated.json'), 'utf8')) as { files: string[] }
 			for (const path of [...manifest.files, '.generated.json']) {
@@ -281,15 +317,15 @@ describe('the bin', () => {
 		finally {
 			rmSync(out, { recursive: true, force: true })
 		}
-	}, 120_000)
+	}, TEST_TIMEOUT)
 
 	it('refuses an example that does not compile', () => {
 		const out = mkdtempSync(join(tmpdir(), 'widget-docs-bin-'))
 		try {
 			const broken = join(out, 'broken.json')
 			const example = JSON.parse(readFileSync(join(packageRoot, 'fixtures/survey-example.json'), 'utf8')) as Record<string, unknown>
-			appendFileSync(broken, JSON.stringify({ ...example, type: 'Missing' }))
-			const result = spawnSync(process.execPath, [join(dist, 'cli.mjs'), '--module', fixture, '--export', 'surveySystem', '--tsconfig', tsconfig, '--example', broken, '--out', join(out, 'out')], { cwd: packageRoot, encoding: 'utf8' })
+			writeFileSync(broken, JSON.stringify({ ...example, type: 'Missing' }))
+			const result = runBin(['--module', fixture, '--export', 'surveySystem', '--tsconfig', tsconfig, '--example', broken, '--out', join(out, 'out')])
 			expect(result.status)
 				.toBe(1)
 			expect(result.stderr)
@@ -300,5 +336,5 @@ describe('the bin', () => {
 		finally {
 			rmSync(out, { recursive: true, force: true })
 		}
-	}, 60_000)
+	}, TEST_TIMEOUT)
 })
