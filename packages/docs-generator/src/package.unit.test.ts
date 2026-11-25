@@ -19,6 +19,11 @@ const fixture = join(packageRoot, 'fixtures/survey-system.ts')
 const tsconfig = join(packageRoot, 'tsconfig.json')
 
 interface PackageJson {
+	readonly private?: boolean
+	readonly version: string
+	readonly publishConfig?: { readonly access?: string }
+	readonly files: readonly string[]
+	readonly sideEffects?: boolean
 	readonly exports: Record<string, { readonly types: string, readonly import?: string }>
 	readonly bin: Record<string, string>
 	readonly dependencies: Record<string, string>
@@ -115,8 +120,9 @@ describe('the package boundary', () => {
 			.toBe('workspace:^')
 		expect(pkg.devDependencies['@deviltea/widget-core'])
 			.toBe('workspace:*')
+		// The majors whose plugin API `widgetDocs` uses (Vite 6 added `server.environments`, which `watchChange` reads).
 		expect(pkg.peerDependencies.vite)
-			.toBeDefined()
+			.toBe('^6.0.0 || ^7.0.0 || ^8.0.0')
 		expect(pkg.peerDependenciesMeta?.vite?.optional)
 			.toBe(true)
 		expect(Object.keys(pkg.dependencies)
@@ -125,6 +131,58 @@ describe('the package boundary', () => {
 		expect(pkg.engines?.node)
 			.toBe('>=22.14.0')
 	})
+
+	it('is published at the version of the other released packages, with no side effects', () => {
+		expect(pkg.private)
+			.toBeUndefined()
+		expect(pkg.publishConfig)
+			.toEqual({ access: 'public' })
+		for (const sibling of ['core', 'inspector', 'vue']) {
+			const manifest = JSON.parse(readFileSync(join(packageRoot, '..', sibling, 'package.json'), 'utf8')) as PackageJson
+			expect(pkg.version, sibling)
+				.toBe(manifest.version)
+		}
+		expect(pkg.sideEffects)
+			.toBe(false)
+	})
+
+	it('packs the build and the virtual-module declarations, never the sources, tests, fixtures or examples', () => {
+		// Sorted: the repository's lint sorts the manifest's `files`.
+		expect([...pkg.files].sort())
+			.toEqual(['dist', 'virtual-widget-docs-slim.d.ts', 'virtual-widget-docs.d.ts'])
+		// A real `pnpm pack`, as the release and CI make it, read back from the tarball: `pnpm pack --dry-run` and its
+		// `--json` list leave out the repository's LICENSE, which pnpm adds to the tarball.
+		const destination = mkdtempSync(join(tmpdir(), 'widget-docs-pack-'))
+		let packed: string[]
+		try {
+			const pack = spawnSync('pnpm', ['pack', '--pack-destination', destination], { cwd: packageRoot, encoding: 'utf8', timeout: CHILD_TIMEOUT })
+			expect(pack.status, pack.stderr)
+				.toBe(0)
+			const tarball = readdirSync(destination)
+				.filter(name => name.endsWith('.tgz'))
+			expect(tarball)
+				.toHaveLength(1)
+			const list = spawnSync('tar', ['-tzf', join(destination, tarball[0]!)], { encoding: 'utf8', timeout: CHILD_TIMEOUT })
+			expect(list.status, list.stderr)
+				.toBe(0)
+			packed = list.stdout.split('\n')
+				.filter(line => line !== '')
+				.map(line => line.replace(/^package\//, ''))
+		}
+		finally {
+			rmSync(destination, { recursive: true, force: true })
+		}
+		expect(packed.filter(path => !path.startsWith('dist/'))
+			.sort())
+			.toEqual(['LICENSE', 'README.md', 'package.json', 'virtual-widget-docs-slim.d.ts', 'virtual-widget-docs.d.ts'])
+		expect(packed.filter(path => /\.unit\.test\.|(?:^|\/)(?:fixtures|examples|src)\//.test(path)))
+			.toEqual([])
+		// Every file a subpath or the bin names is in the tarball, and so is the worker the bin starts by URL.
+		const targets = [...Object.values(pkg.exports)
+			.flatMap(entry => Object.values(entry)), ...Object.values(pkg.bin)].map(target => target.replace(/^\.\//, ''))
+		expect(packed)
+			.toEqual(expect.arrayContaining([...targets, 'dist/runtime-worker.mjs', 'dist/runtime-facts.mjs']))
+	}, TEST_TIMEOUT)
 
 	it('never bundles Core', () => {
 		for (const file of readdirSync(dist)

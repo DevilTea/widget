@@ -9,11 +9,13 @@ import { assertUnifiedVersion, distTagFor, fail, packageEntry, packageIds, packa
 /**
  * Publishes the packed Widget packages for one release (run by `.github/workflows/publish.yml`).
  *
- * The three packages are published in dependency order, Core first. A package whose exact version is
+ * The four packages are published in dependency order, Core first. A package whose exact version is
  * already on the registry is skipped, so re-running the workflow after a partial failure finishes the
  * release. The registry is asked about the exact version (`GET /<name>/<version>`), which is not served from
  * the cached package document that lags behind a publish; an answer that is neither a clear "present" nor a
- * clear "absent" stops the run before anything is published.
+ * clear "absent" stops the run before anything is published. So does a package that does not exist on the
+ * registry at all: Trusted Publishing cannot create one, so publishing the others first would leave a partial
+ * release (see `docs/migration/release-cutover.md` for the one-time placeholder).
  */
 
 const REGISTRY = 'https://registry.npmjs.org'
@@ -26,10 +28,19 @@ export interface ReleasePackage {
 	tarball: string
 }
 
+/**
+ * What the registry says about one package version: `published` (that exact version is there), `absent` (the
+ * package exists and that version is not there), `missing-package` (the package itself does not exist: Trusted
+ * Publishing cannot create it) or `unclear`.
+ */
 export type RegistryAnswer
 	= | { kind: 'published', integrity: string | null }
 		| { kind: 'absent' }
+		| { kind: 'missing-package' }
 		| { kind: 'unclear', reason: string }
+
+/** Where the one-time step that creates a package on npm is described. */
+export const PACKAGE_CREATION_GUIDE = 'docs/migration/release-cutover.md'
 
 /** The packages in the order they must be published: Core, then the packages that peer-depend on it. */
 export const publishOrder: readonly string[] = packageIds
@@ -45,15 +56,21 @@ export function registryVersionUrl(name: string, version: string) {
 	return `${REGISTRY}/${name.replace('/', '%2F')}/${encodeURIComponent(version)}`
 }
 
+/** The registry URL of a package's document (the packument), which exists exactly when the package does. */
+export function registryPackageUrl(name: string) {
+	return `${REGISTRY}/${name.replace('/', '%2F')}`
+}
+
 /**
  * Reads the registry's answer for one exact version. Pure: takes the HTTP status and the parsed JSON body
  * (`undefined` when the body was not JSON).
  *
- * `200` with this very name and version is "published". `404` with a JSON body is "absent": the registry
- * answers that for a missing version (`"version not found: 9.9.9"`) and for a missing package (`"Not Found"`).
- * Anything else, including a `200` for another version, a `404` that is not JSON (a proxy or CDN page) and
- * every `4xx`/`5xx` other than `404`, is unclear, because publishing on a guess could either fail on
- * "cannot publish over the previously published versions" or publish something that is already there.
+ * `200` with this very name and version is "published". `404` with a JSON body is "absent" here: that version is
+ * not served. The registry answers the same status for a missing version and for a missing package, so whether
+ * the package exists is asked separately (`interpretPackageResponse`). Anything else, including a `200` for
+ * another version, a `404` that is not JSON (a proxy or CDN page) and every `4xx`/`5xx` other than `404`, is
+ * unclear, because publishing on a guess could either fail on "cannot publish over the previously published
+ * versions" or publish something that is already there.
  */
 export function interpretRegistryResponse(name: string, version: string, status: number, body: unknown): RegistryAnswer {
 	if (status === 200) {
@@ -72,6 +89,34 @@ export function interpretRegistryResponse(name: string, version: string, status:
 		return { kind: 'unclear', reason: `the registry answered 404 for ${name}@${version} without a JSON body` }
 	}
 	return { kind: 'unclear', reason: `the registry answered HTTP ${status} for ${name}@${version}` }
+}
+
+/**
+ * Reads the registry's answer for a package's document, asked after the exact version was not found. Pure: takes
+ * the HTTP status and the parsed JSON body. It goes by the status and the document's own `name`, never by the
+ * wording of an error message.
+ *
+ * `200` with a document of this name is "absent": the package exists and the version is not published yet (the
+ * normal case of a release). A document that lists the version anyway contradicts the version answer and is
+ * unclear. `404` with a JSON body is "missing-package": the package does not exist, and Trusted Publishing cannot
+ * create it. Anything else is unclear.
+ */
+export function interpretPackageResponse(name: string, version: string, status: number, body: unknown): RegistryAnswer {
+	if (status === 200) {
+		if (typeof body === 'object' && body !== null && (body as { name?: unknown }).name === name) {
+			const versions = (body as { versions?: unknown }).versions
+			if (typeof versions === 'object' && versions !== null && Object.hasOwn(versions, version))
+				return { kind: 'unclear', reason: `the registry lists ${name}@${version} in the package document but did not serve that version` }
+			return { kind: 'absent' }
+		}
+		return { kind: 'unclear', reason: `the registry answered 200 for the package ${name} with a document that is not that package` }
+	}
+	if (status === 404) {
+		if (typeof body === 'string' || (typeof body === 'object' && body !== null))
+			return { kind: 'missing-package' }
+		return { kind: 'unclear', reason: `the registry answered 404 for the package ${name} without a JSON body` }
+	}
+	return { kind: 'unclear', reason: `the registry answered HTTP ${status} for the package ${name}` }
 }
 
 /** Compares the registry's integrity with the local tarball's; only ever informative. */
@@ -148,21 +193,30 @@ function label(pkg: ReleasePackage) {
 
 /**
  * Publishes `packages` in `publishOrder` order. Nothing is published unless the registry gave a clear answer
- * for every package, so an unclear answer stops the run before the first publish. A dependent is only
- * published once the packages before it (Core) were published now or found published already; the first
- * failure stops the run and the outcomes so far are on the error.
+ * for every package and every package already exists on the registry, so an unclear answer, or a package that
+ * Trusted Publishing cannot create, stops the run before the first publish. A dependent is only published once
+ * the packages before it (Core) were published now or found published already; the first failure stops the run
+ * and the outcomes so far are on the error.
  */
 export async function runPublish(packages: readonly ReleasePackage[], deps: PublishDependencies, options: PublishOptions): Promise<PublishOutcome[]> {
 	const ordered = [...packages].sort((a, b) => publishOrder.indexOf(a.id) - publishOrder.indexOf(b.id))
 	const outcomes: PublishOutcome[] = []
 
 	const answers = new Map<string, RegistryAnswer>()
+	const missing: ReleasePackage[] = []
 	for (const pkg of ordered) {
 		const answer = await deps.lookup(pkg)
 		if (answer.kind === 'unclear')
 			throw new PublishError(`Cannot tell whether ${label(pkg)} is on the registry: ${answer.reason}. Nothing was published; re-run the workflow.`, outcomes)
+		if (answer.kind === 'missing-package')
+			missing.push(pkg)
 		answers.set(pkg.id, answer)
-		deps.log(`${label(pkg)}: ${answer.kind === 'published' ? 'already on the registry' : 'not on the registry'}.`)
+		deps.log(`${label(pkg)}: ${answer.kind === 'published' ? 'already on the registry' : answer.kind === 'missing-package' ? 'the package does not exist on the registry' : 'not on the registry'}.`)
+	}
+	if (missing.length > 0) {
+		const names = missing.map(pkg => pkg.name)
+			.join(', ')
+		throw new PublishError(`${names} ${missing.length === 1 ? 'does' : 'do'} not exist on the registry, and npm Trusted Publishing cannot create a package. Publish a 0.0.0 placeholder of each by hand and configure its Trusted Publisher (repository DevilTea/widget, workflow publish.yml), as ${PACKAGE_CREATION_GUIDE} describes, then re-run the workflow (if the placeholder was published moments ago, the registry may still answer from a cached 404: wait a few minutes before re-running). Nothing was published.`, outcomes)
 	}
 
 	for (const pkg of ordered) {
@@ -213,26 +267,54 @@ function parseJson(text: string): unknown {
 	}
 }
 
-/** Asks the registry about one version; a few attempts on a network error, `429` or `5xx`, then `unclear`. */
-export async function lookupRegistry(pkg: ReleasePackage, attempts = 4, delayMs = 2000): Promise<RegistryAnswer> {
-	let answer: RegistryAnswer = { kind: 'unclear', reason: 'no attempt was made' }
-	for (let attempt = 1; attempt <= attempts; attempt++) {
-		if (attempt > 1)
-			await new Promise(done => setTimeout(done, delayMs * (attempt - 1)))
-		try {
-			const response = await fetch(registryVersionUrl(pkg.name, pkg.version), {
-				headers: { 'accept': 'application/json', 'cache-control': 'no-cache' },
-				signal: AbortSignal.timeout(20_000),
-			})
-			answer = interpretRegistryResponse(pkg.name, pkg.version, response.status, parseJson(await response.text()))
-			if (response.status !== 429 && response.status < 500)
-				return answer
+/** One HTTP GET against the registry: the status and the body parsed as JSON (`undefined` when it is not JSON). */
+export type RegistryRequest = (url: string, accept: string) => Promise<{ status: number, body: unknown }>
+
+async function fetchRegistry(url: string, accept: string): Promise<{ status: number, body: unknown }> {
+	const response = await fetch(url, {
+		headers: { 'accept': accept, 'cache-control': 'no-cache' },
+		signal: AbortSignal.timeout(20_000),
+	})
+	return { status: response.status, body: parseJson(await response.text()) }
+}
+
+export interface LookupOptions {
+	/** The HTTP GET; `fetch` against the public registry unless a test passes a fake. */
+	request?: RegistryRequest
+	attempts?: number
+	delayMs?: number
+}
+
+/**
+ * Asks the registry about one version (`GET /<name>/<version>`, which is not served from the cached package
+ * document that lags behind a publish). When that version is not there, asks for the package document
+ * (`GET /<name>`, abbreviated) to tell "the package exists" from "the package does not exist", by status and
+ * document rather than by the wording of the `404`. Each question gets a few attempts on a network error, `429`
+ * or `5xx`, then is `unclear`.
+ */
+export async function lookupRegistry(pkg: ReleasePackage, { request = fetchRegistry, attempts = 4, delayMs = 2000 }: LookupOptions = {}): Promise<RegistryAnswer> {
+	const ask = async (url: string, accept: string, interpret: (status: number, body: unknown) => RegistryAnswer): Promise<RegistryAnswer> => {
+		let answer: RegistryAnswer = { kind: 'unclear', reason: 'no attempt was made' }
+		for (let attempt = 1; attempt <= attempts; attempt++) {
+			if (attempt > 1)
+				await new Promise(done => setTimeout(done, delayMs * (attempt - 1)))
+			try {
+				const { status, body } = await request(url, accept)
+				answer = interpret(status, body)
+				if (status !== 429 && status < 500)
+					return answer
+			}
+			catch (error) {
+				answer = { kind: 'unclear', reason: `the registry could not be reached (${error instanceof Error ? error.message : String(error)})` }
+			}
 		}
-		catch (error) {
-			answer = { kind: 'unclear', reason: `the registry could not be reached (${error instanceof Error ? error.message : String(error)})` }
-		}
+		return answer
 	}
-	return answer
+
+	const versionAnswer = await ask(registryVersionUrl(pkg.name, pkg.version), 'application/json', (status, body) => interpretRegistryResponse(pkg.name, pkg.version, status, body))
+	if (versionAnswer.kind !== 'absent')
+		return versionAnswer
+	return ask(registryPackageUrl(pkg.name), 'application/vnd.npm.install-v1+json', (status, body) => interpretPackageResponse(pkg.name, pkg.version, status, body))
 }
 
 export function tarballIntegrity(path: string) {

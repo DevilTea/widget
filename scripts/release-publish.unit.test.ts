@@ -1,12 +1,16 @@
-import type { PublishDependencies, PublishOptions, RegistryAnswer, ReleasePackage } from './release-publish'
+import type { PublishDependencies, PublishOptions, RegistryAnswer, RegistryRequest, ReleasePackage } from './release-publish'
 import { describe, expect, it } from 'vitest'
 import { packageEntry, packageIds } from './release-package'
 import {
 	integrityNote,
+	interpretPackageResponse,
 	interpretRegistryResponse,
+	lookupRegistry,
+	PACKAGE_CREATION_GUIDE,
 	packedManifestProblem,
 	PublishError,
 	publishOrder,
+	registryPackageUrl,
 	registryVersionUrl,
 	runPublish,
 	tarballName,
@@ -56,10 +60,15 @@ function harness(script: Script) {
 
 const options: PublishOptions = { dryRun: false, recheckAttempts: 3, recheckIntervalMs: 5000 }
 
+/** The same registry answer for every published package, with `overrides` on top. */
+function everyPackage(answer: RegistryAnswer, overrides: Script['registry'] = {}): Script['registry'] {
+	return { ...Object.fromEntries(packageIds.map(id => [id, answer])), ...overrides }
+}
+
 describe('publishOrder and tarballName', () => {
-	it('publishes Core first, then the Inspector and the Vue adapter', () => {
+	it('publishes Core first, then the Inspector, the Vue adapter and the documentation generator', () => {
 		expect(publishOrder)
-			.toEqual(['widget-core', 'widget-inspector', 'widget-vue'])
+			.toEqual(['widget-core', 'widget-inspector', 'widget-vue', 'widget-docs-generator'])
 	})
 
 	it('names the tarball the way npm pack does', () => {
@@ -73,6 +82,11 @@ describe('publishOrder and tarballName', () => {
 		expect(registryVersionUrl('@deviltea/widget-core', '0.1.1'))
 			.toBe('https://registry.npmjs.org/@deviltea%2Fwidget-core/0.1.1')
 	})
+
+	it('asks the registry for the package document of a scoped package', () => {
+		expect(registryPackageUrl('@deviltea/widget-docs-generator'))
+			.toBe('https://registry.npmjs.org/@deviltea%2Fwidget-docs-generator')
+	})
 })
 
 describe('interpretRegistryResponse', () => {
@@ -85,7 +99,7 @@ describe('interpretRegistryResponse', () => {
 			.toEqual({ kind: 'published', integrity: null })
 	})
 
-	it('reads a JSON 404 as absent, for a missing version and for a missing package', () => {
+	it('reads any JSON 404 as "that version is not served", whatever its wording (the package document tells the rest)', () => {
 		expect(interpretRegistryResponse(name, '0.1.1', 404, 'version not found: 0.1.1'))
 			.toEqual({ kind: 'absent' })
 		expect(interpretRegistryResponse(name, '0.1.1', 404, 'Not Found'))
@@ -111,6 +125,110 @@ describe('interpretRegistryResponse', () => {
 	})
 })
 
+describe('interpretPackageResponse', () => {
+	const name = '@deviltea/widget-docs-generator'
+
+	it('reads a package document of this name without the version as "the package exists, the version is absent"', () => {
+		expect(interpretPackageResponse(name, '0.4.0', 200, { name, versions: { '0.0.0': {} } }))
+			.toEqual({ kind: 'absent' })
+		expect(interpretPackageResponse(name, '0.4.0', 200, { name }))
+			.toEqual({ kind: 'absent' })
+	})
+
+	it('reads a JSON 404 as "the package does not exist", by status, whatever the message says', () => {
+		for (const body of ['Not Found', { error: 'Not found' }, 'anything else']) {
+			expect(interpretPackageResponse(name, '0.4.0', 404, body))
+				.toEqual({ kind: 'missing-package' })
+		}
+	})
+
+	it.each([
+		['a document that lists the version the version endpoint did not serve', 200, { name, versions: { '0.4.0': {} } }],
+		['a document of another package', 200, { name: '@deviltea/widget-vue', versions: {} }],
+		['a 200 that is not a document', 200, 'ok'],
+		['a 404 that is not JSON (a proxy page)', 404, undefined],
+		['a 429', 429, 'slow down'],
+		['a 503', 503, { error: 'unavailable' }],
+		['a 401', 401, { error: 'unauthorized' }],
+	])('is unclear about %s', (_description, status, body) => {
+		expect(interpretPackageResponse(name, '0.4.0', status, body).kind)
+			.toBe('unclear')
+	})
+})
+
+describe('lookupRegistry with a fake registry', () => {
+	const pkg: ReleasePackage = { id: 'widget-docs-generator', name: '@deviltea/widget-docs-generator', version: '0.4.0', tarball: '/tmp/x.tgz' }
+
+	/** Answers each URL from `routes` (a list is consumed one answer per request) and records every request. */
+	function fakeRegistry(routes: Record<string, { status: number, body: unknown } | Array<{ status: number, body: unknown }>>) {
+		const requests: Array<{ url: string, accept: string }> = []
+		const served = new Map<string, number>()
+		const request: RegistryRequest = async (url, accept) => {
+			requests.push({ url, accept })
+			const route = routes[url]
+			if (route === undefined)
+				throw new Error(`unexpected request ${url}`)
+			const answers = Array.isArray(route) ? route : [route]
+			const index = served.get(url) ?? 0
+			served.set(url, index + 1)
+			return answers[Math.min(index, answers.length - 1)]!
+		}
+		return { request, requests }
+	}
+	const versionUrl = registryVersionUrl(pkg.name, pkg.version)
+	const packageUrl = registryPackageUrl(pkg.name)
+
+	it('answers "published" from the version alone, without asking for the package document', async () => {
+		const { request, requests } = fakeRegistry({ [versionUrl]: { status: 200, body: { name: pkg.name, version: '0.4.0', dist: { integrity: 'sha512-x' } } } })
+		expect(await lookupRegistry(pkg, { request, delayMs: 0 }))
+			.toEqual({ kind: 'published', integrity: 'sha512-x' })
+		expect(requests.map(entry => entry.url))
+			.toEqual([versionUrl])
+	})
+
+	it('answers "absent" when the version is missing and the package exists (its abbreviated document is asked for)', async () => {
+		const { request, requests } = fakeRegistry({
+			[versionUrl]: { status: 404, body: 'version not found: 0.4.0' },
+			[packageUrl]: { status: 200, body: { name: pkg.name, versions: { '0.0.0': {} } } },
+		})
+		expect(await lookupRegistry(pkg, { request, delayMs: 0 }))
+			.toEqual({ kind: 'absent' })
+		expect(requests)
+			.toEqual([
+				{ url: versionUrl, accept: 'application/json' },
+				{ url: packageUrl, accept: 'application/vnd.npm.install-v1+json' },
+			])
+	})
+
+	it('answers "missing-package" when neither the version nor the package exists', async () => {
+		const { request } = fakeRegistry({
+			[versionUrl]: { status: 404, body: 'Not Found' },
+			[packageUrl]: { status: 404, body: { error: 'Not found' } },
+		})
+		expect(await lookupRegistry(pkg, { request, delayMs: 0 }))
+			.toEqual({ kind: 'missing-package' })
+	})
+
+	it('retries the package document on a 5xx and is unclear when it never answers', async () => {
+		const { request, requests } = fakeRegistry({
+			[versionUrl]: { status: 404, body: 'version not found: 0.4.0' },
+			[packageUrl]: { status: 503, body: undefined },
+		})
+		expect((await lookupRegistry(pkg, { request, attempts: 3, delayMs: 0 })).kind)
+			.toBe('unclear')
+		expect(requests.filter(entry => entry.url === packageUrl))
+			.toHaveLength(3)
+	})
+
+	it('is unclear when the registry cannot be reached', async () => {
+		const request: RegistryRequest = async () => {
+			throw new Error('ECONNRESET')
+		}
+		expect(await lookupRegistry(pkg, { request, attempts: 2, delayMs: 0 }))
+			.toEqual({ kind: 'unclear', reason: 'the registry could not be reached (ECONNRESET)' })
+	})
+})
+
 describe('integrityNote', () => {
 	it('says whether the registry copy is the local tarball, and never fails either way', () => {
 		expect(integrityNote('sha512-a', 'sha512-a'))
@@ -127,11 +245,14 @@ describe('integrityNote', () => {
 describe('packedManifestProblem', () => {
 	const expectedCore = { name: '@deviltea/widget-core', version: '0.1.1', corePeer: false }
 	const expectedVue = { name: '@deviltea/widget-vue', version: '0.1.1', corePeer: true }
+	const expectedGenerator = { name: '@deviltea/widget-docs-generator', version: '0.1.1', corePeer: true }
 
 	it('accepts a manifest with the right name, version and packed Core peer range', () => {
 		expect(packedManifestProblem({ name: '@deviltea/widget-core', version: '0.1.1', dependencies: { 'alien-signals': '^3.0.0' } }, expectedCore))
 			.toBeNull()
 		expect(packedManifestProblem({ name: '@deviltea/widget-vue', version: '0.1.1', peerDependencies: { '@deviltea/widget-core': '^0.1.1', 'vue': '^3.5.0' } }, expectedVue))
+			.toBeNull()
+		expect(packedManifestProblem({ name: '@deviltea/widget-docs-generator', version: '0.1.1', peerDependencies: { '@deviltea/widget-core': '^0.1.1', 'vite': '^6.0.0 || ^7.0.0 || ^8.0.0' }, dependencies: { tsx: '^4.23.0', typescript: '^6.0.3' } }, expectedGenerator))
 			.toBeNull()
 	})
 
@@ -152,6 +273,11 @@ describe('packedManifestProblem', () => {
 			.toContain('^0.1.1')
 		expect(packedManifestProblem({ name: '@deviltea/widget-vue', version: '0.1.1' }, expectedVue))
 			.toContain('^0.1.1')
+		// The generator's Core peer: a caret on another version, or Core only as a dev dependency (bundled or missing).
+		expect(packedManifestProblem({ name: '@deviltea/widget-docs-generator', version: '0.1.1', peerDependencies: { '@deviltea/widget-core': '^0.1.0' } }, expectedGenerator))
+			.toContain('^0.1.1')
+		expect(packedManifestProblem({ name: '@deviltea/widget-docs-generator', version: '0.1.1', peerDependencies: { vite: '^7.0.0' }, devDependencies: { '@deviltea/widget-core': '0.1.1' } }, expectedGenerator))
+			.toContain('^0.1.1')
 	})
 
 	it('refuses a manifest that is not an object', () => {
@@ -161,29 +287,29 @@ describe('packedManifestProblem', () => {
 })
 
 describe('runPublish', () => {
-	it('publishes Core, then the Inspector, then the Vue adapter when none is on the registry', async () => {
-		const { deps, events } = harness({ registry: { 'widget-core': absent, 'widget-inspector': absent, 'widget-vue': absent } })
+	it('publishes Core, then the Inspector, the Vue adapter and the documentation generator when none is on the registry', async () => {
+		const { deps, events } = harness({ registry: everyPackage(absent) })
 		const outcomes = await runPublish(release('0.1.1'), deps, options)
 		expect(events)
-			.toEqual(['publish widget-core latest', 'publish widget-inspector latest', 'publish widget-vue latest'])
+			.toEqual(['publish widget-core latest', 'publish widget-inspector latest', 'publish widget-vue latest', 'publish widget-docs-generator latest'])
 		expect(outcomes.map(outcome => outcome.status))
-			.toEqual(['published', 'published', 'published'])
+			.toEqual(['published', 'published', 'published', 'published'])
 	})
 
 	it('orders the packages even when they are given in another order', async () => {
-		const { deps, events } = harness({ registry: { 'widget-core': absent, 'widget-inspector': absent, 'widget-vue': absent } })
-		await runPublish(release('0.1.1', ['widget-vue', 'widget-inspector', 'widget-core']), deps, options)
+		const { deps, events } = harness({ registry: everyPackage(absent) })
+		await runPublish(release('0.1.1', ['widget-docs-generator', 'widget-vue', 'widget-inspector', 'widget-core']), deps, options)
 		expect(events.map(event => event.split(' ')[1]))
-			.toEqual(['widget-core', 'widget-inspector', 'widget-vue'])
+			.toEqual(['widget-core', 'widget-inspector', 'widget-vue', 'widget-docs-generator'])
 	})
 
 	it('skips every package that is already published, saying so, and publishes nothing (a re-run after full success)', async () => {
-		const { deps, events, lines } = harness({ registry: { 'widget-core': published, 'widget-inspector': published, 'widget-vue': published } })
+		const { deps, events, lines } = harness({ registry: everyPackage(published) })
 		const outcomes = await runPublish(release('0.1.0'), deps, options)
 		expect(events)
 			.toEqual([])
 		expect(outcomes.map(outcome => outcome.status))
-			.toEqual(['skipped', 'skipped', 'skipped'])
+			.toEqual(['skipped', 'skipped', 'skipped', 'skipped'])
 		for (const name of packageIds.map(id => packageEntry(id).name)) {
 			expect(lines.some(line => line.includes(`${name}@0.1.0 is already published, skipping`)))
 				.toBe(true)
@@ -191,23 +317,23 @@ describe('runPublish', () => {
 	})
 
 	it('finishes a release after Core was published and a dependent was not (a re-run after a partial failure)', async () => {
-		const { deps, events } = harness({ registry: { 'widget-core': published, 'widget-inspector': published, 'widget-vue': absent } })
+		const { deps, events } = harness({ registry: everyPackage(published, { 'widget-docs-generator': absent }) })
 		const outcomes = await runPublish(release('0.1.1'), deps, options)
 		expect(events)
-			.toEqual(['publish widget-vue latest'])
+			.toEqual(['publish widget-docs-generator latest'])
 		expect(outcomes.map(outcome => outcome.status))
-			.toEqual(['skipped', 'skipped', 'published'])
+			.toEqual(['skipped', 'skipped', 'skipped', 'published'])
 	})
 
-	it('publishes a dependent when Core was found published and the dependent was not', async () => {
-		const { deps, events } = harness({ registry: { 'widget-core': published, 'widget-inspector': absent, 'widget-vue': absent } })
+	it('publishes the dependents when Core was found published and they were not', async () => {
+		const { deps, events } = harness({ registry: everyPackage(absent, { 'widget-core': published }) })
 		await runPublish(release('0.1.1'), deps, options)
 		expect(events)
-			.toEqual(['publish widget-inspector latest', 'publish widget-vue latest'])
+			.toEqual(['publish widget-inspector latest', 'publish widget-vue latest', 'publish widget-docs-generator latest'])
 	})
 
 	it('publishes no dependent when Core fails to publish and the registry does not have it', async () => {
-		const { deps, events } = harness({ registry: { 'widget-core': absent, 'widget-inspector': absent, 'widget-vue': absent }, failing: ['widget-core'] })
+		const { deps, events } = harness({ registry: everyPackage(absent), failing: ['widget-core'] })
 		const error = await runPublish(release('0.1.1'), deps, options)
 			.catch((caught: unknown) => caught)
 		expect(error)
@@ -220,8 +346,8 @@ describe('runPublish', () => {
 			.toContain('@deviltea/widget-core@0.1.1')
 	})
 
-	it('stops after the Inspector fails and does not publish the Vue adapter, keeping what was published', async () => {
-		const { deps, events } = harness({ registry: { 'widget-core': absent, 'widget-inspector': absent, 'widget-vue': absent }, failing: ['widget-inspector'] })
+	it('stops after the Inspector fails and publishes neither the Vue adapter nor the generator, keeping what was published', async () => {
+		const { deps, events } = harness({ registry: everyPackage(absent), failing: ['widget-inspector'] })
 		const error = await runPublish(release('0.1.1'), deps, options)
 			.catch((caught: unknown) => caught)
 		expect(events.filter(event => event.startsWith('publish ')))
@@ -232,20 +358,20 @@ describe('runPublish', () => {
 
 	it('treats a failed `npm publish` as published when the registry then has that exact version', async () => {
 		const { deps, events, lines } = harness({
-			registry: { 'widget-core': [absent, absent, published], 'widget-inspector': absent, 'widget-vue': absent },
+			registry: everyPackage(absent, { 'widget-core': [absent, absent, published] }),
 			failing: ['widget-core'],
 		})
 		const outcomes = await runPublish(release('0.1.1'), deps, options)
 		expect(outcomes.map(outcome => outcome.status))
-			.toEqual(['published-despite-error', 'published', 'published'])
+			.toEqual(['published-despite-error', 'published', 'published', 'published'])
 		expect(events)
-			.toEqual(['publish widget-core latest', 'sleep 5000', 'publish widget-inspector latest', 'publish widget-vue latest'])
+			.toEqual(['publish widget-core latest', 'sleep 5000', 'publish widget-inspector latest', 'publish widget-vue latest', 'publish widget-docs-generator latest'])
 		expect(lines.some(line => line.includes('treating it as published')))
 			.toBe(true)
 	})
 
 	it('gives up after the configured number of re-checks when the version never shows up', async () => {
-		const { deps, events } = harness({ registry: { 'widget-core': absent, 'widget-inspector': absent, 'widget-vue': absent }, failing: ['widget-core'] })
+		const { deps, events } = harness({ registry: everyPackage(absent), failing: ['widget-core'] })
 		await expect(runPublish(release('0.1.1'), deps, options))
 			.rejects
 			.toBeInstanceOf(PublishError)
@@ -255,8 +381,7 @@ describe('runPublish', () => {
 
 	it('publishes nothing when the registry gives an unclear answer for any package', async () => {
 		for (const unclearId of packageIds) {
-			const registry: Script['registry'] = { 'widget-core': absent, 'widget-inspector': absent, 'widget-vue': absent }
-			registry[unclearId] = { kind: 'unclear', reason: 'the registry answered HTTP 503' }
+			const registry = everyPackage(absent, { [unclearId]: { kind: 'unclear', reason: 'the registry answered HTTP 503' } })
 			const { deps, events } = harness({ registry })
 			const error = await runPublish(release('0.1.1'), deps, options)
 				.catch((caught: unknown) => caught)
@@ -269,15 +394,54 @@ describe('runPublish', () => {
 		}
 	})
 
+	it('publishes nothing, Core included, when a package does not exist on the registry, and says how to create it', async () => {
+		const { deps, events } = harness({ registry: everyPackage(absent, { 'widget-docs-generator': { kind: 'missing-package' } }) })
+		const error = await runPublish(release('0.4.0'), deps, options)
+			.catch((caught: unknown) => caught)
+		expect(error)
+			.toBeInstanceOf(PublishError)
+		expect(events)
+			.toEqual([])
+		expect((error as PublishError).outcomes)
+			.toEqual([])
+		const message = (error as PublishError).message
+		expect(message)
+			.toContain('@deviltea/widget-docs-generator does not exist on the registry')
+		expect(message)
+			.toContain('0.0.0 placeholder')
+		expect(message)
+			.toContain('Trusted Publisher')
+		expect(message)
+			.toContain(PACKAGE_CREATION_GUIDE)
+		expect(PACKAGE_CREATION_GUIDE)
+			.toBe('docs/migration/release-cutover.md')
+	})
+
+	it('names every missing package at once, and stops a dry run the same way', async () => {
+		const { deps, events, lines } = harness({ registry: everyPackage(published, { 'widget-inspector': { kind: 'missing-package' }, 'widget-docs-generator': { kind: 'missing-package' } }) })
+		const error = await runPublish(release('0.4.0'), deps, { ...options, dryRun: true })
+			.catch((caught: unknown) => caught)
+		expect(error)
+			.toBeInstanceOf(PublishError)
+		expect(events)
+			.toEqual([])
+		expect((error as PublishError).outcomes)
+			.toEqual([])
+		expect(lines.filter(line => line.startsWith('Dry run: would publish')))
+			.toEqual([])
+		expect((error as PublishError).message)
+			.toContain('@deviltea/widget-inspector, @deviltea/widget-docs-generator do not exist on the registry')
+	})
+
 	it('sends a prerelease to the next dist-tag and never to latest', async () => {
-		const { deps, events } = harness({ registry: { 'widget-core': absent, 'widget-inspector': absent, 'widget-vue': absent } })
+		const { deps, events } = harness({ registry: everyPackage(absent) })
 		await runPublish(release('0.2.0-beta.0'), deps, options)
 		expect(events)
-			.toEqual(['publish widget-core next', 'publish widget-inspector next', 'publish widget-vue next'])
+			.toEqual(['publish widget-core next', 'publish widget-inspector next', 'publish widget-vue next', 'publish widget-docs-generator next'])
 	})
 
 	it('in a dry run asks the registry but publishes nothing, listing what it would publish in order', async () => {
-		const { deps, events, lines } = harness({ registry: { 'widget-core': published, 'widget-inspector': absent, 'widget-vue': absent } })
+		const { deps, events, lines } = harness({ registry: everyPackage(absent, { 'widget-core': published }) })
 		const outcomes = await runPublish(release('0.1.1'), deps, { ...options, dryRun: true })
 		expect(events)
 			.toEqual([])
@@ -286,8 +450,9 @@ describe('runPublish', () => {
 				{ id: 'widget-core', status: 'skipped' },
 				{ id: 'widget-inspector', status: 'would-publish' },
 				{ id: 'widget-vue', status: 'would-publish' },
+				{ id: 'widget-docs-generator', status: 'would-publish' },
 			])
 		expect(lines.filter(line => line.startsWith('Dry run: would publish')))
-			.toHaveLength(2)
+			.toHaveLength(3)
 	})
 })

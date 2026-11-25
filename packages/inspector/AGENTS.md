@@ -39,4 +39,4 @@ pnpm typecheck   # package + tests tsconfig
 pnpm build       # tsdown (includes publint)
 ```
 
-Release wiring (release script, `publish.yml` tag pattern, root `publint`, CI packed-consumer job) treats this package like core and Vue: the three packages share one version and are released together (see the root `AGENTS.md` "Releasing"); never run `pnpm release*` without an explicit release instruction.
+Release wiring (release script, `publish.yml` tag pattern, root `publint`, CI packed-consumer job) treats this package like core and Vue: the four packages (Core, this package, the Vue adapter and the documentation generator) share one version and are released together (see the root `AGENTS.md` "Releasing"); never run `pnpm release*` without an explicit release instruction.

@@ -34,6 +34,9 @@ const expectations: Record<string, DocumentExpectation> = {
 	'docs/site/migration/0.4.md': { before: 9, after: 2, run: 14, unmarked: 0 },
 	'docs/site/packages/widget-core.md': { before: 0, after: 1, run: 28, unmarked: 28 },
 	'packages/core/README.md': { before: 0, after: 0, run: 3, unmarked: 3 },
+	// The generator's samples compile against its built subpaths; the ones that need a project on disk are `after`.
+	'docs/site/packages/widget-docs-generator.md': { before: 0, after: 4, run: 1, unmarked: 0 },
+	'packages/docs-generator/README.md': { before: 0, after: 2, run: 0, unmarked: 0 },
 	// No marked sample yet: these pages hold unmarked fragments only.
 	'docs/site/packages/widget-vue.md': { before: 0, after: 0, run: 0, unmarked: 11 },
 	'docs/site/packages/widget-inspector.md': { before: 0, after: 0, run: 0, unmarked: 2 },
@@ -295,7 +298,7 @@ describe('build output', () => {
 	it('names the missing files and the command to run when the packages are not built', () => {
 		const root = mkdtempSync(join(tmpdir(), 'widget-docs-samples-root-'))
 		try {
-			for (const directory of ['packages/core', 'packages/vue', 'packages/inspector']) {
+			for (const directory of ['packages/core', 'packages/vue', 'packages/inspector', 'packages/docs-generator']) {
 				mkdirSync(join(root, directory), { recursive: true })
 				writeFileSync(join(root, directory, 'package.json'), JSON.stringify({ exports: { '.': { types: './dist/index.d.mts', import: './dist/index.mjs' } } }))
 			}
@@ -304,6 +307,8 @@ describe('build output', () => {
 				.toContain('packages/core/dist/index.mjs')
 			expect(message)
 				.toContain('packages/inspector/dist/index.d.mts')
+			expect(message)
+				.toContain('packages/docs-generator/dist/index.mjs')
 			expect(message)
 				.toContain('pnpm build')
 		}
@@ -337,11 +342,12 @@ describe.skipIf(missingBuild !== null)('documentation samples', () => {
 			.join('\n'))
 			.toBe('')
 		// The samples state their output in comments; they were compared, not skipped. Raise this when comments are
-		// added; a drop means output stopped being compared. The floor is the measured count (102: 69 in the Core guide,
-		// 10 in its README and 23 in the 0.4 migration guide). It was 90 until the 0.1 migration guide's samples became
-		// historical (written against 0.1, no longer compiled, marked `skip`), which removed their compared output.
+		// added; a drop means output stopped being compared. The floor is the measured count (104: 69 in the Core guide,
+		// 10 in its README, 23 in the 0.4 migration guide and 2 in the generator's page). It was 90 until the 0.1
+		// migration guide's samples became historical (written against 0.1, no longer compiled, marked `skip`), which
+		// removed their compared output.
 		expect(result.compared.length)
-			.toBeGreaterThanOrEqual(102)
+			.toBeGreaterThanOrEqual(104)
 		// An exemption that is no longer needed has to be removed.
 		const used = new Set(result.exempted.map(claim => `${claim.document}\n${claim.sample}\n${claim.text}`))
 		expect(exemptComments.filter(entry => !used.has(`${entry.document}\n${entry.sample}\n${entry.comment}`)))

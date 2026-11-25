@@ -1,3 +1,4 @@
+/// <reference types="@deviltea/widget-docs-generator/virtual-widget-docs" />
 import type {
 	AnyWidgetPlugin,
 	AnyWidgetPluginTuple,
@@ -10,6 +11,9 @@ import type {
 	RuntimeInspection,
 } from '@deviltea/widget-core/inspection'
 import type { WidgetIntegrationEventEmitter } from '@deviltea/widget-core/integration'
+import type { SystemIr as BuildTimeSystemIr, CheckResult, createDocsCache, DocsCacheOptions, emitLlmSchema, extractIr, importRuntimeFacts, JsonSchema } from '@deviltea/widget-docs-generator'
+import type { WIDGET_DOCS_VERSION, WidgetDocs, WidgetDocsSlim } from '@deviltea/widget-docs-generator/docs'
+import type { createFlatConverter, FlatConversionError, FlatConverter, FlatDocument, FlatNode, SystemIr } from '@deviltea/widget-docs-generator/runtime'
 import type { CreateInspectorAgentOptions, InspectorAgent } from '@deviltea/widget-inspector/agent'
 import type { InspectAnchorAttributes } from '@deviltea/widget-inspector/anchor'
 import type { MessagePortChannelHub } from '@deviltea/widget-inspector/channel'
@@ -49,6 +53,7 @@ import type {
 	WidgetVueRendererSectionMarker,
 } from '@deviltea/widget-vue'
 import type { WidgetTestRenderers } from '@deviltea/widget-vue/testing'
+import type surveyDocs from 'virtual:widget-docs/survey'
 
 interface PublishedContracts {
 	readonly root: {
@@ -142,3 +147,53 @@ type InternalContext = typeof import('@deviltea/widget-vue/context')
 type InternalRuntimeGuard = typeof import('@deviltea/widget-vue/runtime-guard')
 const unreachableVueWitness: [InternalContext?, InternalRuntimeGuard?] | undefined = undefined
 void unreachableVueWitness
+
+// The documentation generator: the build-time API, the run-time converter, the docs object and the virtual module.
+interface DocsGeneratorContracts {
+	readonly buildTime: {
+		readonly check: CheckResult
+		readonly cacheOptions: DocsCacheOptions
+		readonly createDocsCache: typeof createDocsCache
+		readonly emitLlmSchema: typeof emitLlmSchema
+		readonly extractIr: typeof extractIr
+		readonly importRuntimeFacts: typeof importRuntimeFacts
+		readonly schema: JsonSchema
+	}
+	readonly runtime: {
+		readonly converter: FlatConverter
+		readonly createFlatConverter: typeof createFlatConverter
+		readonly document: FlatDocument
+		readonly error: FlatConversionError
+		readonly node: FlatNode
+	}
+	readonly docs: {
+		readonly full: WidgetDocs
+		readonly slim: WidgetDocsSlim
+		readonly version: typeof WIDGET_DOCS_VERSION
+	}
+}
+const docsGeneratorWitness: DocsGeneratorContracts | undefined = undefined
+void docsGeneratorWitness
+
+// `./runtime` and `.` name one IR type, so the `ir.json` the build-time API writes is what the converter takes.
+export function convertWith(ir: BuildTimeSystemIr, document: FlatDocument): unknown {
+	const runtimeIr: SystemIr = ir
+	return (null as unknown as typeof createFlatConverter)(runtimeIr)
+		.flatToTree(document)
+}
+
+// `virtual-widget-docs` types `virtual:widget-docs/<name>` as the full `WidgetDocs` (its `types` section included).
+export function namedTypes(docs: typeof surveyDocs): WidgetDocs['types'] {
+	const full: WidgetDocs = docs
+	return full.types
+}
+
+// The generator's internal modules are not importable.
+// @ts-expect-error -- `flat` is internal.
+type InternalFlat = typeof import('@deviltea/widget-docs-generator/flat')
+// @ts-expect-error -- `runtime-facts` is internal.
+type InternalRuntimeFacts = typeof import('@deviltea/widget-docs-generator/runtime-facts')
+// @ts-expect-error -- `cli` is the bin, not a module.
+type InternalCli = typeof import('@deviltea/widget-docs-generator/cli')
+const unreachableDocsGeneratorWitness: [InternalFlat?, InternalRuntimeFacts?, InternalCli?] | undefined = undefined
+void unreachableDocsGeneratorWitness

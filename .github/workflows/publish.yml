@@ -29,7 +29,7 @@ jobs:
           cache: 'false'
       - run: pnpm install --frozen-lockfile
       - name: Verify tag and package versions
-        # The tag commit must be on main, the tag must be `v<version>`, and all three published packages
+        # The tag commit must be on main, the tag must be `v<version>`, and all four published packages
         # must be at exactly that version.
         run: |
           git fetch origin main
@@ -37,11 +37,12 @@ jobs:
           pnpm exec tsx scripts/release-package.ts verify-tag "$GITHUB_REF_NAME"
       - run: pnpm check
       - name: Pack release tarballs
-        # Packs Core, the Inspector and the Vue adapter, and checks each packed manifest (name, version, and a
-        # `^<version>` Core peer range instead of `workspace:^`) before anything is published.
+        # Packs Core, the Inspector, the Vue adapter and the documentation generator, and checks each packed
+        # manifest (name, version, and a `^<version>` Core peer range instead of `workspace:^`) before anything
+        # is published.
         run: pnpm exec tsx scripts/release-publish.ts pack --out "$RUNNER_TEMP/packages"
       - name: Publish with npm trusted publishing
-        # Core first, then the Inspector and the Vue adapter. A package whose exact version is already on the
-        # registry is skipped, so re-running this workflow (or this job) finishes a partly published release.
-        # Prerelease versions go to the `next` dist-tag, never `latest`.
+        # Core first, then the Inspector, the Vue adapter and the documentation generator. A package whose
+        # exact version is already on the registry is skipped, so re-running this workflow (or this job)
+        # finishes a partly published release. Prerelease versions go to the `next` dist-tag, never `latest`.
         run: pnpm exec tsx scripts/release-publish.ts publish --tarballs "$RUNNER_TEMP/packages"

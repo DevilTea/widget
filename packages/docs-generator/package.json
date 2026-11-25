@@ -1,10 +1,30 @@
 {
 	"name": "@deviltea/widget-docs-generator",
 	"type": "module",
-	"version": "0.0.0",
-	"private": true,
+	"publishConfig": {
+		"access": "public"
+	},
+	"version": "0.3.0",
 	"description": "Turns a Widget System's TypeScript types (the shape) and its plugins' builder docs (the prose) into documentation and AI-facing artifacts: a docs object served by a Vite plugin, an IR, JSON Schemas, flat/tree converters and Agent Skills.",
+	"author": "DevilTea <ch19980814@gmail.com>",
 	"license": "MIT",
+	"homepage": "https://github.com/DevilTea/widget/tree/main/packages/docs-generator#readme",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/DevilTea/widget.git",
+		"directory": "packages/docs-generator"
+	},
+	"bugs": {
+		"url": "https://github.com/DevilTea/widget/issues"
+	},
+	"keywords": [
+		"widget",
+		"documentation",
+		"json-schema",
+		"vite-plugin",
+		"agent-skills",
+		"llm"
+	],
 	"sideEffects": false,
 	"exports": {
 		".": {
@@ -30,14 +50,23 @@
 			"import": "./dist/vite.mjs"
 		}
 	},
+	"main": "dist/index.mjs",
+	"module": "dist/index.mjs",
+	"types": "dist/index.d.mts",
 	"bin": {
 		"widget-docs-generator": "./dist/cli.mjs"
 	},
+	"files": [
+		"dist",
+		"virtual-widget-docs-slim.d.ts",
+		"virtual-widget-docs.d.ts"
+	],
 	"engines": {
 		"node": ">=22.14.0"
 	},
 	"scripts": {
 		"build": "tsdown",
+		"build:pack": "pnpm build && pnpm pack",
 		"dev": "tsdown --watch",
 		"generate:example": "node ./dist/cli.mjs --module ./fixtures/survey-system.ts --export surveySystem --tsconfig ./tsconfig.json --root ../.. --example ./fixtures/survey-example.json --out ./examples/survey",
 		"check:example": "node ./dist/cli.mjs --check --module ./fixtures/survey-system.ts --export surveySystem --tsconfig ./tsconfig.json --root ../..",
@@ -46,7 +75,7 @@
 	},
 	"peerDependencies": {
 		"@deviltea/widget-core": "workspace:^",
-		"vite": "catalog:"
+		"vite": "^6.0.0 || ^7.0.0 || ^8.0.0"
 	},
 	"peerDependenciesMeta": {
 		"vite": {
